@@ -13,6 +13,7 @@
 - **Multithreaded I/O** — Configurable thread pools for parallel hashing across network drives.
 - **Exponential Backoff** — `tenacity`-powered automatic retries on network failures with configurable backoff.
 - **Rich Terminal Dashboard** — Animated progress bars with ETA, transfer speed, and file counts. Intelligent prompts for session resumption.
+- **Native macOS GUI** — A stunning, standalone Apple-native SwiftUI application that wraps the engine for a premium desktop experience.
 - **YAML Profiles** — Define named source/dest mappings in `nas_profiles.yaml` to manage multiple libraries.
 - **Audit Receipts** — Every successful run generates a JSON receipt mapping exact `source → destination` paths.
 - **Dry-Run Reports** — Preview the entire copy plan as a CSV spreadsheet before committing.
@@ -50,6 +51,15 @@ python3 organize_nas.py --dry-run
 python3 organize_nas.py -y
 ```
 
+### Native macOS UI
+A standalone, fully native macOS Swift application is included. It bridges the Python backend via a highly efficient JSON pipe. To compile it natively on your Mac (no Xcode required):
+
+```bash
+cd nas_ui
+./build.sh
+open "build/NAS Organizer UI.app"
+```
+
 ### CLI Flags
 
 | Flag | Description |
@@ -62,6 +72,7 @@ python3 organize_nas.py -y
 | `--verify` | Re-hash each file after copy to verify byte-level integrity |
 | `--rebuild-cache` | Force a full re-index of the destination |
 | `--workers N` | Thread pool size for parallel hashing (default: 8) |
+| `--json` | Mutes terminal animations and streams raw JSON logs to standard output (used exclusively by the native SwiftUI app) |
 
 ### Configuration Profiles
 
@@ -91,6 +102,9 @@ NAS-Photo-Organizer/
 │   ├── database.py          # SQLite WAL cache + job queue
 │   ├── io.py                # Atomic copy, BLAKE2b hashing, retries
 │   └── metadata.py          # Date extraction (EXIF, filename, mdls)
+├── nas_ui/                  # Native macOS SwiftUI Frontend
+│   ├── Sources/             # Swift app logic and UI views
+│   └── build.sh             # Native executable compiler script
 ├── test_organize_nas.py     # 141 tests, 97% coverage
 ├── nas_profiles.yaml        # YAML configuration profiles
 └── requirements.txt         # Python dependencies
