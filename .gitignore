@@ -13,3 +13,5 @@ venv/
 .organize_logs/
 dry_run_report_*.csv
 audit_receipt_*.json
+.coverage
+htmlcov/
