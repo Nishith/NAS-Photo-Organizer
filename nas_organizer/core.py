@@ -18,7 +18,7 @@ from rich.prompt import Confirm
 from rich.panel import Panel
 
 from .database import CacheDB
-from .io import safe_copy_atomic, process_single_file, verify_copy, cleanup_tmp_files, check_disk_space
+from .io import safe_copy_atomic, process_single_file, verify_copy, cleanup_tmp_files
 from .metadata import get_file_date, ALL_EXTS, SKIP_FILES, HAS_EXIFREAD
 
 SEQ_WIDTH = 3
@@ -286,6 +286,8 @@ def main():
     dup = os.path.join(dst, "Duplicate")
     rebuild = args.rebuild_cache
     workers = max(1, args.workers)
+
+    os.makedirs(dst, exist_ok=True)
 
     console.print(Panel(
         f"[bold cyan]NAS Photo Organizer v3[/bold cyan]\n"
@@ -588,14 +590,35 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, w
                 result = safe_copy_atomic(src_p, dst_p)
                 if verify:
                     if not verify_copy(src_p, result, h):
+                        try:
+                            os.remove(result)
+                        except OSError as cleanup_err:
+                            if run_log:
+                                run_log.warn(f"Failed to remove unverified copy: {result}: {cleanup_err}")
                         if run_log:
                             run_log.error(f"Verification failed: {src_p} → {result}")
                         emit_json("error", message=f"Verification failed: {src_p} -> {result}")
                         verify_failures += 1
+                        cache_db.update_job_status(src_p, 'FAILED')
+                        consecutive_fail += 1
+                        total_fail += 1
+                        if consecutive_fail >= MAX_CONSECUTIVE_FAILURES or total_fail >= MAX_TOTAL_FAILURES:
+                            msg = (f"Aborting: {consecutive_fail} consecutive failures "
+                                   f"({total_fail} total out of {count + 1} attempted)")
+                            console.print(f"\n[bold red]{msg}[/bold red]")
+                            if run_log:
+                                run_log.error(msg)
+                            break
+                        progress.advance(task_id)
+                        count += 1
+                        if count % max(1, len(pending_jobs) // 100) == 0:
+                            emit_json("task_progress", task="copy", completed=count, total=len(pending_jobs),
+                                      bytes_copied=bytes_copied, bytes_total=bytes_total)
+                        continue
                 cache_db.update_job_status(src_p, 'COPIED')
                 st = os.stat(result)
                 dest_updates.append((result, h, st.st_size, st.st_mtime))
-                executed_log.append((src_p, dst_p, h))
+                executed_log.append((src_p, result, h))
                 try:
                     bytes_copied += os.path.getsize(src_p)
                 except OSError:
