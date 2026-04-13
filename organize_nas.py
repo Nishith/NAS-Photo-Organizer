@@ -15,9 +15,10 @@ def check_and_install_dependencies():
 
     # Check if packages exist
     missing = []
-    for pkg in ["exifread", "tenacity"]:
+    for pkg in ["exifread", "tenacity", "rich", "yaml"]:
         if importlib.util.find_spec(pkg) is None:
-            missing.append(pkg)
+            # Note: pyyaml imports as 'yaml'
+            missing.append(pkg if pkg != 'yaml' else 'pyyaml')
 
     if missing:
         print(f"Missing essential packages: {', '.join(missing)}")

@@ -1,0 +1,15 @@
+# NAS Organizer Configuration Profiles
+# Define source and destination directories to avoid typing them repeatedly in the CLI.
+# Usage: python3 organize_nas.py --profile profile_name
+
+default:
+  source: "/Volumes/photo/bkp_1_9"
+  dest: "/Volumes/home/Organized_Photos_Apr_26"
+
+mobile_backup:
+  source: "/Volumes/home/Mobile_Snapshots"
+  dest: "/Volumes/home/Organized_Photos_Apr_26"
+
+raw_workflow:
+  source: "/Volumes/SSD/Lightroom_Exports"
+  dest: "/Volumes/NAS/Photography_Archive"
