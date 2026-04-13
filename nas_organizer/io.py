@@ -5,6 +5,7 @@ import hashlib
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
 HASH_CHUNK_SIZE = 8 * 1024 * 1024
+MAX_COLLISIONS = 9999
 
 
 def fast_hash(path, known_size=None):
@@ -102,6 +103,9 @@ def safe_copy_atomic(src, dst):
     original_dst = dst
     counter = 1
     while os.path.exists(dst):
+        if counter > MAX_COLLISIONS:
+            raise OSError(errno.EEXIST,
+                          f"Too many collisions for destination path: {original_dst}")
         base, ext = os.path.splitext(original_dst)
         dst = f"{base}_collision_{counter}{ext}"
         counter += 1
@@ -119,7 +123,7 @@ def safe_copy_atomic(src, dst):
                 os.remove(tmp_dst)
             except OSError:
                 pass
-        raise e
+        raise
 
 
 def process_single_file(path, cached_data):

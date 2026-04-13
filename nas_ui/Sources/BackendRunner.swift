@@ -214,7 +214,9 @@ class BackendRunner: ObservableObject {
             }
         }
 
-        buffer = lines.last ?? ""
+        let tail = lines.last ?? ""
+        // Guard against unbounded buffer growth from a malformed (no-newline) backend output.
+        buffer = tail.count < 10 * 1024 * 1024 ? tail : ""
     }
 
     private func handleEvent(_ event: JsonEvent) {

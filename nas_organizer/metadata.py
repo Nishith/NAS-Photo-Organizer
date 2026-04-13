@@ -35,6 +35,8 @@ def get_date_exifread(path):
 
 def get_date_mdls(path):
     try:
+        if not os.path.isfile(path):
+            return None
         result = subprocess.run(['mdls', '-name', 'kMDItemContentCreationDate', '-raw', path],
                                 capture_output=True, text=True, timeout=5)
         val = result.stdout.strip()

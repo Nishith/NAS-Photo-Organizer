@@ -400,8 +400,9 @@ def main():
                         src_hashes[path] = h
                         if h and was_hashed:
                             src_updates.append((path, h, size, mtime))
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        emit_json("warning", message=f"Unexpected hash error for {path}: {exc}")
+                        console.print(f"[yellow]Hash error: {path}: {exc}[/yellow]")
                     progress.advance(task_src)
                     count += 1
                     if count % max(1, len(src_files) // 100) == 0:
@@ -502,7 +503,7 @@ def main():
 
         for src_path, h in src_dups:
             dt = get_file_date(src_path)
-            date_str = dt.strftime('%Y-%m-%d') if dt.year > 1971 else "Unknown_Date"
+            date_str = dt.strftime('%Y-%m-%d') if (dt and dt.year > 1971) else "Unknown_Date"
             start_seq = dup_seq.get(date_str, 0) + 1
             dup_seq[date_str] += 1
             ext = os.path.splitext(src_path)[1]
