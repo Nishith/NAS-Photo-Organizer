@@ -60,6 +60,9 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, progress=None, ptask=None
     dup_seq_index = defaultdict(int)
     seq_pattern = re.compile(r'^(\d{4}-\d{2}-\d{2})_(\d+)')
     dup_dir = os.path.join(dst_dir, "Duplicate")
+    
+    if progress and ptask:
+        progress.update(ptask, total=None)
 
     for root, dirs, fnames in os.walk(dst_dir):
         dirs[:] = [d for d in dirs if not d.startswith('.')]
@@ -76,12 +79,18 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, progress=None, ptask=None
                     if seq > dup_seq_index[date_str]: dup_seq_index[date_str] = seq
                 else:
                     if seq > seq_index[date_str]: seq_index[date_str] = seq
+                    
+            if progress and ptask and len(files_to_check) % 1000 == 0:
+                progress.update(ptask, description=f"[cyan]Scanning Dest... ({len(files_to_check)} found)")
 
     hash_index = {}
     updates = []
     
     if progress and ptask:
-        progress.update(ptask, total=len(files_to_check))
+        if len(files_to_check) == 0:
+            progress.update(ptask, description="[cyan]Index Built (Empty)", total=1, completed=1)
+        else:
+            progress.update(ptask, description="[cyan]Validating Dest Hashes...", total=len(files_to_check))
         
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
         futures = {executor.submit(process_single_file, path, cache.get(path)): path for path in files_to_check}
@@ -207,7 +216,7 @@ def main():
         transient=False
     ) as progress:
         
-        task_dest = progress.add_task("[cyan]Indexing Destination Arrays...", total=100)
+        task_dest = progress.add_task("[cyan]Scanning Destination Array...", total=None)
         dest_hash_index, dest_seq, dup_seq = build_dest_index(dst, cache_db, rebuild, progress, task_dest)
         
         task_src = progress.add_task("[magenta]Hashing Source Payload...", total=len(src_files))
