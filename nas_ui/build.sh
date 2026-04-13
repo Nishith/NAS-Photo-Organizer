@@ -6,11 +6,20 @@ BUILD_DIR="build"
 APP_DIR="${BUILD_DIR}/${APP_NAME}.app"
 MACOS_DIR="${APP_DIR}/Contents/MacOS"
 RESOURCES_DIR="${APP_DIR}/Contents/Resources"
+ICONSET_DIR="${BUILD_DIR}/AppIcon.iconset"
+ICON_FILE="${RESOURCES_DIR}/AppIcon.icns"
 
 echo "🧹 Cleaning up..."
 rm -rf "$BUILD_DIR"
 mkdir -p "$MACOS_DIR"
 mkdir -p "$RESOURCES_DIR"
+mkdir -p "$ICONSET_DIR"
+
+echo "🎨 Generating app icon..."
+swift Tools/IconGenerator.swift "$ICONSET_DIR"
+if command -v iconutil >/dev/null 2>&1; then
+  iconutil -c icns "$ICONSET_DIR" -o "$ICON_FILE"
+fi
 
 echo "🔨 Compiling Swift sources..."
 swiftc \
@@ -33,15 +42,21 @@ cat <<EOF > "${APP_DIR}/Contents/Info.plist"
     <key>CFBundleExecutable</key>
     <string>${APP_NAME}</string>
     <key>CFBundleIdentifier</key>
-    <string>com.example.NASOrganizerUI</string>
+    <string>com.nishith.nasorganizerui</string>
+    <key>CFBundleDisplayName</key>
+    <string>NAS Organizer</string>
     <key>CFBundleName</key>
     <string>${APP_NAME}</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>3.0</string>
+    <key>CFBundleVersion</key>
+    <string>3</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
-    <string>11.0</string>
+    <string>13.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

@@ -9,6 +9,12 @@ The project has two front ends over the same Python engine:
 
 The organizer is designed for very large libraries where correctness matters more than cleverness. It never mutates the source, stages every copy atomically, persists its copy queue in SQLite, and records what happened in machine-readable artifacts.
 
+## Screenshots
+
+| Overview | Setup Detail |
+| :--- | :--- |
+| ![NAS Organizer overview](docs/screenshots/ui-overview.png) | ![NAS Organizer setup detail](docs/screenshots/ui-setup-detail.png) |
+
 ## What The Project Does
 
 Given a source library and a destination root, the organizer:
@@ -51,7 +57,7 @@ Organized_Photos/
 - Collision-safe writes using `_collision_N` suffixes instead of overwrite.
 - Verification mode that removes failed copies and marks them as failed instead of trusting them.
 - Retry logic that fails fast for permanent path problems such as missing source files.
-- Native macOS UI with live phase progress, throughput, ETA, issue counts, and completion actions.
+- Native macOS UI with drag-and-drop setup, command-menu shortcuts, filtered activity views, stronger completion states, and live phase progress, throughput, ETA, and issue counts.
 
 ## Safety And Correctness Guarantees
 
@@ -178,22 +184,26 @@ Current UI behavior:
 
 - native SwiftUI shell over the Python backend
 - source and destination folder selection
+- drag-and-drop folder setup for source and destination
 - optional saved-profile flow
 - preview and transfer actions
 - state-aware left rail that emphasizes setup before a run and live controls during a run
 - hero status surface with progress, throughput, and ETA
 - run metrics for discovered, planned, already organized, duplicates, issues, and completed copies
 - phase visualization for Discover, Hash Source, Index Destination, Classify, and Transfer
-- expandable activity console
-- post-run actions for opening the destination, report, and logs
+- segmented activity area with summary and filterable console modes
+- keyboard shortcuts and app command menus for common actions
+- a stronger completion experience with destination, report, and log follow-up actions
+- generated custom app icon and cleaner app bundle metadata
 
 Core UI files:
 
 - [`nas_ui/Sources/ContentView.swift`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/nas_ui/Sources/ContentView.swift)
 - [`nas_ui/Sources/BackendRunner.swift`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/nas_ui/Sources/BackendRunner.swift)
 - [`nas_ui/Sources/NASOrganizerApp.swift`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/nas_ui/Sources/NASOrganizerApp.swift)
+- [`nas_ui/Tools/IconGenerator.swift`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/nas_ui/Tools/IconGenerator.swift)
 
-The build script at [`nas_ui/build.sh`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/nas_ui/build.sh) packages a `.app` bundle without needing an Xcode project.
+The build script at [`nas_ui/build.sh`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/nas_ui/build.sh) packages a `.app` bundle without needing an Xcode project, generates the app icon, and writes the bundle metadata.
 
 ## Installation
 
@@ -253,6 +263,15 @@ open "build/NAS Organizer UI.app"
 
 The app launches the Python backend using `python3 organize_nas.py --json --yes ...`.
 
+Useful keyboard shortcuts in the current app:
+
+- `Cmd+O` chooses the source folder
+- `Shift+Cmd+O` chooses the destination folder
+- `Shift+Cmd+P` reveals the saved-profile field
+- `Cmd+R` starts a preview
+- `Cmd+Return` starts a transfer
+- `Cmd+L` toggles the activity pane
+
 ## Configuration Profiles
 
 Profiles live in `nas_profiles.yaml` at the project root.
@@ -293,6 +312,10 @@ The app build output under `nas_ui/build/` is also ignored by Git.
 
 ```text
 NAS-Photo-Organizer/
+  docs/
+    screenshots/
+      ui-overview.png
+      ui-setup-detail.png
   organize_nas.py
   requirements.txt
   README.md
@@ -308,6 +331,8 @@ NAS-Photo-Organizer/
       BackendRunner.swift
       ContentView.swift
       NASOrganizerApp.swift
+    Tools/
+      IconGenerator.swift
     build.sh
   test_organize_nas.py
 ```
@@ -345,7 +370,7 @@ Representative coverage areas include:
 As of the current codebase, this project is:
 
 - a resumable Python organizer with strong correctness-oriented transfer logic
-- a macOS SwiftUI front end for the same engine
+- a macOS SwiftUI front end with keyboard-driven commands, drag-and-drop setup, and a more product-like desktop experience
 - safe to preview repeatedly
 - designed to survive interruptions and partial failures
 - optimized for large libraries where both speed and auditability matter
