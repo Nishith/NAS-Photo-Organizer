@@ -1,199 +1,249 @@
 # NAS Photo Organizer v3
 
-> **TL;DR:** A high-performance Python tool that recursively scans, deduplicates, and organizes massive photo/video libraries on network-attached storage into a clean `YYYY/MM/DD` folder structure. Survives network drops, power outages, and partial transfers with atomic writes, SQLite-backed resume queues, and exponential backoff retries. Ships with a rich terminal UI, YAML configuration profiles, full audit logging, and a native macOS SwiftUI application.
+A high-safety photo and video organizer for large local or NAS-backed libraries.
 
----
+The project has two front ends over the same Python engine:
 
-## Features
+- A Rich-powered CLI for scanning, previewing, resuming, and executing large runs.
+- A native macOS SwiftUI app that launches the backend in JSON mode and presents live progress, summaries, and post-run actions.
 
-- **Atomic File Transfers** — Files are written to `.tmp` staging buffers, flushed to disk via `os.fsync()`, and only then renamed into place. No corrupted partial files from network hiccups.
-- **Resumable Job Queue** — The entire copy plan is committed to an SQLite database (`CopyJobs` table) before a single byte is written. If interrupted, just re-run — it picks up exactly where it stopped.
-- **SQLite WAL Mode** — Write-Ahead Logging ensures the database never locks or corrupts, even during crashes.
-- **BLAKE2b Hashing** — Fast, hardware-accelerated deduplication using chunked hash digests (first + last 512 KB).
-- **Multithreaded I/O** — Configurable thread pool for parallel hashing across network drives with streaming dest walk (hashing begins as files are discovered, not after).
-- **Exponential Backoff** — `tenacity`-powered automatic retries on network failures. Disk-full (`ENOSPC`) errors are never retried.
-- **Disk Space Pre-Flight** — Checks available destination space (with 10 MB safety buffer) before each copy attempt. Fails immediately on `ENOSPC` rather than looping.
-- **Orphan Cleanup** — Sweeps destination for leftover `.tmp` files from any previous interrupted run at startup.
-- **Flapping Network Guard** — Aborts early when too many consecutive *or* total copy failures are detected, preventing an indefinite retry storm.
-- **Parallel Date Classification** — Date extraction (EXIF, filename, Spotlight, mtime) runs in parallel threads on all new files simultaneously, eliminating the serial `mdls` bottleneck.
-- **Rich Terminal Dashboard** — Animated progress bars with ETA, transfer speed (MB/s), and file counts.
-- **Native macOS GUI** — A standalone Apple-native SwiftUI application that wraps the Python engine via a JSON pipe, with a 5-phase progress indicator, real-time speed/ETA, error badges, and post-run actions.
-- **YAML Profiles** — Define named source/dest mappings in `nas_profiles.yaml` to manage multiple libraries.
-- **Audit Receipts** — Every successful run generates a JSON receipt mapping exact `source → destination` paths.
-- **Dry-Run Reports** — Preview the entire copy plan as a CSV spreadsheet before committing.
+The organizer is designed for very large libraries where correctness matters more than cleverness. It never mutates the source, stages every copy atomically, persists its copy queue in SQLite, and records what happened in machine-readable artifacts.
 
-## Data Safety Rules
+## What The Project Does
 
-1. **Zero Deletion** — The source is never modified or deleted. All operations are read + copy only.
-2. **Global Deduplication** — Files already in the destination (matched by BLAKE2b hash) are silently skipped. Internal source duplicates are routed to `Duplicate/YYYY/MM/DD/`.
-3. **Collision Protection** — If a destination file already exists at the target path, the incoming copy is safely renamed with an incrementing `_collision_N` suffix. No data is ever overwritten.
+Given a source library and a destination root, the organizer:
 
-## Date Extraction (Graceful Degradation)
+- discovers supported media files recursively
+- hashes the source payload and indexes the destination
+- skips files already present in the destination
+- routes internal source duplicates into `Duplicate/...`
+- classifies files by date using EXIF, filename patterns, Spotlight metadata, or `mtime`
+- plans date-based destinations under `YYYY/MM/DD/` or `Unknown_Date/`
+- writes the copy plan to SQLite before starting transfers
+- copies atomically with retry logic for transient failures
+- optionally verifies each completed copy by re-hashing the destination
 
-| Priority | Method | Details |
-| :---: | :--- | :--- |
-| 1 | **EXIF** | `exifread` extracts `DateTimeOriginal` from JPEG/HEIC/RAW files |
-| 2 | **Filename** | Regex parsing for `IMG_20240101_XXXXXX`, `VID_`, `PANO_`, `BURST_`, etc. |
-| 3 | **Spotlight** | macOS `mdls kMDItemContentCreationDate` for MOV and other formats |
-| 4 | **Modified Time** | Last resort: filesystem `mtime` |
+Typical destination layout:
 
-Files that cannot yield a date go into `Unknown_Date/` for manual review.
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        organize_nas.py                              │
-│              (bootstrap: installs deps, delegates to               │
-│                    nas_organizer.core.main)                         │
-└───────────────────────────────┬─────────────────────────────────────┘
-                                │
-                ┌───────────────▼───────────────┐
-                │         nas_organizer/         │
-                │                               │
-                │  ┌──────────────────────────┐ │
-                │  │       core.py            │ │
-                │  │  ─ CLI argument parsing  │ │
-                │  │  ─ Rich terminal UI      │ │
-                │  │  ─ 5-phase orchestration │ │
-                │  │  ─ Parallel execution    │ │
-                │  └────┬──────┬──────┬───────┘ │
-                │       │      │      │          │
-                │  ┌────▼──┐ ┌─▼───┐ ┌▼──────┐  │
-                │  │ io.py │ │ db  │ │ meta  │  │
-                │  │       │ │ .py │ │ data  │  │
-                │  │ hash  │ │     │ │ .py   │  │
-                │  │ copy  │ │SQLi-│ │ EXIF  │  │
-                │  │ retry │ │te   │ │ mdls  │  │
-                │  │ space │ │WAL  │ │ regex │  │
-                │  └───────┘ └─────┘ └───────┘  │
-                └───────────────────────────────┘
-                                │
-                    (JSON pipe: stdout/stdin)
-                                │
-                ┌───────────────▼───────────────┐
-                │     nas_ui/ (SwiftUI macOS)    │
-                │                               │
-                │  ContentView.swift             │
-                │  ─ Sidebar: source/dest/opts  │
-                │  ─ 5-phase progress indicator │
-                │  ─ Speed + ETA display        │
-                │  ─ Error badge counter        │
-                │  ─ Post-run action bar        │
-                │                               │
-                │  BackendRunner.swift           │
-                │  ─ NSTask process management  │
-                │  ─ JSON event parsing         │
-                │  ─ Speed/ETA computation      │
-                └───────────────────────────────┘
+```text
+Organized_Photos/
+  2024/
+    06/
+      15/
+        2024-06-15_001.jpg
+  Unknown_Date/
+    Unknown_001.mov
+  Duplicate/
+    2024/
+      06/
+        15/
+          2024-06-15_001.jpg
 ```
 
----
+## Current Highlights
 
-## Execution Flow
+- Full-file BLAKE2b hashing for collision-resistant identity and dedupe decisions.
+- Atomic copies through `*.tmp` staging plus `fsync()` before rename.
+- SQLite WAL-backed cache and resume queue stored in the destination root.
+- Fast resume behavior: interrupted runs can continue from persisted `PENDING` jobs.
+- Dry-run planning to CSV before any transfers happen.
+- Audit receipts to JSON after execution.
+- Collision-safe writes using `_collision_N` suffixes instead of overwrite.
+- Verification mode that removes failed copies and marks them as failed instead of trusting them.
+- Retry logic that fails fast for permanent path problems such as missing source files.
+- Native macOS UI with live phase progress, throughput, ETA, issue counts, and completion actions.
 
-```
-organize_nas.py
-      │
-      ▼
-  main()
-    │
-    ├─ 1. STARTUP
-    │    ├── Load profile / parse args
-    │    ├── Open CacheDB (SQLite WAL)
-    │    ├── Open RunLogger
-    │    └── Cleanup orphaned .tmp files in dest
-    │
-    ├─ 2. RESUME CHECK
-    │    └── If pending jobs in DB → offer to resume or flush
-    │
-    ├─ 3. DISCOVERY  [task: discovery]
-    │    └── os.walk(src) → collect all media files
-    │
-    ├─ 4. SRC HASH   [task: src_hash]
-    │    └── ThreadPoolExecutor → BLAKE2b each source file
-    │        (cache-aware: skip if size+mtime unchanged)
-    │
-    ├─ 5. DEST INDEX  [task: dest_hash]
-    │    ├── fast_dest=True  → load from SQLite cache (instant)
-    │    └── fast_dest=False → stream walk+hash concurrently
-    │         └── ThreadPoolExecutor submits during os.walk
-    │
-    ├─ 6. CLASSIFICATION  [task: classification]
-    │    ├── Compare src hashes against dest index
-    │    │    ├── already_in_dst → skip
-    │    │    ├── src_dup       → route to Duplicate/
-    │    │    └── new_file      → queue for copy
-    │    └── ThreadPoolExecutor → parallel date extraction
-    │         EXIF → filename regex → mdls → mtime
-    │
-    ├─ 7. COPY PLAN
-    │    ├── Assign YYYY/MM/DD paths with sequential numbers
-    │    ├── Detect sequence overflow (>999/day → widened suffix)
-    │    └── INSERT into CopyJobs (SQLite)
-    │
-    ├─ 8. DRY RUN?
-    │    └── Yes → generate CSV report → complete
-    │
-    └─ 9. EXECUTE   [task: copy]
-         ├── For each job: safe_copy_atomic()
-         │    ├── check_disk_space() → raise ENOSPC immediately
-         │    ├── shutil.copy2() → .tmp file
-         │    ├── os.fsync()
-         │    └── os.rename() → final path
-         ├── verify_copy() if --verify
-         ├── Track consecutive + total failures
-         │    └── Abort if either threshold exceeded
-         └── generate_audit_receipt() → JSON
-```
+## Safety And Correctness Guarantees
 
----
+The current code intentionally enforces these rules:
 
-## JSON Event Protocol (Python ↔ SwiftUI)
+- The source library is never modified or deleted.
+- Files already present in the destination are skipped by hash, not by filename.
+- Distinct files are identified by a streamed full-file hash, not a partial head/tail sample.
+- Every copy is written to a temporary file first, then renamed into place only after the data is flushed.
+- Existing destination files are never overwritten. Name collisions are resolved by appending `_collision_N`.
+- If `--verify` is enabled and a copy does not match the expected hash, the bad destination copy is removed, the job is marked `FAILED`, and the failed result is not added to the destination cache.
+- Audit receipts record the actual destination path that was written, including collision-renamed paths.
+- Brand-new destination roots are created automatically before cache or log files are opened.
+- Stale queue entries and other permanent path failures fail immediately instead of burning through retry backoff.
 
-When `--json` is active, the backend emits one JSON object per line to stdout. The SwiftUI `BackendRunner` parses these in real time.
+## Reliability Model
 
-| `type` | Key Fields | Description |
-| :--- | :--- | :--- |
-| `startup` | — | Engine initialized |
-| `task_start` | `task`, `total` | Phase beginning (discovery/src_hash/dest_hash/classification/copy) |
-| `task_progress` | `task`, `completed`, `total`, `bytes_copied`, `bytes_total` | Mid-phase progress tick |
-| `task_complete` | `task`, `new`, `already_in_dst`, `dups`, `errors`, `copied`, `failed` | Phase finished with summary |
-| `copy_plan_ready` | `count` | Number of files queued for copy |
-| `info` | `message` | Informational log line |
-| `warning` | `message` | Non-fatal warning |
-| `error` | `message` | Copy or verification failure |
-| `prompt` | `message` | Requests a yes/no confirmation from the UI |
-| `complete` | `status`, `dest`, `report` | Run finished; `status` ∈ {`finished`, `dry_run_finished`, `nothing_to_copy`, `cancelled`} |
+### Resume Queue
 
----
+The destination root contains `.organize_cache.db`, which holds:
 
-## Installation & Usage
+- `FileCache`: cached source or destination hashes plus `size` and `mtime`
+- `CopyJobs`: persisted copy plan with `PENDING`, `COPIED`, or `FAILED` state
 
-The bootstrap wrapper `organize_nas.py` handles dependency management. It detects missing packages (`exifread`, `tenacity`, `rich`, `pyyaml`) and offers to install them.
+The queue is written before transfers begin, so an interrupted run can be resumed without rebuilding the plan from scratch.
+
+### Atomic Copy Path
+
+`safe_copy_atomic()` in [`nas_organizer/io.py`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/nas_organizer/io.py) performs the write path:
+
+1. Ensure the destination directory exists.
+2. Check available disk space with a 10 MB safety buffer.
+3. Choose a collision-safe final path if needed.
+4. Copy to `final_path.tmp`.
+5. `fsync()` the temporary file.
+6. Rename the temp file into place.
+
+### Retry Policy
+
+The retry policy is intentionally selective:
+
+- transient `OSError`s are retried with exponential backoff
+- permanent local errors are not retried
+
+Currently non-retryable error classes include:
+
+- `ENOSPC`
+- `ENOENT`
+- `ENOTDIR`
+- `EISDIR`
+- `EINVAL`
+
+With `tenacity` configured as `reraise=True`, permanent failures surface as the original `OSError` instead of being wrapped in a `RetryError`.
+
+### Failure Abort Thresholds
+
+The engine protects against flapping storage or network conditions with two thresholds:
+
+- `MAX_CONSECUTIVE_FAILURES = 5`
+- `MAX_TOTAL_FAILURES = 20`
+
+If either threshold is exceeded during execution, the run aborts early with a clear message instead of churning through a doomed queue.
+
+## Date Extraction Order
+
+Date extraction is intentionally layered and degrades gracefully:
+
+1. EXIF via `exifread`
+2. Filename parsing for common camera naming conventions
+3. macOS Spotlight metadata via `mdls`
+4. Filesystem modified time
+
+If no reliable date can be determined, the file is routed into `Unknown_Date/`.
+
+## CLI And App Flow
+
+The backend is implemented in [`nas_organizer/core.py`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/nas_organizer/core.py) and orchestrates these phases:
+
+1. Startup
+2. Discovery
+3. Source hashing
+4. Destination indexing
+5. Classification
+6. Copy plan generation
+7. Dry run or execution
+
+When launched with `--json`, the backend emits one JSON object per line. The SwiftUI app consumes that stream and maps backend phases into its UI.
+
+### JSON Event Types
+
+The current protocol includes:
+
+- `startup`
+- `task_start`
+- `task_progress`
+- `task_complete`
+- `copy_plan_ready`
+- `info`
+- `warning`
+- `error`
+- `prompt`
+- `complete`
+
+Important payload fields currently used by the UI include:
+
+- `found`
+- `count`
+- `already_in_dst`
+- `dups`
+- `errors`
+- `copied`
+- `failed`
+- `bytes_copied`
+- `bytes_total`
+- `dest`
+- `report`
+- `status`
+
+## macOS UI
+
+The macOS app lives under [`nas_ui/`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/nas_ui).
+
+Current UI behavior:
+
+- native SwiftUI shell over the Python backend
+- source and destination folder selection
+- optional saved-profile flow
+- preview and transfer actions
+- state-aware left rail that emphasizes setup before a run and live controls during a run
+- hero status surface with progress, throughput, and ETA
+- run metrics for discovered, planned, already organized, duplicates, issues, and completed copies
+- phase visualization for Discover, Hash Source, Index Destination, Classify, and Transfer
+- expandable activity console
+- post-run actions for opening the destination, report, and logs
+
+Core UI files:
+
+- [`nas_ui/Sources/ContentView.swift`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/nas_ui/Sources/ContentView.swift)
+- [`nas_ui/Sources/BackendRunner.swift`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/nas_ui/Sources/BackendRunner.swift)
+- [`nas_ui/Sources/NASOrganizerApp.swift`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/nas_ui/Sources/NASOrganizerApp.swift)
+
+The build script at [`nas_ui/build.sh`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/nas_ui/build.sh) packages a `.app` bundle without needing an Xcode project.
+
+## Installation
+
+Python dependencies are listed in [`requirements.txt`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/requirements.txt):
+
+- `exifread`
+- `tenacity`
+- `rich`
+- `pyyaml`
+
+The bootstrap wrapper [`organize_nas.py`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/organize_nas.py) checks for these packages and offers to install them if they are missing.
+
+### CLI Usage
 
 ```bash
-# Basic usage
-python3 organize_nas.py --source /Volumes/NAS/Unsorted --dest /Volumes/NAS/Organized
+# explicit source and destination
+python3 organize_nas.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos
 
-# Use a named profile from nas_profiles.yaml
+# use a named profile from nas_profiles.yaml
 python3 organize_nas.py --profile mobile_backup
 
-# Preview without copying (generates CSV report)
-python3 organize_nas.py --dry-run
+# plan only, write a CSV, do not copy
+python3 organize_nas.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos --dry-run
 
-# Auto-confirm for unattended/cron usage
-python3 organize_nas.py -y
+# skip prompts for unattended use
+python3 organize_nas.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos -y
 
-# Fast repeated dry-runs (load dest index from cache, skip network scan)
-python3 organize_nas.py --fast-dest --dry-run
+# verify every completed copy by re-hashing the destination
+python3 organize_nas.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos --verify
+
+# reuse cached destination index for repeated previews
+python3 organize_nas.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos --fast-dest --dry-run
 ```
 
-### Native macOS UI
+### CLI Flags
 
-A standalone, fully native macOS Swift application is included. It wraps the Python engine via a JSON pipe.
+| Flag | Meaning |
+| :--- | :--- |
+| `--source PATH` | Source directory to scan |
+| `--dest PATH` | Destination root for organized output |
+| `--profile NAME` | Load source and destination from `nas_profiles.yaml` |
+| `--dry-run` | Build the copy plan and write a CSV without copying |
+| `--verify` | Re-hash the destination after each copy |
+| `--rebuild-cache` | Force a full rebuild of the destination cache |
+| `--fast-dest` | Load destination index from cache instead of scanning the destination |
+| `--workers N` | Hashing worker count, default `8` |
+| `--json` | Emit JSON progress events for the GUI |
+| `-y`, `--yes` | Auto-confirm prompts |
+
+### macOS App
 
 ```bash
 cd nas_ui
@@ -201,35 +251,13 @@ cd nas_ui
 open "build/NAS Organizer UI.app"
 ```
 
-The UI provides:
-- Source/destination folder pickers with live path validation
-- Optional profile name input with in-app help popover
-- "Preview" (dry-run) and "Start Transfer" split buttons
-- 5-step phase indicator: Discover → Hash Src → Index Dst → Classify → Copy
-- Real-time MB/s speed and ETA display
-- Persistent error badge showing total error count
-- Workers stepper (1–32 threads, default 8)
-- Fast Dest Mode toggle
-- Post-run actions: Open in Finder, View Report, Logs Folder
+The app launches the Python backend using `python3 organize_nas.py --json --yes ...`.
 
-### CLI Flags
+## Configuration Profiles
 
-| Flag | Description |
-| :--- | :--- |
-| `--source PATH` | Source directory to scan |
-| `--dest PATH` | Destination directory for organized output |
-| `--profile NAME` | Load source/dest from `nas_profiles.yaml` |
-| `--dry-run` | Generate a CSV report of planned operations without copying |
-| `-y` / `--yes` | Skip confirmation prompts (for cron/GUI use) |
-| `--verify` | Re-hash each file after copy to verify byte-level integrity |
-| `--rebuild-cache` | Force a full re-index of the destination |
-| `--fast-dest` | Load destination index from SQLite cache, skipping the network scan |
-| `--workers N` | Thread pool size for parallel hashing (default: 8) |
-| `--json` | Stream raw JSON events to stdout (used by the SwiftUI app) |
+Profiles live in `nas_profiles.yaml` at the project root.
 
-### Configuration Profiles
-
-Define reusable source/dest pairs in `nas_profiles.yaml` next to `organize_nas.py`:
+Example:
 
 ```yaml
 default:
@@ -241,109 +269,83 @@ mobile_backup:
   dest: "/Volumes/home/Organized_Photos"
 ```
 
-Running without `--source`/`--dest` automatically loads the `default` profile.
+Resolution behavior:
 
----
+- `--profile NAME` uses that named profile
+- otherwise, if `--source` or `--dest` is missing, the tool falls back to the `default` profile if it exists
 
-## Project Structure
+`nas_profiles.yaml` is intentionally ignored by Git in this repository because it is expected to contain machine-local paths.
 
-```
-NAS-Photo-Organizer/
-├── organize_nas.py              # Bootstrap wrapper (dependency installer)
-├── nas_organizer/
-│   ├── __init__.py
-│   ├── __main__.py              # python -m nas_organizer entry point
-│   ├── core.py                  # Main orchestrator, CLI, Rich UI, 5-phase engine
-│   ├── database.py              # SQLite WAL: FileCache + CopyJobs tables
-│   ├── io.py                    # Atomic copy, BLAKE2b hashing, retries, disk check
-│   └── metadata.py              # Date extraction (EXIF → filename → mdls → mtime)
-├── nas_ui/
-│   ├── Sources/
-│   │   ├── AppDelegate.swift    # macOS app lifecycle
-│   │   ├── ContentView.swift    # SwiftUI layout, sidebar, phase indicator
-│   │   └── BackendRunner.swift  # NSTask process, JSON pipe, speed/ETA computation
-│   └── build.sh                 # swiftc compiler script (no Xcode required)
-├── test_organize_nas.py         # 214 tests, ≥95% code coverage
-├── nas_profiles.yaml            # YAML configuration profiles
-└── requirements.txt             # Python dependencies
-```
+## Generated Files
 
----
-
-## Testing
-
-The project maintains **≥95% code coverage** across all modules.
-
-```bash
-# Run all tests
-python3 -m unittest test_organize_nas.py -v
-
-# Run with coverage report
-python3 -m coverage run --source=nas_organizer -m unittest test_organize_nas
-python3 -m coverage report --show-missing
-```
-
-Test classes cover:
-
-| Area | What Is Tested |
-| :--- | :--- |
-| `TestFastHash` | Partial hashing, size prefix, large files |
-| `TestProcessSingleFile` | Cache hits, mtime tolerance, OSError handling |
-| `TestSafeCopyAtomic` | Atomic rename, collision suffixes, retry on transient errors |
-| `TestVerifyCopy` | Hash match/mismatch, missing dest file |
-| `TestCheckDiskSpace` | Sufficient space, ENOSPC raise, 10 MB buffer |
-| `TestIsRetryableError` | ENOSPC not retried, other OSErrors retried |
-| `TestCleanupTmpFiles` | Orphan removal, nested dirs, dotdir skip |
-| `TestCacheDB` | Hash cache, job queue, WAL mode, idempotent inserts |
-| `TestBuildDestIndex` | Empty dest, seq tracking, duplicate dir, fast_dest mode |
-| `TestClassification` | New/dup/already-in-dest logic, date grouping |
-| `TestParallelClassification` | Correct YYYY/MM/DD paths, mdls fallback |
-| `TestClassificationException` | `get_file_date` crash → mtime fallback → Unknown_Date |
-| `TestUnknownDatePath` | 1970 epoch date → `Unknown_Date/` copy plan |
-| `TestExecuteJobs` | Successful copy, bytes tracking, `run_log` error messages |
-| `TestMaxTotalFailures` | Consecutive + total failure abort thresholds |
-| `TestSeqOverflowWarning` | `>999` files/day widened suffix, log warning |
-| `TestRunLogger` | Open/close, log/warn/error, try/finally guarantee |
-| `TestDryRunReport` | CSV columns, row count |
-| `TestAuditReceipt` | JSON structure, return path |
-| `TestLoadProfile` | YAML loading, missing profile error |
-| `TestFormatSeq` | Zero-padding, >999 widening |
-| `TestExifreadTagFound` | Tag match → parsed datetime; zero timestamp → None |
-| `TestParseArgs` | All CLI flags |
-
----
-
-## Generated Artifacts
-
-All logs and reports are written inside the destination directory:
+The organizer writes run state and reports into the destination root:
 
 | File | Purpose |
 | :--- | :--- |
-| `.organize_cache.db` | SQLite database (hash cache + job queue) |
-| `.organize_log.txt` | Plain-text run log with timestamps |
-| `.organize_logs/audit_receipt_*.json` | Post-copy audit receipts (source → dest mapping) |
-| `.organize_logs/dry_run_report_*.csv` | Dry-run preview spreadsheets |
+| `.organize_cache.db` | SQLite cache and persisted copy queue |
+| `.organize_log.txt` | Plain-text run log |
+| `.organize_logs/dry_run_report_*.csv` | Dry-run plan export |
+| `.organize_logs/audit_receipt_*.json` | Executed transfer receipt |
 
----
+The app build output under `nas_ui/build/` is also ignored by Git.
 
-## Reliability Improvements
+## Repository Layout
 
-This version adds several hardening improvements over v2:
+```text
+NAS-Photo-Organizer/
+  organize_nas.py
+  requirements.txt
+  README.md
+  nas_organizer/
+    __init__.py
+    __main__.py
+    core.py
+    database.py
+    io.py
+    metadata.py
+  nas_ui/
+    Sources/
+      BackendRunner.swift
+      ContentView.swift
+      NASOrganizerApp.swift
+    build.sh
+  test_organize_nas.py
+```
 
-### Disk Space Guard
-Before each copy attempt, `check_disk_space()` verifies the destination has at least `file_size + 10 MB` of free space. An `ENOSPC` error is raised immediately and never handed to the retry decorator — unlike transient network failures, a full disk won't self-heal.
+## Testing
 
-### Flapping Network Protection
-Two failure counters run in parallel: `consecutive_fail` (resets on success) and `total_fail` (never resets). If either reaches its threshold (`MAX_CONSECUTIVE_FAILURES = 5` or `MAX_TOTAL_FAILURES = 20`), the run aborts immediately with a clear diagnostic message rather than grinding through thousands of doomed jobs.
+The current repository test suite contains 209 unit and integration tests in [`test_organize_nas.py`](/Users/nishithnand/Downloads/photo_org/NAS-Photo-Organizer/test_organize_nas.py).
 
-### Orphan `.tmp` Cleanup
-At startup, the engine walks the destination tree and removes any `*.tmp` files left by previous interrupted copies. This prevents stale partial files from accumulating over time.
+Run the suite with:
 
-### `ptask = 0` Bug Fix
-Rich `Progress.add_task()` returns integer `TaskID` values starting at `0`. The previous `if progress and ptask:` guard treated task ID `0` as falsy, silently skipping all progress updates for the first task added to a `Progress` object. Fixed to `if progress is not None and ptask is not None:`.
+```bash
+python3 -m unittest test_organize_nas.py -v
+```
 
-### Resource Cleanup
-The `main()` function is wrapped in a `try/finally` block that guarantees `RunLogger.close()` and `CacheDB.close()` are called even when an unhandled exception occurs mid-run.
+Representative coverage areas include:
 
-### Parallel Classification
-Date extraction (EXIF/filename/mdls/mtime) previously ran serially. It now runs in a `ThreadPoolExecutor` on the new-files list only, eliminating the `mdls` serial bottleneck for libraries with thousands of undated files.
+- hashing behavior and cache reuse
+- atomic copy and collision handling
+- retry classification and disk-space failure behavior
+- destination indexing and `--fast-dest`
+- classification and date extraction fallback
+- copy execution, verification failure handling, and abort thresholds
+- dry-run reports and audit receipts
+- profile loading and CLI parsing
+
+## Notes And Tradeoffs
+
+- The destination cache is a performance feature. Use `--rebuild-cache` when you explicitly want a full refresh.
+- `--fast-dest` is best for repeated previews against a stable destination and should not be treated as a substitute for a real rebuild forever.
+- The GUI is macOS-specific, but the backend itself is plain Python.
+- Spotlight-based date extraction depends on macOS tooling.
+
+## Current State Summary
+
+As of the current codebase, this project is:
+
+- a resumable Python organizer with strong correctness-oriented transfer logic
+- a macOS SwiftUI front end for the same engine
+- safe to preview repeatedly
+- designed to survive interruptions and partial failures
+- optimized for large libraries where both speed and auditability matter
