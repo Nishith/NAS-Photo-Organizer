@@ -27,11 +27,43 @@ def verify_copy(src_path, dst_path, expected_hash):
         return False
 
 
+def cleanup_tmp_files(dst_dir):
+    """Remove orphaned .tmp files left by interrupted copies. Returns count removed."""
+    cleaned = 0
+    for root, dirs, fnames in os.walk(dst_dir):
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        for fname in fnames:
+            if fname.endswith('.tmp'):
+                path = os.path.join(root, fname)
+                try:
+                    os.remove(path)
+                    cleaned += 1
+                except OSError:
+                    pass
+    return cleaned
+
+
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=10),
        retry=retry_if_exception_type(OSError))
 def safe_copy_atomic(src, dst):
     """Copy src to dst atomically: write to .tmp, fsync, rename."""
     os.makedirs(os.path.dirname(dst), exist_ok=True)
+    dst_dir = os.path.dirname(dst)
+
+    # Check available disk space before attempting copy (10 MB safety buffer)
+    try:
+        needed = os.path.getsize(src)
+        free = shutil.disk_usage(dst_dir).free
+        if free < needed + 10 * 1024 * 1024:
+            raise OSError(
+                f"Insufficient disk space on destination: {free // (1024*1024)} MB free, "
+                f"{needed // (1024*1024)} MB needed"
+            )
+    except OSError as e:
+        if "Insufficient disk space" in str(e):
+            raise
+        # getsize or disk_usage failed for another reason; proceed and let copy fail naturally
+
     original_dst = dst
     counter = 1
     while os.path.exists(dst):
