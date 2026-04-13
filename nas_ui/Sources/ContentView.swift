@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var destPath: String = ""
     @State private var profileName: String = ""
     @State private var isDryRun: Bool = false
+    @State private var isFastDest: Bool = false
     
     var body: some View {
         HStack(spacing: 0) {
@@ -46,13 +47,15 @@ struct ContentView: View {
                 Toggle("Dry Run Mode", isOn: $isDryRun)
                     .padding(.top, 10)
                 
+                Toggle("Fast Dest Mode", isOn: $isFastDest)
+                
                 Spacer()
                 
                 Button(action: {
                     if runner.isRunning {
                         runner.cancel()
                     } else {
-                        runner.start(source: sourcePath, dest: destPath, profile: profileName, isDryRun: isDryRun)
+                        runner.start(source: sourcePath, dest: destPath, profile: profileName, isDryRun: isDryRun, isFastDest: isFastDest)
                     }
                 }) {
                     Text(runner.isRunning ? "Cancel" : "Start Transfer")

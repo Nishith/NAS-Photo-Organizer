@@ -85,6 +85,7 @@ def parse_args():
                         help=f"Thread pool size for hashing (default {DEFAULT_WORKERS})")
     parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts (unattended)")
     parser.add_argument("--json", action="store_true", help="Output progress as JSON instead of Rich text (for GUI backend usage)")
+    parser.add_argument("--fast-dest", action="store_true", help="Bypass destination OS scan and load directly from cache (fast repeated dry runs)")
     return parser.parse_args()
 
 
@@ -112,19 +113,46 @@ def load_profile(profile_name):
 # ── Destination Indexing ────────────────────────────────────────────────────
 
 def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
-                     progress=None, ptask=None):
+                     progress=None, ptask=None, fast_dest=False):
     import re
     if rebuild:
         cache_db.clear_cache(type_id=2)
 
     cache = cache_db.get_cache_dict(2)
-    files_to_check = []
-
     seq_index = defaultdict(int)
     dup_seq_index = defaultdict(int)
     seq_pattern = re.compile(r'^(\d{4}-\d{2}-\d{2}|Unknown)_(\d+)')
     dup_dir = os.path.join(dst_dir, "Duplicate")
     
+    hash_index = {}
+    
+    if fast_dest:
+        if progress and ptask:
+            progress.update(ptask, description="[cyan]Fast Dest: Loading from cache...", total=1)
+        emit_json("task_start", task="dest_hash", total=len(cache))
+        
+        for path, data in cache.items():
+            hash_index[data["hash"]] = path
+            fname = os.path.basename(path)
+            m = seq_pattern.match(fname)
+            if m:
+                prefix = m.group(1)
+                date_str = "Unknown_Date" if prefix == "Unknown" else prefix
+                seq = int(m.group(2))
+                if path.startswith(dup_dir):
+                    if seq > dup_seq_index[date_str]:
+                        dup_seq_index[date_str] = seq
+                else:
+                    if seq > seq_index[date_str]:
+                        seq_index[date_str] = seq
+                        
+        if progress and ptask:
+            progress.update(ptask, completed=1)
+        emit_json("task_complete", task="dest_hash")
+        return hash_index, seq_index, dup_seq_index
+
+    # ── Standard Validation (Network Scan) ──
+    files_to_check = []
     if progress and ptask:
         progress.update(ptask, total=None)
 
@@ -151,7 +179,6 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
             if progress and ptask and len(files_to_check) % 1000 == 0:
                 progress.update(ptask, description=f"[cyan]Scanning Dest... ({len(files_to_check)} found)")
 
-    hash_index = {}
     updates = []
     
     emit_json("task_start", task="dest_hash", total=len(files_to_check))
@@ -339,7 +366,7 @@ def main():
 
         task_dest = progress.add_task("[cyan]Scanning Destination Array...", total=None)
         dest_hash_index, dest_seq, dup_seq = build_dest_index(
-            dst, cache_db, rebuild, workers, progress, task_dest
+            dst, cache_db, rebuild, workers, progress, task_dest, fast_dest=args.fast_dest
         )
 
         task_src = progress.add_task("[magenta]Hashing Source Payload...", total=len(src_files))

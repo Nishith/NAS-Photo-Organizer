@@ -71,6 +71,7 @@ open "build/NAS Organizer UI.app"
 | `-y` / `--yes` | Skip confirmation prompts (for cron jobs) |
 | `--verify` | Re-hash each file after copy to verify byte-level integrity |
 | `--rebuild-cache` | Force a full re-index of the destination |
+| `--fast-dest` | Instantly bypass NAS sweeps and populate the destination array purely from SQLite cache. Used for fast, repeated dry-runs. |
 | `--workers N` | Thread pool size for parallel hashing (default: 8) |
 | `--json` | Mutes terminal animations and streams raw JSON logs to standard output (used exclusively by the native SwiftUI app) |
 

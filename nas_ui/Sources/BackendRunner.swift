@@ -35,7 +35,7 @@ class BackendRunner: ObservableObject {
         }
     }
     
-    func start(source: String, dest: String, profile: String, isDryRun: Bool) {
+    func start(source: String, dest: String, profile: String, isDryRun: Bool, isFastDest: Bool) {
         guard !isRunning else { return }
         isRunning = true
         logLines.removeAll()
@@ -43,7 +43,7 @@ class BackendRunner: ObservableObject {
         currentTaskName = "Starting Engine..."
         
         DispatchQueue.global(qos: .userInitiated).async {
-            self.runProcess(source: source, dest: dest, profile: profile, isDryRun: isDryRun)
+            self.runProcess(source: source, dest: dest, profile: profile, isDryRun: isDryRun, isFastDest: isFastDest)
         }
     }
     
@@ -62,7 +62,7 @@ class BackendRunner: ObservableObject {
         currentTaskName = "Cancelled"
     }
     
-    private func runProcess(source: String, dest: String, profile: String, isDryRun: Bool) {
+    private func runProcess(source: String, dest: String, profile: String, isDryRun: Bool, isFastDest: Bool) {
         let task = Process()
         let pipe = Pipe()
         let inPipe = Pipe()
@@ -78,6 +78,7 @@ class BackendRunner: ObservableObject {
         var args = ["python3", scriptPath, "--json"]
         
         if isDryRun { args.append("--dry-run") }
+        if isFastDest { args.append("--fast-dest") }
         if !profile.isEmpty {
             args.append(contentsOf: ["--profile", profile])
         } else {
