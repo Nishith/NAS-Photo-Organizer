@@ -30,6 +30,11 @@ _PKG_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_DIR = os.path.dirname(_PKG_DIR)
 
 console = Console()
+_json_active = False
+
+def emit_json(msg_type, **kwargs):
+    if _json_active:
+        print(json.dumps({"type": msg_type, **kwargs}), flush=True)
 
 
 # ── Run Logger ──────────────────────────────────────────────────────────────
@@ -79,6 +84,7 @@ def parse_args():
     parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
                         help=f"Thread pool size for hashing (default {DEFAULT_WORKERS})")
     parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts (unattended)")
+    parser.add_argument("--json", action="store_true", help="Output progress as JSON instead of Rich text (for GUI backend usage)")
     return parser.parse_args()
 
 
@@ -147,6 +153,8 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
 
     hash_index = {}
     updates = []
+    
+    emit_json("task_start", task="dest_hash", total=len(files_to_check))
 
     if progress and ptask:
         if len(files_to_check) == 0:
@@ -154,6 +162,7 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
         else:
             progress.update(ptask, description="[cyan]Validating Dest Hashes...", total=len(files_to_check))
 
+    count = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
             executor.submit(process_single_file, path, cache.get(path)): path
@@ -169,8 +178,13 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
                         updates.append((path, h, size, mtime))
             except Exception:
                 pass
+            count += 1
             if progress and ptask:
                 progress.advance(ptask)
+            if count % max(1, len(files_to_check)//100) == 0:
+                emit_json("task_progress", task="dest_hash", completed=count, total=len(files_to_check))
+
+    emit_json("task_complete", task="dest_hash")
 
     cache_db.save_batch(2, updates)
     return hash_index, seq_index, dup_seq_index
@@ -207,6 +221,12 @@ def generate_audit_receipt(jobs_executed, dest_path):
 
 def main():
     args = parse_args()
+
+    if args.json:
+        global _json_active, console
+        _json_active = True
+        console = Console(quiet=True)
+        emit_json("startup", status="initializing")
 
     # Resolve paths
     src = args.source
@@ -278,6 +298,7 @@ def main():
 
     # ── Discovery ───────────────────────────────────────────────────────
     src_files = []
+    emit_json("task_start", task="discovery")
     with console.status("[bold blue]Scanning source directories...", spinner="dots"):
         for root, dirs, fnames in os.walk(src):
             dirs[:] = sorted(d for d in dirs if not d.startswith('.'))
@@ -286,9 +307,11 @@ def main():
                     continue
                 if os.path.splitext(fname)[1].lower() in ALL_EXTS:
                     src_files.append(os.path.join(root, fname))
+    emit_json("task_complete", task="discovery", found=len(src_files))
 
     if not src_files:
         console.print("[yellow]No valid media files found in source.[/yellow]")
+        emit_json("error", message="No valid media files found in source")
         run_log.log("No valid media files found in source")
         run_log.close()
         cache_db.close()
@@ -320,8 +343,10 @@ def main():
         )
 
         task_src = progress.add_task("[magenta]Hashing Source Payload...", total=len(src_files))
+        emit_json("task_start", task="src_hash", total=len(src_files))
         src_cache = cache_db.get_cache_dict(1)
 
+        count = 0
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
                 executor.submit(process_single_file, path, src_cache.get(path)): path
@@ -337,6 +362,11 @@ def main():
                 except Exception:
                     pass
                 progress.advance(task_src)
+                count += 1
+                if count % max(1, len(src_files)//100) == 0:
+                    emit_json("task_progress", task="src_hash", completed=count, total=len(src_files))
+
+        emit_json("task_complete", task="src_hash")
 
     cache_db.save_batch(1, src_updates)
 
@@ -347,6 +377,7 @@ def main():
     hash_errors = 0
     src_seen = {}
 
+    emit_json("task_start", task="classification")
     with console.status("[bold yellow]Classifying by date...", spinner="arc"):
         for src_path in src_files:
             h = src_hashes.get(src_path)
@@ -367,6 +398,8 @@ def main():
             date_str = dt.strftime('%Y-%m-%d') if dt.year > 1971 else "Unknown_Date"
             date_groups[date_str].append((src_path, h))
 
+    emit_json("task_complete", task="classification", already_in_dst=already_in_dst, new=len(src_seen), dups=len(src_dups), errors=hash_errors)
+    
     run_log.log(f"Classification: {already_in_dst} already in dest, "
                 f"{len(src_seen)} new, {len(src_dups)} internal dups, "
                 f"{hash_errors} hash errors")
@@ -406,6 +439,8 @@ def main():
             dst_path = os.path.join(dup, yyyy, mm, dd, filename)
         jobs_to_insert.append((src_path, dst_path, h, 'PENDING'))
 
+    emit_json("copy_plan_ready", count=len(jobs_to_insert))
+
     # ── Dry run or execute ──────────────────────────────────────────────
     if args.dry_run:
         log_dir = os.path.join(dst, ".organize_logs")
@@ -415,6 +450,7 @@ def main():
         run_log.log(f"Dry-run report: {len(jobs_to_insert)} planned, report at {report_path}")
         run_log.close()
         cache_db.close()
+        emit_json("complete", status="dry_run_finished")
         return
 
     if not jobs_to_insert:
@@ -422,14 +458,19 @@ def main():
         run_log.log("Nothing to copy — all files already in destination")
         run_log.close()
         cache_db.close()
+        emit_json("complete", status="nothing_to_copy")
         return
 
     console.print(f"\n[bold magenta]{len(jobs_to_insert)} files ready to copy.[/bold magenta]")
     if not args.yes:
+        # In JSON mode we generally expect --yes to be passed by GUI, but just in case
+        if _json_active:
+             emit_json("prompt", message="Proceed with copy?")
         if not Confirm.ask("Proceed with copy?"):
             run_log.log("Copy cancelled by user")
             run_log.close()
             cache_db.close()
+            emit_json("complete", status="cancelled")
             return
 
     cache_db.enqueue_jobs(jobs_to_insert)
@@ -438,6 +479,7 @@ def main():
     run_log.log("Run complete")
     run_log.close()
     cache_db.close()
+    emit_json("complete", status="finished")
 
 
 def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False):
@@ -447,6 +489,8 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False):
     consecutive_fail = 0
     executed_log = []
     verify_failures = 0
+    
+    emit_json("task_start", task="copy", total=len(pending_jobs))
 
     with Progress(
         SpinnerColumn(),
@@ -458,6 +502,7 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False):
     ) as progress:
         task_id = progress.add_task("[green]Copying...", total=len(pending_jobs))
 
+        count = 0
         for src_p, dst_p, h in pending_jobs:
             try:
                 result = safe_copy_atomic(src_p, dst_p)
@@ -465,6 +510,7 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False):
                     if not verify_copy(src_p, result, h):
                         if run_log:
                             run_log.error(f"Verification failed: {src_p} → {result}")
+                        emit_json("error", message=f"Verification failed: {src_p} -> {result}")
                         verify_failures += 1
                 cache_db.update_job_status(src_p, 'COPIED')
                 st = os.stat(result)
@@ -473,6 +519,7 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False):
                 consecutive_fail = 0
             except Exception as e:
                 cache_db.update_job_status(src_p, 'FAILED')
+                emit_json("error", message=f"Copy failed: {src_p} -> {dst_p}: {e}")
                 if run_log:
                     run_log.error(f"Copy failed: {src_p} → {dst_p}: {e}")
                 consecutive_fail += 1
@@ -483,6 +530,11 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False):
                         run_log.error(msg)
                     break
             progress.advance(task_id)
+            count += 1
+            if count % max(1, len(pending_jobs)//100) == 0:
+                emit_json("task_progress", task="copy", completed=count, total=len(pending_jobs))
+        
+        emit_json("task_complete", task="copy")
 
     cache_db.save_batch(2, dest_updates)
 
