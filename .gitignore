@@ -15,3 +15,6 @@ dry_run_report_*.csv
 audit_receipt_*.json
 .coverage
 htmlcov/
+.claude/
+nas_profiles.yaml
+nas_ui/build/

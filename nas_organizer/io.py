@@ -4,18 +4,20 @@ import shutil
 import hashlib
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
+HASH_CHUNK_SIZE = 8 * 1024 * 1024
+
 
 def fast_hash(path, known_size=None):
-    """Fast partial hash: size + blake2b(first 512KB + last 512KB)."""
+    """Stream a full-file blake2b hash prefixed with size for collision-resistant identity."""
     size = known_size if known_size is not None else os.path.getsize(path)
     h = hashlib.blake2b()
     h.update(str(size).encode())
-    chunk = 512 * 1024
     with open(path, 'rb') as f:
-        h.update(f.read(chunk))
-        if size > chunk:
-            f.seek(-min(chunk, size - chunk), 2)
-            h.update(f.read(chunk))
+        while True:
+            chunk = f.read(HASH_CHUNK_SIZE)
+            if not chunk:
+                break
+            h.update(chunk)
     return f"{size}_{h.hexdigest()}"
 
 
@@ -64,14 +66,21 @@ def cleanup_tmp_files(dst_dir):
 def _is_retryable_error(exc):
     """Return True for transient OSErrors that are worth retrying.
 
-    ENOSPC (disk full) is permanent — retrying wastes time and should be
-    propagated immediately to the caller.
+    Permanent local-path errors should fail fast so stale queue entries do not
+    stall large resumed runs.
     """
-    return isinstance(exc, OSError) and getattr(exc, 'errno', None) != errno.ENOSPC
+    non_retryable_errnos = {
+        errno.ENOSPC,
+        errno.ENOENT,
+        errno.ENOTDIR,
+        errno.EISDIR,
+        errno.EINVAL,
+    }
+    return isinstance(exc, OSError) and getattr(exc, 'errno', None) not in non_retryable_errnos
 
 
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=10),
-       retry=retry_if_exception(_is_retryable_error))
+       retry=retry_if_exception(_is_retryable_error), reraise=True)
 def safe_copy_atomic(src, dst):
     """Copy src to dst atomically: write to .tmp, fsync, rename.
 

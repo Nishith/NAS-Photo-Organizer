@@ -116,6 +116,12 @@ class TestFastHash(TempDirMixin, unittest.TestCase):
         self.assertTrue(parts[0].isdigit())
         self.assertTrue(len(parts[1]) > 0)
 
+    def test_middle_of_large_file_changes_hash(self):
+        chunk = 512 * 1024
+        p1 = self._mkfile("large_a.bin", b"A" * chunk + b"X" * chunk + b"B" * chunk)
+        p2 = self._mkfile("large_b.bin", b"A" * chunk + b"Y" * chunk + b"B" * chunk)
+        self.assertNotEqual(fast_hash(p1), fast_hash(p2))
+
 
 # ════════════════════════════════════════════════════════════════════════════
 # verify_copy
@@ -198,7 +204,7 @@ class TestSafeCopyAtomic(TempDirMixin, unittest.TestCase):
 
     def test_missing_source_raises(self):
         dst = os.path.join(self.tmpdir, "dst", "photo.jpg")
-        with self.assertRaises(Exception):
+        with self.assertRaises(FileNotFoundError):
             safe_copy_atomic("/nonexistent/src.jpg", dst)
 
 
@@ -1178,13 +1184,40 @@ class TestExecuteJobs(TempDirMixin, unittest.TestCase):
         execute_jobs(pending, db, dst_dir, run_log=logger, verify=True)
         logger.close()
 
-        # File still gets copied (verification is advisory, not blocking)
-        self.assertTrue(os.path.exists(dst_path))
+        # Verification failure should be treated as a failed transfer
+        self.assertFalse(os.path.exists(dst_path))
+        cur = db.conn.execute("SELECT status FROM CopyJobs WHERE src_path = ?", (src,))
+        self.assertEqual(cur.fetchone()[0], "FAILED")
+        self.assertEqual(db.get_cache_dict(2), {})
 
         # Log should contain verification failure
         with open(os.path.join(dst_dir, "test.log")) as f:
             log_content = f.read()
         self.assertIn("Verification failed", log_content)
+        db.close()
+
+    def test_audit_receipt_uses_actual_collision_path(self):
+        from nas_organizer.core import execute_jobs
+        src_dir, dst_dir, db = self._setup_env()
+
+        src = os.path.join(src_dir, "photo.jpg")
+        with open(src, 'wb') as f:
+            f.write(b"new data")
+
+        planned_dst = os.path.join(dst_dir, "photo.jpg")
+        with open(planned_dst, 'wb') as f:
+            f.write(b"existing")
+
+        db.enqueue_jobs([(src, planned_dst, "h1", "PENDING")])
+        execute_jobs(db.get_pending_jobs(), db, dst_dir)
+
+        receipt_dir = os.path.join(dst_dir, ".organize_logs")
+        receipt_path = os.path.join(receipt_dir, sorted(os.listdir(receipt_dir))[-1])
+        with open(receipt_path) as f:
+            receipt = json.load(f)
+
+        self.assertTrue(os.path.exists(os.path.join(dst_dir, "photo_collision_1.jpg")))
+        self.assertEqual(receipt["transfers"][0]["dest"], os.path.join(dst_dir, "photo_collision_1.jpg"))
         db.close()
 
     def test_consecutive_failure_aborts(self):
@@ -1263,6 +1296,22 @@ class TestMainDryRun(TempDirMixin, unittest.TestCase):
         # Header + 2 data rows
         self.assertEqual(len(rows), 3)
         self.assertEqual(rows[0], ["Source", "Destination", "Hash", "Status"])
+
+    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    def test_dry_run_creates_missing_destination_root(self, _mock_yaml):
+        from nas_organizer.core import main
+        src = os.path.join(self.tmpdir, "source")
+        dst = os.path.join(self.tmpdir, "dest_missing")
+        os.makedirs(src)
+
+        with open(os.path.join(src, "IMG_20230615_120000.jpg"), 'wb') as f:
+            f.write(b"photo_data")
+
+        with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
+            main()
+
+        self.assertTrue(os.path.isdir(dst))
+        self.assertTrue(os.path.exists(os.path.join(dst, ".organize_cache.db")))
 
     @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
     def test_dry_run_empty_source(self, _mock_yaml):
@@ -1834,12 +1883,16 @@ class TestIsRetryableError(unittest.TestCase):
         e = OSError("network reset")
         self.assertTrue(_is_retryable_error(e))
 
-    def test_enoent_is_retryable(self):
+    def test_enoent_is_not_retryable(self):
         e = OSError(errno.ENOENT, "no such file")
-        self.assertTrue(_is_retryable_error(e))
+        self.assertFalse(_is_retryable_error(e))
 
     def test_enospc_is_not_retryable(self):
         e = OSError(errno.ENOSPC, "no space left on device")
+        self.assertFalse(_is_retryable_error(e))
+
+    def test_enotdir_is_not_retryable(self):
+        e = OSError(errno.ENOTDIR, "not a directory")
         self.assertFalse(_is_retryable_error(e))
 
     def test_non_oserror_is_not_retryable(self):

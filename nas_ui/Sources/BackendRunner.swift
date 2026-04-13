@@ -46,6 +46,14 @@ class BackendRunner: ObservableObject {
 
     // Error tracking for persistent badge
     @Published var errorCount: Int = 0
+    @Published var discoveredCount: Int = 0
+    @Published var plannedCount: Int = 0
+    @Published var alreadyInDestinationCount: Int = 0
+    @Published var duplicateCount: Int = 0
+    @Published var hashErrorCount: Int = 0
+    @Published var copiedCount: Int = 0
+    @Published var failedCount: Int = 0
+    @Published var completionStatus: String = "idle"
 
     // Set on completion so UI can offer "Open in Finder"
     @Published var completedDest: String = ""
@@ -81,6 +89,14 @@ class BackendRunner: ObservableObject {
         completedDest = ""
         completedReport = ""
         currentTaskName = "Starting Engine..."
+        discoveredCount = 0
+        plannedCount = 0
+        alreadyInDestinationCount = 0
+        duplicateCount = 0
+        hashErrorCount = 0
+        copiedCount = 0
+        failedCount = 0
+        completionStatus = "running"
         speedLastBytes = 0
         speedLastTime = Date()
 
@@ -106,6 +122,7 @@ class BackendRunner: ObservableObject {
             self.currentTaskName = "Cancelled"
             self.speedMBps = 0.0
             self.etaSeconds = -1
+            self.completionStatus = "cancelled"
         }
     }
 
@@ -245,7 +262,13 @@ class BackendRunner: ObservableObject {
                 self.progress = 1.0
                 self.speedMBps = 0.0
                 self.etaSeconds = -1
+                if t == "discovery" {
+                    self.discoveredCount = event.found ?? self.discoveredCount
+                }
                 if t == "classification" {
+                    self.alreadyInDestinationCount = event.already_in_dst ?? 0
+                    self.duplicateCount = event.dups ?? 0
+                    self.hashErrorCount = event.errors ?? 0
                     self.appendLog("Classification complete:")
                     self.appendLog("  New files:        \(event.new ?? 0)")
                     self.appendLog("  Already in dest:  \(event.already_in_dst ?? 0)")
@@ -254,10 +277,13 @@ class BackendRunner: ObservableObject {
                         self.appendLog("  Hash errors:      \(event.errors!)")
                     }
                 } else if t == "copy" {
+                    self.copiedCount = event.copied ?? 0
+                    self.failedCount = event.failed ?? 0
                     self.appendLog("Copy complete: \(event.copied ?? 0) succeeded, \(event.failed ?? 0) failed.")
                 }
 
             case "copy_plan_ready":
+                self.plannedCount = event.count ?? 0
                 self.appendLog("Plan ready: \(event.count ?? 0) files queued for copy.")
 
             case "info":
@@ -281,6 +307,7 @@ class BackendRunner: ObservableObject {
                 self.etaSeconds = -1
                 self.completedDest = event.dest ?? ""
                 self.completedReport = event.report ?? ""
+                self.completionStatus = event.status ?? "done"
                 let statusLabel: String
                 switch event.status {
                 case "finished":         statusLabel = "Done"
