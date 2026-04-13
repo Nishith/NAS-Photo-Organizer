@@ -1,52 +1,121 @@
-# NAS Photo Organizer v3 (Enterprise Edition)
+# NAS Photo Organizer v3
 
-> **TL;DR:** A high-performance Python package built to recursively scan, identify, deduplicate, and organize massive photo/video datasets over hostile network configurations (NAS, SMB, AFP) without data loss. It transfers media into an immaculate `YYYY/MM/DD` folder structure utilizing Write-Ahead Logging (WAL) SQLite databases, `concurrent.futures` multithreading, and `BLAKE2b` hardware-accelerated chunk-hashing. It survives network drops natively via exponential backoff retries and atomic OS disk flushing (`fsync`).
+> **TL;DR:** A high-performance Python tool that recursively scans, deduplicates, and organizes massive photo/video libraries on network-attached storage into a clean `YYYY/MM/DD` folder structure. Survives network drops, power outages, and partial transfers with atomic writes, SQLite-backed resume queues, and exponential backoff retries. Ships with a beautiful Rich terminal UI, YAML configuration profiles, and full audit logging.
 
 ---
 
-## 🚀 Architecture Overview
+## Features
 
-This project evolved from a monolithic script into an enterprise toolkit tailored exclusively for extreme scale and fault tolerance when dealing with Network Attached Storage devices dropping packets:
+- **Atomic File Transfers** — Files are written to `.tmp` staging buffers, flushed to disk via `os.fsync()`, and only then renamed into place. No more corrupted partial files from network hiccups.
+- **Resumable Job Queue** — The entire copy plan is committed to an SQLite database (`CopyJobs` table) before a single byte is written. If interrupted, just re-run the script — it picks up exactly where it stopped.
+- **SQLite WAL Mode** — Write-Ahead Logging ensures the database never locks or corrupts, even during crashes.
+- **BLAKE2b Hashing** — Fast, hardware-accelerated deduplication using chunked hash digests (first + last 512KB).
+- **Multithreaded I/O** — Configurable thread pools for parallel hashing across network drives.
+- **Exponential Backoff** — `tenacity`-powered automatic retries on network failures with configurable backoff.
+- **Rich Terminal Dashboard** — Animated progress bars with ETA, transfer speed, and file counts. Intelligent prompts for session resumption.
+- **YAML Profiles** — Define named source/dest mappings in `nas_profiles.yaml` to manage multiple libraries.
+- **Audit Receipts** — Every successful run generates a JSON receipt mapping exact `source → destination` paths.
+- **Dry-Run Reports** — Preview the entire copy plan as a CSV spreadsheet before committing.
 
-- **Atomic Network File Synchronization:** Avoids dreaded "corrupted partial file" scenarios. Byte transfers are spooled into `.ext.tmp` buffers securely. Only when the host hardware reports a successful physical spindle `os.fsync()` cache flush will the file rename lock natively commit over the network.
-- **SQLite WAL & State Machine Queue:** No more starting from scratch if processing hundreds of thousands of files crashes. Your index arrays dump safely into an SQLite database (`.organize_cache.db`). The active transfers execute sequentially off an idempotent robust `CopyJobs` queue using isolated Database Write-Ahead Logging schemas. Power outage? Just turn the script back on and it resumes hashing precisely where it died.
-- **Multithreaded I/O Backoffs:** Disk latency and spotty connection drops are shielded by native concurrent thread pools looping over dynamic `tenacity` exponential network backoffs. 
-- **BLAKE2b Verification Hashing:** Verifies strict byte-uniqueness utilizing non-cryptographic `hashlib.blake2b()` native streaming, safely replacing outdated MD5 limits.
+## Data Safety Rules
 
-## 🗂 Data Structure Rules
+1. **Zero Deletion** — The source is never modified or deleted. All operations are read + copy only.
+2. **Global Deduplication** — Files already in the destination (matched by size + hash) are silently skipped. Internal duplicates within the source are routed to a separate `Duplicate/YYYY/MM/DD/` directory.
+3. **Collision Protection** — If a destination file already exists, the copy is safely renamed with an incrementing `_collision_N` suffix. No data is ever overwritten.
 
-1. **Zero Deletion:** Operations exist solely in `Read` and `Copy`. The source environment is absolutely never modified or deleted. 
-2. **Global Deduplication:** It aggressively indexes destination drives. Identical files (matching by file size and chunked hash digests) found redundantly strewn across the source drive bypass the unified timeline and route seamlessly into an isolated `Duplicate/YYYY/MM/DD/` bucket to keep chronological folders completely sterile.
+## Date Extraction (Graceful Degradation)
 
-#### Date Exaction Flow (Graceful Degradation)
-1. **EXIF Base Data:** It utilizes standard `exifread` to extract `EXIF DateTimeOriginal`, pulling exact camera-shutter timings natively. 
-2. **Regex Parsing:** Useful for stripped or encrypted files sent natively via WhatsApp/Android (e.g. `IMG_20240101_XXX`).
-3. **Spotlight APIs:** Runs Mac native `mdls` subprocesses to analyze deeper network-layer OS metadata limits for tricky formats like `.MOV`.
-4. **Modified Times:** System bounds fallback mapping strictly as a last resort.
+1. **EXIF** — `exifread` extracts `DateTimeOriginal` from photo metadata.
+2. **Filename Patterns** — Regex parsing for `IMG_20240101_XXXXXX`, `VID_`, `PANO_`, `BURST_`, etc.
+3. **Spotlight (macOS)** — Falls back to `mdls kMDItemContentCreationDate` for formats like `.MOV`.
+4. **Modified Time** — Last resort: uses the filesystem `mtime`.
 
-If the file refuses to yield a date, it isolates gently in an `Unknown_Date/` bin for manual user resolution.
+Files that refuse to yield a date are placed in `Unknown_Date/` for manual review.
 
-## 💻 Usage & Installation 
+## Installation & Usage
 
-To prevent polluting your `sys.path`, simply boot the wrapper launcher `organize_nas.py` sitting at the root logic. It auto-resolves your Python dependencies inside your environment, checks for `requirements.txt` (`tenacity`, `exifread`), securely installs them, and routes internally to the engine.
+The bootstrap wrapper `organize_nas.py` handles dependency management automatically. It detects missing packages (`exifread`, `tenacity`, `rich`, `pyyaml`) and offers to install them.
 
 ```bash
+# Basic usage
 python3 organize_nas.py --source /Volumes/NAS/Unsorted --dest /Volumes/NAS/Organized
+
+# Use a named profile from nas_profiles.yaml
+python3 organize_nas.py --profile mobile_backup
+
+# Preview without copying
+python3 organize_nas.py --dry-run
+
+# Auto-confirm for unattended/cron usage
+python3 organize_nas.py -y
 ```
 
-### CLI Arguments
+### CLI Flags
 
-| Flag | Operation Effect |
+| Flag | Description |
 | :--- | :--- |
-| `--dry-run` | Strictly constructs a target database, scans duplicates, establishes chunked memory maps, and previews the file sequences on standard output without executing copy-writes. |
-| `-y` or  `--yes` | Silences the manual user prompt buffer asking for `Proceed to Copy Database? [Y/n]` (ideal for unmonitored crontabs). |
-| `--verify` | Enforces a dual-hash post-flush re-verification layer immediately checking if the written drive bytes identically match the memory payload bytes over the wire. |
-| `--rebuild-cache` | Triggers a hard deletion wiping out `.organize_cache.db` arrays, forcibly resolving the metadata over the entire hierarchy from byte 0. |
+| `--source PATH` | Source directory to scan |
+| `--dest PATH` | Destination directory for organized output |
+| `--profile NAME` | Load source/dest from `nas_profiles.yaml` |
+| `--dry-run` | Generate a CSV report of planned operations without copying |
+| `-y` / `--yes` | Skip confirmation prompts (for cron jobs) |
+| `--verify` | Re-hash each file after copy to verify byte-level integrity |
+| `--rebuild-cache` | Force a full re-index of the destination |
+| `--workers N` | Thread pool size for parallel hashing (default: 8) |
 
-## 🧪 Validations
+### Configuration Profiles
 
-We maintain a dynamic Python `unittest` suite injecting temporary local DB environments masking NAS limits locally to guarantee sequences never destruct identically indexed buffers. 
+Define reusable source/dest pairs in `nas_profiles.yaml`:
+
+```yaml
+default:
+  source: "/Volumes/photo/bkp_1_9"
+  dest: "/Volumes/home/Organized_Photos"
+
+mobile_backup:
+  source: "/Volumes/home/Mobile_Snapshots"
+  dest: "/Volumes/home/Organized_Photos"
+```
+
+Running without `--source`/`--dest` automatically loads the `default` profile.
+
+## Project Structure
+
+```
+NAS-Photo-Organizer/
+├── organize_nas.py          # Bootstrap wrapper (dependency installer)
+├── nas_organizer/
+│   ├── __init__.py
+│   ├── __main__.py          # Entry point
+│   ├── core.py              # Main orchestrator, CLI, Rich UI
+│   ├── database.py          # SQLite WAL cache + job queue
+│   ├── io.py                # Atomic copy, BLAKE2b hashing, retries
+│   └── metadata.py          # Date extraction (EXIF, filename, mdls)
+├── test_organize_nas.py     # 141 tests, 97% coverage
+├── nas_profiles.yaml        # YAML configuration profiles
+└── requirements.txt         # Python dependencies
+```
+
+## Testing
+
+The project maintains a comprehensive test suite with **141 tests** at **97% code coverage**, including integration tests for the full dry-run and copy pipelines.
 
 ```bash
+# Run tests
 python3 -m unittest test_organize_nas.py -v
+
+# Run with coverage
+python3 -m coverage run -m unittest test_organize_nas.py
+python3 -m coverage report --show-missing
 ```
+
+## Generated Artifacts
+
+All logs and reports are stored in `.organize_logs/` within the destination directory:
+
+| File | Purpose |
+| :--- | :--- |
+| `.organize_cache.db` | SQLite database (hash cache + job queue) |
+| `.organize_log.txt` | Plain-text run log with timestamps |
+| `.organize_logs/audit_receipt_*.json` | Post-copy audit receipts |
+| `.organize_logs/dry_run_report_*.csv` | Dry-run preview spreadsheets |

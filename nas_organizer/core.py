@@ -116,7 +116,7 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
 
     seq_index = defaultdict(int)
     dup_seq_index = defaultdict(int)
-    seq_pattern = re.compile(r'^(\d{4}-\d{2}-\d{2})_(\d+)')
+    seq_pattern = re.compile(r'^(\d{4}-\d{2}-\d{2}|Unknown)_(\d+)')
     dup_dir = os.path.join(dst_dir, "Duplicate")
     
     if progress and ptask:
@@ -125,16 +125,16 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
     for root, dirs, fnames in os.walk(dst_dir):
         dirs[:] = [d for d in dirs if not d.startswith('.')]
         for fname in fnames:
-            if fname.startswith('.') or fname in SKIP_FILES:
-                continue
-            if not os.path.splitext(fname)[1].lower() in ALL_EXTS:
+            if fname.startswith('.') or fname in SKIP_FILES or os.path.splitext(fname)[1].lower() not in ALL_EXTS:
                 continue
             path = os.path.join(root, fname)
             files_to_check.append(path)
 
             m = seq_pattern.match(fname)
             if m:
-                date_str, seq = m.group(1), int(m.group(2))
+                prefix = m.group(1)
+                date_str = "Unknown_Date" if prefix == "Unknown" else prefix
+                seq = int(m.group(2))
                 if path.startswith(dup_dir):
                     if seq > dup_seq_index[date_str]:
                         dup_seq_index[date_str] = seq
@@ -408,7 +408,9 @@ def main():
 
     # ── Dry run or execute ──────────────────────────────────────────────
     if args.dry_run:
-        report_path = os.path.join(dst, f"dry_run_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
+        log_dir = os.path.join(dst, ".organize_logs")
+        os.makedirs(log_dir, exist_ok=True)
+        report_path = os.path.join(log_dir, f"dry_run_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
         generate_dry_run_report(jobs_to_insert, dst, report_path)
         run_log.log(f"Dry-run report: {len(jobs_to_insert)} planned, report at {report_path}")
         run_log.close()

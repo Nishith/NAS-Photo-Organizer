@@ -1,7 +1,7 @@
 import os
 import shutil
 import hashlib
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 
 def fast_hash(path, known_size=None):
@@ -27,13 +27,17 @@ def verify_copy(src_path, dst_path, expected_hash):
         return False
 
 
-@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=10))
+@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=10),
+       retry=retry_if_exception_type(OSError))
 def safe_copy_atomic(src, dst):
     """Copy src to dst atomically: write to .tmp, fsync, rename."""
     os.makedirs(os.path.dirname(dst), exist_ok=True)
-    if os.path.exists(dst):
-        base, ext = os.path.splitext(dst)
-        dst = f"{base}_collision{ext}"
+    original_dst = dst
+    counter = 1
+    while os.path.exists(dst):
+        base, ext = os.path.splitext(original_dst)
+        dst = f"{base}_collision_{counter}{ext}"
+        counter += 1
 
     tmp_dst = dst + ".tmp"
     try:

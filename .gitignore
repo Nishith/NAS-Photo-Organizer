@@ -5,6 +5,11 @@ __pycache__/
 venv/
 .venv/
 .organize_cache.db
+.organize_cache.db-wal
+.organize_cache.db-shm
 .dest_hash_cache.json
 .src_hash_cache.json
 .organize_log.txt
+.organize_logs/
+dry_run_report_*.csv
+audit_receipt_*.json
