@@ -13,77 +13,113 @@ struct RunHistoryView: View {
     }()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Run History")
-                    .font(.largeTitle.weight(.bold))
-                Text("Chronoframe reads existing artifacts from the destination root without changing them.")
+        List {
+            if !appState.historyStore.destinationRoot.isEmpty {
+                Section("Destination") {
+                    Text(appState.historyStore.destinationRoot)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
+            }
+
+            Section("Artifacts") {
+                if appState.historyStore.entries.isEmpty {
+                    EmptyStateView(
+                        title: "No Artifacts Yet",
+                        message: "Run a preview or transfer, then open this section to inspect reports, receipts, and logs.",
+                        systemImage: "clock.arrow.circlepath"
+                    )
+                    .listRowInsets(EdgeInsets())
+                } else {
+                    ForEach(appState.historyStore.entries) { entry in
+                        historyRow(for: entry)
+                            .padding(.vertical, 4)
+                    }
+                }
+            }
+        }
+        .listStyle(.inset)
+        .navigationTitle("Run History")
+    }
+
+    private func historyRow(for entry: RunHistoryEntry) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                Label {
+                    Text(entry.title)
+                        .font(.headline)
+                } icon: {
+                    Image(systemName: entry.kind.systemImage)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 12)
+
+                Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            if appState.historyStore.entries.isEmpty {
-                EmptyStateView(
-                    title: "No Artifacts Yet",
-                    message: "Run a preview or transfer, then open this section to inspect reports, receipts, and logs.",
-                    systemImage: "clock.arrow.circlepath"
-                )
-            } else {
-                List(appState.historyStore.entries) { entry in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Label {
-                                Text(entry.title)
-                                    .font(.headline)
-                            } icon: {
-                                Image(systemName: entry.kind.systemImage)
-                                    .foregroundStyle(.secondary)
-                            }
+            Text(entry.relativePath)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
 
-                            Text(entry.relativePath)
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-
-                            HStack(spacing: 10) {
-                                Text(entry.kind.title)
-                                    .font(.caption2.weight(.semibold))
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(.thinMaterial, in: Capsule())
-
-                                if let fileSizeBytes = entry.fileSizeBytes {
-                                    Text(Self.fileSizeFormatter.string(fromByteCount: fileSizeBytes))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-
-                        Spacer()
-
-                        VStack(alignment: .trailing, spacing: 8) {
-                            Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            HStack(spacing: 8) {
-                                Button("Open") {
-                                    appState.openHistoryEntry(entry)
-                                }
-
-                                Button("Reveal") {
-                                    appState.revealHistoryEntry(entry)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 10) {
+                    historyMetadata(for: entry)
+                    Spacer(minLength: 12)
+                    historyActions(for: entry)
                 }
-                .listStyle(.inset)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    historyMetadata(for: entry)
+                    historyActions(for: entry)
+                }
             }
         }
-        .padding(24)
-        .navigationTitle("Run History")
+    }
+
+    private func historyMetadata(for entry: RunHistoryEntry) -> some View {
+        HStack(spacing: 10) {
+            Text(entry.kind.title)
+                .font(.caption2.weight(.semibold))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.thinMaterial, in: Capsule())
+
+            if let fileSizeBytes = entry.fileSizeBytes {
+                Text(Self.fileSizeFormatter.string(fromByteCount: fileSizeBytes))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func historyActions(for entry: RunHistoryEntry) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                Button("Open") {
+                    appState.openHistoryEntry(entry)
+                }
+
+                Button("Reveal") {
+                    appState.revealHistoryEntry(entry)
+                }
+            }
+
+            Menu("Actions") {
+                Button("Open") {
+                    appState.openHistoryEntry(entry)
+                }
+
+                Button("Reveal") {
+                    appState.revealHistoryEntry(entry)
+                }
+            }
+        }
     }
 }

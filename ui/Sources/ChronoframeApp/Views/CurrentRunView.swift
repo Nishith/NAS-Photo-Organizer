@@ -3,32 +3,23 @@ import ChronoframeAppCore
 #endif
 import SwiftUI
 
-private enum ActivityPane: String, CaseIterable, Identifiable {
-    case summary = "Summary"
-    case console = "Console"
-
-    var id: String { rawValue }
-}
-
 struct CurrentRunView: View {
     @ObservedObject var appState: AppState
-    @State private var activityPane: ActivityPane = .summary
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Current Run")
-                        .font(.largeTitle.weight(.bold))
-                    Text(statusSubtitle)
-                        .foregroundStyle(.secondary)
-                }
-
-                GroupBox("Status") {
+            VStack(alignment: .leading, spacing: 18) {
+                GroupBox {
                     VStack(alignment: .leading, spacing: 16) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(appState.runSessionStore.currentTaskTitle)
-                                .font(.title2.weight(.semibold))
+                        HStack(alignment: .top, spacing: 16) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(appState.runSessionStore.currentTaskTitle)
+                                    .font(.title2.weight(.semibold))
+
+                                Text(statusSubtitle)
+                                    .foregroundStyle(.secondary)
+                            }
+
                             Spacer()
                             statusBadge
                         }
@@ -36,86 +27,100 @@ struct CurrentRunView: View {
                         ProgressView(value: appState.runSessionStore.progress)
                             .tint(.accentColor)
 
-                        phaseRow
+                        phaseView
                     }
                 }
 
-                GroupBox("Metrics") {
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                        metricCard(title: "Discovered", value: abbreviated(appState.runSessionStore.metrics.discoveredCount))
-                        metricCard(title: "Planned", value: abbreviated(appState.runSessionStore.metrics.plannedCount))
-                        metricCard(title: "Already There", value: abbreviated(appState.runSessionStore.metrics.alreadyInDestinationCount))
-                        metricCard(title: "Duplicates", value: abbreviated(appState.runSessionStore.metrics.duplicateCount))
-                        metricCard(title: "Issues", value: abbreviated(appState.runSessionStore.issueCount))
-                        metricCard(title: "Copied", value: abbreviated(appState.runSessionStore.metrics.copiedCount))
-                    }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 12)], spacing: 12) {
+                    metricCard(title: "Discovered", value: abbreviated(appState.runSessionStore.metrics.discoveredCount))
+                    metricCard(title: "Planned", value: abbreviated(appState.runSessionStore.metrics.plannedCount))
+                    metricCard(title: "Already There", value: abbreviated(appState.runSessionStore.metrics.alreadyInDestinationCount))
+                    metricCard(title: "Duplicates", value: abbreviated(appState.runSessionStore.metrics.duplicateCount))
+                    metricCard(title: "Issues", value: abbreviated(appState.runSessionStore.issueCount))
+                    metricCard(title: "Copied", value: abbreviated(appState.runSessionStore.metrics.copiedCount))
                 }
 
-                GroupBox("Artifacts") {
-                    HStack(spacing: 12) {
-                        Button("Open Destination") {
-                            appState.openDestination()
-                        }
-                        .disabled((appState.runSessionStore.summary?.artifacts.destinationRoot ?? "").isEmpty)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 16) {
+                        overviewPanel
+                            .frame(minWidth: 300, maxWidth: .infinity, alignment: .leading)
 
-                        Button("Open Report") {
-                            appState.openReport()
-                        }
-                        .disabled(appState.runSessionStore.summary?.artifacts.reportPath == nil)
-
-                        Button("Open Logs") {
-                            appState.openLogsDirectory()
-                        }
-                        .disabled(appState.runSessionStore.summary?.artifacts.logsDirectoryPath == nil)
-
-                        Spacer()
+                        consolePanel
+                            .frame(minWidth: 340, maxWidth: .infinity, alignment: .leading)
                     }
-                }
 
-                GroupBox("Activity") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Picker("Activity", selection: $activityPane) {
-                            ForEach(ActivityPane.allCases) { pane in
-                                Text(pane.rawValue).tag(pane)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(width: 220)
-
-                        if activityPane == .summary {
-                            VStack(alignment: .leading, spacing: 8) {
-                                summaryRow("Mode", appState.runSessionStore.currentMode?.title ?? "Idle")
-                                summaryRow("Speed", appState.runSessionStore.metrics.speedMBps > 0 ? String(format: "%.1f MB/s", appState.runSessionStore.metrics.speedMBps) : "—")
-                                summaryRow("ETA", formattedETA(appState.runSessionStore.metrics.etaSeconds))
-                                summaryRow("Warnings", "\(appState.runLogStore.warningCount)")
-                                summaryRow("Errors", "\(appState.runLogStore.errorCount)")
-                            }
-                        } else {
-                            ScrollView {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    if appState.runSessionStore.logLines.isEmpty {
-                                        Text("The console will appear here once the backend emits activity.")
-                                            .foregroundStyle(.secondary)
-                                    } else {
-                                        ForEach(Array(appState.runSessionStore.logLines.enumerated()), id: \.offset) { _, line in
-                                            Text(line)
-                                                .font(.system(size: 12, weight: .regular, design: .monospaced))
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                .textSelection(.enabled)
-                                        }
-                                    }
-                                }
-                            }
-                            .frame(minHeight: 240)
-                        }
+                    VStack(alignment: .leading, spacing: 16) {
+                        overviewPanel
+                        consolePanel
                     }
                 }
             }
             .padding(24)
-            .frame(maxWidth: 960, alignment: .leading)
+            .frame(maxWidth: 1_120, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("Current Run")
+    }
+
+    private var overviewPanel: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Overview")
+                    .font(.headline)
+
+                summaryRow("Mode", appState.runSessionStore.currentMode?.title ?? "Idle")
+                summaryRow("Speed", appState.runSessionStore.metrics.speedMBps > 0 ? String(format: "%.1f MB/s", appState.runSessionStore.metrics.speedMBps) : "—")
+                summaryRow("ETA", formattedETA(appState.runSessionStore.metrics.etaSeconds))
+                summaryRow("Warnings", "\(appState.runLogStore.warningCount)")
+                summaryRow("Errors", "\(appState.runLogStore.errorCount)")
+
+                if let destination = destinationRoot, !destination.isEmpty {
+                    Divider()
+
+                    Text(destination)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                        .truncationMode(.middle)
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            artifactButtons
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            artifactButtons
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var consolePanel: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Console")
+                    .font(.headline)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if appState.runSessionStore.logLines.isEmpty {
+                            Text("The console will appear here once the backend emits activity.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(Array(appState.runSessionStore.logLines.enumerated()), id: \.offset) { _, line in
+                                Text(line)
+                                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                    }
+                }
+                .frame(minHeight: 220, idealHeight: 280)
+            }
+        }
     }
 
     private var statusSubtitle: String {
@@ -140,23 +145,45 @@ struct CurrentRunView: View {
     }
 
     private var statusBadge: some View {
-        Text(appState.runSessionStore.status.rawValue.capitalized)
+        Text(statusTitle)
             .font(.caption.weight(.semibold))
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(.thinMaterial, in: Capsule())
     }
 
-    private var phaseRow: some View {
+    private var phaseView: some View {
+        ViewThatFits(in: .horizontal) {
+            phaseRow(showLabels: true)
+            compactPhaseRow
+        }
+    }
+
+    private var compactPhaseRow: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let currentPhase = appState.runSessionStore.currentPhase {
+                Text(currentPhase.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            phaseRow(showLabels: false)
+        }
+    }
+
+    private func phaseRow(showLabels: Bool) -> some View {
         HStack(spacing: 10) {
             ForEach(RunPhase.allCases, id: \.self) { phase in
                 VStack(spacing: 8) {
                     Circle()
                         .fill(fill(for: phase))
                         .frame(width: 20, height: 20)
-                    Text(phase.title)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+
+                    if showLabels {
+                        Text(phase.title)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 if phase != RunPhase.allCases.last {
@@ -165,6 +192,51 @@ struct CurrentRunView: View {
                         .frame(height: 4)
                 }
             }
+        }
+    }
+
+    private var artifactButtons: some View {
+        Group {
+            Button("Open Destination") {
+                appState.openDestination()
+            }
+            .disabled(destinationRoot == nil)
+
+            Button("Open Report") {
+                appState.openReport()
+            }
+            .disabled(appState.runSessionStore.summary?.artifacts.reportPath == nil)
+
+            Button("Open Logs") {
+                appState.openLogsDirectory()
+            }
+            .disabled(appState.runSessionStore.summary?.artifacts.logsDirectoryPath == nil)
+        }
+    }
+
+    private var destinationRoot: String? {
+        let destination = appState.runSessionStore.summary?.artifacts.destinationRoot ?? appState.historyStore.destinationRoot
+        return destination.isEmpty ? nil : destination
+    }
+
+    private var statusTitle: String {
+        switch appState.runSessionStore.status {
+        case .idle:
+            return "Idle"
+        case .preflighting:
+            return "Preparing"
+        case .running:
+            return "Running"
+        case .dryRunFinished:
+            return "Preview Complete"
+        case .finished:
+            return "Finished"
+        case .nothingToCopy:
+            return "Up to Date"
+        case .cancelled:
+            return "Cancelled"
+        case .failed:
+            return "Failed"
         }
     }
 

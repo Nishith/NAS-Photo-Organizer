@@ -7,7 +7,7 @@ struct ChronoframeApp: App {
     var body: some Scene {
         WindowGroup("Chronoframe") {
             RootSplitView(appState: appState)
-                .frame(minWidth: 1_100, minHeight: 760)
+                .frame(minWidth: 860, idealWidth: 1_160, minHeight: 680, idealHeight: 800)
         }
         .commands {
             AppCommands(appState: appState)
@@ -15,7 +15,7 @@ struct ChronoframeApp: App {
 
         Settings {
             SettingsView(appState: appState)
-                .frame(width: 420, height: 280)
+                .frame(minWidth: 420, idealWidth: 460, minHeight: 280)
                 .padding()
         }
     }

@@ -9,6 +9,7 @@ struct RootSplitView: View {
     var body: some View {
         NavigationSplitView {
             SidebarView(appState: appState)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 300)
         } detail: {
             detailView
         }
@@ -21,7 +22,7 @@ struct RootSplitView: View {
                     } label: {
                         Label("Cancel", systemImage: "stop.fill")
                     }
-                } else {
+                } else if showsRunToolbarActions {
                     Button {
                         Task { await appState.startPreview() }
                     } label: {
@@ -95,6 +96,15 @@ struct RootSplitView: View {
             RunHistoryView(appState: appState)
         case .profiles:
             ProfilesView(appState: appState)
+        }
+    }
+
+    private var showsRunToolbarActions: Bool {
+        switch appState.selection {
+        case .currentRun:
+            return true
+        case .setup, .history, .profiles:
+            return false
         }
     }
 }
