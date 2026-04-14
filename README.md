@@ -194,7 +194,7 @@ Current UI behavior:
 - segmented activity area with summary and filterable console modes
 - keyboard shortcuts and app command menus for common actions
 - a stronger completion experience with destination, report, and log follow-up actions
-- generated custom app icon and cleaner app bundle metadata
+- checked-in custom app icon assets and cleaner app bundle metadata
 
 Core UI files:
 
@@ -203,7 +203,9 @@ Core UI files:
 - [`ui/Sources/ChronoframeApp.swift`](ui/Sources/ChronoframeApp.swift)
 - [`ui/Tools/IconGenerator.swift`](ui/Tools/IconGenerator.swift)
 
-The build script at [`ui/build.sh`](ui/build.sh) packages a `.app` bundle without needing an Xcode project, generates the app icon, and writes the bundle metadata.
+The build script at [`ui/build.sh`](ui/build.sh) packages a `.app` bundle without needing an Xcode project, copies the checked-in [`ui/Resources/AppIcon.icns`](ui/Resources/AppIcon.icns) bundle icon, and writes the bundle metadata. The source artwork lives in [`ui/Resources/AppIcon.iconset`](ui/Resources/AppIcon.iconset) and can be regenerated with [`ui/Tools/IconGenerator.swift`](ui/Tools/IconGenerator.swift).
+
+For local development, `build.sh` ad hoc signs the staged bundle so the packaged app has sealed resources and a stable bundle identifier. The same script also emits `build/Chronoframe.zip` for archive validation. For distribution builds, set `CHRONOFRAME_CODESIGN_IDENTITY` to a Developer ID Application identity and the same script will apply hardened runtime signing using [`ui/Packaging/Chronoframe.entitlements`](ui/Packaging/Chronoframe.entitlements) before creating the zip archive.
 
 ## Installation
 

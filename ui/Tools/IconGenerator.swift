@@ -2,6 +2,8 @@
 
 import AppKit
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
 struct IconPalette {
     let sky = NSColor(srgbRed: 0.18, green: 0.47, blue: 0.90, alpha: 1.0)
@@ -16,10 +18,6 @@ struct IconPalette {
 
 let palette = IconPalette()
 
-let outputPath = CommandLine.arguments.dropFirst().first ?? "build/AppIcon.iconset"
-let outputURL = URL(fileURLWithPath: outputPath, isDirectory: true)
-try FileManager.default.createDirectory(at: outputURL, withIntermediateDirectories: true)
-
 let iconSpecs: [(base: Int, scale: Int)] = [
     (16, 1), (16, 2),
     (32, 1), (32, 2),
@@ -28,13 +26,28 @@ let iconSpecs: [(base: Int, scale: Int)] = [
     (512, 1), (512, 2),
 ]
 
-for spec in iconSpecs {
-    let actualSize = spec.base * spec.scale
-    let image = drawIcon(size: actualSize)
-    let filename = spec.scale == 1
-        ? "icon_\(spec.base)x\(spec.base).png"
-        : "icon_\(spec.base)x\(spec.base)@2x.png"
-    try savePNG(image, to: outputURL.appendingPathComponent(filename))
+let outputPath = CommandLine.arguments.dropFirst().first ?? "build/AppIcon.iconset"
+let outputURL = URL(fileURLWithPath: outputPath, isDirectory: outputPath.hasSuffix(".iconset"))
+
+switch outputURL.pathExtension {
+case "iconset":
+    try FileManager.default.createDirectory(at: outputURL, withIntermediateDirectories: true)
+    for spec in iconSpecs {
+        let actualSize = spec.base * spec.scale
+        let image = drawIcon(size: actualSize)
+        let filename = spec.scale == 1
+            ? "icon_\(spec.base)x\(spec.base).png"
+            : "icon_\(spec.base)x\(spec.base)@2x.png"
+        try savePNG(image, to: outputURL.appendingPathComponent(filename))
+    }
+case "icns":
+    try saveICNS(to: outputURL)
+default:
+    throw NSError(
+        domain: "IconGenerator",
+        code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "Output path must end in .iconset or .icns"]
+    )
 }
 
 func drawIcon(size: Int) -> NSImage {
@@ -180,4 +193,30 @@ func savePNG(_ image: NSImage, to url: URL) throws {
     }
 
     try pngData.write(to: url)
+}
+
+func saveICNS(to url: URL) throws {
+    try? FileManager.default.removeItem(at: url)
+
+    guard let destination = CGImageDestinationCreateWithURL(
+        url as CFURL,
+        UTType.icns.identifier as CFString,
+        iconSpecs.count,
+        nil
+    ) else {
+        throw NSError(domain: "IconGenerator", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to create ICNS destination"])
+    }
+
+    for spec in iconSpecs {
+        let image = drawIcon(size: spec.base * spec.scale)
+        var proposedRect = CGRect(origin: .zero, size: image.size)
+        guard let cgImage = image.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil) else {
+            throw NSError(domain: "IconGenerator", code: 4, userInfo: [NSLocalizedDescriptionKey: "Failed to render CGImage for ICNS"])
+        }
+        CGImageDestinationAddImage(destination, cgImage, nil)
+    }
+
+    if !CGImageDestinationFinalize(destination) {
+        throw NSError(domain: "IconGenerator", code: 5, userInfo: [NSLocalizedDescriptionKey: "Failed to finalize ICNS file"])
+    }
 }
