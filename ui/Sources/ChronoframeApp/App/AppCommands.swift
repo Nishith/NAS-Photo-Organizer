@@ -1,4 +1,6 @@
+#if canImport(ChronoframeAppCore)
 import ChronoframeAppCore
+#endif
 import SwiftUI
 
 struct AppCommands: Commands {

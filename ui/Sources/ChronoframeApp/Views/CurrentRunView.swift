@@ -1,4 +1,6 @@
+#if canImport(ChronoframeAppCore)
 import ChronoframeAppCore
+#endif
 import SwiftUI
 
 private enum ActivityPane: String, CaseIterable, Identifiable {

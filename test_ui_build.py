@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Smoke tests for the packaged macOS app bundle."""
 
+import json
 import os
 import plistlib
 import subprocess
@@ -13,6 +14,26 @@ class TestUIBuildPipeline(unittest.TestCase):
     def test_build_script_stages_bundle_with_icon_and_backend(self):
         repo_root = os.path.dirname(__file__)
         ui_dir = os.path.join(repo_root, "ui")
+        project_path = os.path.join(ui_dir, "Chronoframe.xcodeproj")
+
+        self.assertTrue(os.path.isdir(project_path), project_path)
+
+        listing = subprocess.run(
+            ["xcodebuild", "-list", "-project", project_path],
+            cwd=ui_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(
+            listing.returncode,
+            0,
+            msg=f"xcodebuild -list failed\nSTDOUT:\n{listing.stdout}\nSTDERR:\n{listing.stderr}",
+        )
+        self.assertIn("ChronoframeApp", listing.stdout)
+        self.assertIn("ChronoframeAppTests", listing.stdout)
+        self.assertIn("ChronoframeUITests", listing.stdout)
+        self.assertIn("Chronoframe", listing.stdout)
 
         result = subprocess.run(
             ["bash", "build.sh"],
@@ -49,6 +70,23 @@ class TestUIBuildPipeline(unittest.TestCase):
         self.assertEqual(info["CFBundleExecutable"], "Chronoframe")
         self.assertEqual(info["CFBundleIdentifier"], "com.nishith.chronoframe")
         self.assertEqual(info["CFBundleIconFile"], "AppIcon")
+
+        validation = subprocess.run(
+            [
+                sys.executable,
+                os.path.join(ui_dir, "Packaging", "validate_app_bundle.py"),
+                "--json",
+                app_dir,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(validation.returncode, 0, msg=validation.stderr or validation.stdout)
+        validation_result = json.loads(validation.stdout)
+        self.assertEqual(validation_result["errors"], [])
+        self.assertEqual(validation_result["signature"]["kind"], "adhoc")
+        self.assertTrue(validation_result["signature"]["sealed_resources"])
 
         signature = subprocess.run(
             ["codesign", "-dvvv", app_dir],

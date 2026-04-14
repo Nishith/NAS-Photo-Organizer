@@ -1,4 +1,6 @@
+#if canImport(ChronoframeCore)
 import ChronoframeCore
+#endif
 import Foundation
 
 public protocol ProfilesRepositorying: AnyObject {

@@ -1,4 +1,6 @@
+#if canImport(ChronoframeAppCore)
 import ChronoframeAppCore
+#endif
 import Foundation
 import XCTest
 @testable import ChronoframeApp

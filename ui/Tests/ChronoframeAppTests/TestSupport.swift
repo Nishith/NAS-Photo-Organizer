@@ -1,6 +1,9 @@
+#if canImport(ChronoframeAppCore)
 import ChronoframeAppCore
+#endif
 import Dispatch
 import Foundation
+@testable import ChronoframeApp
 
 enum AppTestFailure: Error, LocalizedError {
     case expectedFailure(String)

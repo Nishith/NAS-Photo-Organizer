@@ -7,45 +7,22 @@ APP_NAME="Chronoframe"
 BUILD_DIR="${SCRIPT_DIR}/build"
 APP_DIR="${BUILD_DIR}/${APP_NAME}.app"
 ZIP_PATH="${BUILD_DIR}/${APP_NAME}.zip"
-MACOS_DIR="${APP_DIR}/Contents/MacOS"
-RESOURCES_DIR="${APP_DIR}/Contents/Resources"
-BACKEND_DIR="${RESOURCES_DIR}/Backend"
+PROJECT_PATH="${SCRIPT_DIR}/Chronoframe.xcodeproj"
+SCHEME_NAME="Chronoframe"
 PACKAGING_DIR="${SCRIPT_DIR}/Packaging"
-EXECUTABLE_PATH="${SCRIPT_DIR}/.build/debug/${APP_NAME}App"
-ICON_SOURCE="${SCRIPT_DIR}/Resources/AppIcon.icns"
+DERIVED_DATA_DIR="${BUILD_DIR}/DerivedData"
 ENTITLEMENTS_PATH="${PACKAGING_DIR}/Chronoframe.entitlements"
+VALIDATOR_PATH="${PACKAGING_DIR}/validate_app_bundle.py"
 TMP_DIR="${TMPDIR:-/tmp}/chronoframe-ui-build"
 MODULE_CACHE_DIR="${TMP_DIR}/module-cache"
-SPM_CACHE_DIR="${TMP_DIR}/spm-cache"
-SPM_CONFIG_DIR="${TMP_DIR}/spm-config"
-SPM_SECURITY_DIR="${TMP_DIR}/spm-security"
 
-mkdir -p "$BUILD_DIR" "$MACOS_DIR" "$RESOURCES_DIR" "$BACKEND_DIR" \
-  "$MODULE_CACHE_DIR" "$SPM_CACHE_DIR" "$SPM_CONFIG_DIR" "$SPM_SECURITY_DIR"
+mkdir -p "$BUILD_DIR" "$MODULE_CACHE_DIR"
 rm -rf "$APP_DIR"
+rm -rf "$DERIVED_DATA_DIR"
 rm -f "$ZIP_PATH"
-mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$BACKEND_DIR"
 
-echo "🔨 Building Swift package from ${SCRIPT_DIR}..."
-(
-  cd "$SCRIPT_DIR"
-  env CLANG_MODULE_CACHE_PATH="$MODULE_CACHE_DIR" \
-      SWIFT_MODULECACHE_PATH="$MODULE_CACHE_DIR" \
-      swift build \
-      --product "${APP_NAME}App" \
-      --disable-sandbox \
-      --cache-path "$SPM_CACHE_DIR" \
-      --config-path "$SPM_CONFIG_DIR" \
-      --security-path "$SPM_SECURITY_DIR"
-)
-
-if [ ! -f "$EXECUTABLE_PATH" ]; then
-  echo "error: expected executable at $EXECUTABLE_PATH" >&2
-  exit 1
-fi
-
-if [ ! -f "$ICON_SOURCE" ]; then
-  echo "error: expected checked-in app icon at $ICON_SOURCE" >&2
+if [ ! -d "$PROJECT_PATH" ]; then
+  echo "error: expected Xcode project at $PROJECT_PATH" >&2
   exit 1
 fi
 
@@ -54,45 +31,31 @@ if [ ! -f "$ENTITLEMENTS_PATH" ]; then
   exit 1
 fi
 
+if [ ! -f "$VALIDATOR_PATH" ]; then
+  echo "error: expected validator script at $VALIDATOR_PATH" >&2
+  exit 1
+fi
+
+echo "🔨 Building Xcode project from ${SCRIPT_DIR}..."
+xcodebuild \
+  -project "$PROJECT_PATH" \
+  -scheme "$SCHEME_NAME" \
+  -configuration Debug \
+  -derivedDataPath "$DERIVED_DATA_DIR" \
+  -destination "platform=macOS,arch=arm64" \
+  CODE_SIGNING_ALLOWED=NO \
+  CLANG_MODULE_CACHE_PATH="$MODULE_CACHE_DIR" \
+  SWIFT_MODULECACHE_PATH="$MODULE_CACHE_DIR" \
+  build >/dev/null
+
+BUILT_APP_PATH="${DERIVED_DATA_DIR}/Build/Products/Debug/${APP_NAME}.app"
+if [ ! -d "$BUILT_APP_PATH" ]; then
+  echo "error: expected built app at $BUILT_APP_PATH" >&2
+  exit 1
+fi
+
 echo "📦 Staging app bundle..."
-cp "$EXECUTABLE_PATH" "$MACOS_DIR/$APP_NAME"
-cp "$REPO_ROOT/chronoframe.py" "$BACKEND_DIR/"
-cp -R "$REPO_ROOT/chronoframe" "$BACKEND_DIR/"
-cp "$REPO_ROOT/requirements.txt" "$BACKEND_DIR/"
-find "$BACKEND_DIR/chronoframe" -type d -name "__pycache__" -prune -exec rm -rf {} +
-cp "$ICON_SOURCE" "${RESOURCES_DIR}/AppIcon.icns"
-
-echo "📝 Generating Info.plist..."
-cat <<EOF > "${APP_DIR}/Contents/Info.plist"
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>${APP_NAME}</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.nishith.chronoframe</string>
-    <key>CFBundleDisplayName</key>
-    <string>Chronoframe</string>
-    <key>CFBundleName</key>
-    <string>${APP_NAME}</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>3.0</string>
-    <key>CFBundleVersion</key>
-    <string>3</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSPrincipalClass</key>
-    <string>NSApplication</string>
-</dict>
-</plist>
-EOF
-
-/usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "${APP_DIR}/Contents/Info.plist" >/dev/null 2>&1 || true
+ditto "$BUILT_APP_PATH" "$APP_DIR"
 
 if [ -n "${CHRONOFRAME_CODESIGN_IDENTITY:-}" ]; then
   echo "🔐 Codesigning app bundle with hardened runtime..."
@@ -104,6 +67,8 @@ else
   echo "🔏 Applying ad hoc signature for local validation..."
   codesign --force --deep --sign - "$APP_DIR"
 fi
+
+python3 "$VALIDATOR_PATH" "$APP_DIR"
 
 echo "🗜️ Creating zip archive..."
 ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$ZIP_PATH"

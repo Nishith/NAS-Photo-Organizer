@@ -1,0 +1,707 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA0000000000000000000201 /* AppCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000101 /* AppCommands.swift */; };
+		AA0000000000000000000202 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000102 /* AppState.swift */; };
+		AA0000000000000000000203 /* ChronoframeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000103 /* ChronoframeApp.swift */; };
+		AA0000000000000000000204 /* CurrentRunView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000104 /* CurrentRunView.swift */; };
+		AA0000000000000000000205 /* ProfilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000105 /* ProfilesView.swift */; };
+		AA0000000000000000000206 /* RootSplitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000106 /* RootSplitView.swift */; };
+		AA0000000000000000000207 /* RunHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000107 /* RunHistoryView.swift */; };
+		AA0000000000000000000208 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000108 /* SettingsView.swift */; };
+		AA0000000000000000000209 /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000109 /* SetupView.swift */; };
+		AA000000000000000000020A /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010A /* SharedViews.swift */; };
+		AA000000000000000000020B /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010B /* SidebarView.swift */; };
+		AA000000000000000000020C /* Exports.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010C /* Exports.swift */; };
+		AA000000000000000000020D /* FinderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010D /* FinderService.swift */; };
+		AA000000000000000000020E /* FolderAccessService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010E /* FolderAccessService.swift */; };
+		AA000000000000000000020F /* OrganizerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010F /* OrganizerEngine.swift */; };
+		AA0000000000000000000210 /* ProfilesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000110 /* ProfilesRepository.swift */; };
+		AA0000000000000000000211 /* PythonOrganizerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000111 /* PythonOrganizerEngine.swift */; };
+		AA0000000000000000000212 /* RunHistoryIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000112 /* RunHistoryIndexer.swift */; };
+		AA0000000000000000000213 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000113 /* HistoryStore.swift */; };
+		AA0000000000000000000214 /* PreferencesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000114 /* PreferencesStore.swift */; };
+		AA0000000000000000000215 /* RunLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000115 /* RunLogStore.swift */; };
+		AA0000000000000000000216 /* RunSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000116 /* RunSessionStore.swift */; };
+		AA0000000000000000000217 /* SetupStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000117 /* SetupStore.swift */; };
+		AA0000000000000000000218 /* RuntimePaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000118 /* RuntimePaths.swift */; };
+		AA0000000000000000000219 /* ProfileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000119 /* ProfileModels.swift */; };
+		AA000000000000000000021A /* RunModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000011A /* RunModels.swift */; };
+		AA000000000000000000021B /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000124 /* AppIcon.icns */; };
+		AA000000000000000000021C /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000121 /* AppStateTests.swift */; };
+		AA000000000000000000021D /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000122 /* TestSupport.swift */; };
+		AA000000000000000000021E /* ChronoframeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000123 /* ChronoframeUITests.swift */; };
+		AA000000000000000000021F /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000126 /* XCTest.framework */; };
+		AA0000000000000000000220 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000126 /* XCTest.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AA0000000000000000000711 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000301;
+			remoteInfo = ChronoframeApp;
+		};
+		AA0000000000000000000712 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000301;
+			remoteInfo = ChronoframeApp;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		AA0000000000000000000101 /* AppCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommands.swift; sourceTree = "<group>"; };
+		AA0000000000000000000102 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		AA0000000000000000000103 /* ChronoframeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronoframeApp.swift; sourceTree = "<group>"; };
+		AA0000000000000000000104 /* CurrentRunView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentRunView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000105 /* ProfilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000106 /* RootSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootSplitView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000107 /* RunHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunHistoryView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000108 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000109 /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
+		AA000000000000000000010A /* SharedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedViews.swift; sourceTree = "<group>"; };
+		AA000000000000000000010B /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		AA000000000000000000010C /* Exports.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Exports.swift; sourceTree = "<group>"; };
+		AA000000000000000000010D /* FinderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderService.swift; sourceTree = "<group>"; };
+		AA000000000000000000010E /* FolderAccessService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderAccessService.swift; sourceTree = "<group>"; };
+		AA000000000000000000010F /* OrganizerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizerEngine.swift; sourceTree = "<group>"; };
+		AA0000000000000000000110 /* ProfilesRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesRepository.swift; sourceTree = "<group>"; };
+		AA0000000000000000000111 /* PythonOrganizerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonOrganizerEngine.swift; sourceTree = "<group>"; };
+		AA0000000000000000000112 /* RunHistoryIndexer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunHistoryIndexer.swift; sourceTree = "<group>"; };
+		AA0000000000000000000113 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
+		AA0000000000000000000114 /* PreferencesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesStore.swift; sourceTree = "<group>"; };
+		AA0000000000000000000115 /* RunLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunLogStore.swift; sourceTree = "<group>"; };
+		AA0000000000000000000116 /* RunSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunSessionStore.swift; sourceTree = "<group>"; };
+		AA0000000000000000000117 /* SetupStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupStore.swift; sourceTree = "<group>"; };
+		AA0000000000000000000118 /* RuntimePaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimePaths.swift; sourceTree = "<group>"; };
+		AA0000000000000000000119 /* ProfileModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileModels.swift; sourceTree = "<group>"; };
+		AA000000000000000000011A /* RunModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunModels.swift; sourceTree = "<group>"; };
+		AA0000000000000000000121 /* AppStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000122 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
+		AA0000000000000000000123 /* ChronoframeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronoframeUITests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000124 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		AA0000000000000000000125 /* Chronoframe.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Chronoframe.entitlements; sourceTree = "<group>"; };
+		AA0000000000000000000126 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
+		AA0000000000000000000181 /* Chronoframe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Chronoframe.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000182 /* ChronoframeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000183 /* ChronoframeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AA0000000000000000000401 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000402 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000000000000000000021F /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000403 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000220 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AA0000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000010 /* Sources */,
+				AA0000000000000000000019 /* Tests */,
+				AA000000000000000000001B /* Xcode */,
+				AA000000000000000000001D /* Resources */,
+				AA000000000000000000001E /* Packaging */,
+				AA0000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000181 /* Chronoframe.app */,
+				AA0000000000000000000182 /* ChronoframeAppTests.xctest */,
+				AA0000000000000000000183 /* ChronoframeUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000010 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000011 /* ChronoframeApp */,
+				AA0000000000000000000014 /* ChronoframeAppCore */,
+				AA0000000000000000000018 /* ChronoframeCore */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000011 /* ChronoframeApp */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000012 /* App */,
+				AA0000000000000000000013 /* Views */,
+			);
+			path = ChronoframeApp;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000012 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000101 /* AppCommands.swift */,
+				AA0000000000000000000102 /* AppState.swift */,
+				AA0000000000000000000103 /* ChronoframeApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000013 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000104 /* CurrentRunView.swift */,
+				AA0000000000000000000105 /* ProfilesView.swift */,
+				AA0000000000000000000106 /* RootSplitView.swift */,
+				AA0000000000000000000107 /* RunHistoryView.swift */,
+				AA0000000000000000000108 /* SettingsView.swift */,
+				AA0000000000000000000109 /* SetupView.swift */,
+				AA000000000000000000010A /* SharedViews.swift */,
+				AA000000000000000000010B /* SidebarView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000014 /* ChronoframeAppCore */ = {
+			isa = PBXGroup;
+			children = (
+				AA000000000000000000010C /* Exports.swift */,
+				AA0000000000000000000015 /* Services */,
+				AA0000000000000000000016 /* Stores */,
+				AA0000000000000000000017 /* Support */,
+			);
+			path = ChronoframeAppCore;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000015 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				AA000000000000000000010D /* FinderService.swift */,
+				AA000000000000000000010E /* FolderAccessService.swift */,
+				AA000000000000000000010F /* OrganizerEngine.swift */,
+				AA0000000000000000000110 /* ProfilesRepository.swift */,
+				AA0000000000000000000111 /* PythonOrganizerEngine.swift */,
+				AA0000000000000000000112 /* RunHistoryIndexer.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000016 /* Stores */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000113 /* HistoryStore.swift */,
+				AA0000000000000000000114 /* PreferencesStore.swift */,
+				AA0000000000000000000115 /* RunLogStore.swift */,
+				AA0000000000000000000116 /* RunSessionStore.swift */,
+				AA0000000000000000000117 /* SetupStore.swift */,
+			);
+			path = Stores;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000017 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000118 /* RuntimePaths.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000018 /* ChronoframeCore */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000119 /* ProfileModels.swift */,
+				AA000000000000000000011A /* RunModels.swift */,
+			);
+			path = ChronoframeCore;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000019 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				AA000000000000000000001A /* ChronoframeAppTests */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		AA000000000000000000001A /* ChronoframeAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000121 /* AppStateTests.swift */,
+				AA0000000000000000000122 /* TestSupport.swift */,
+			);
+			path = ChronoframeAppTests;
+			sourceTree = "<group>";
+		};
+		AA000000000000000000001B /* Xcode */ = {
+			isa = PBXGroup;
+			children = (
+				AA000000000000000000001C /* UITests */,
+			);
+			path = Xcode;
+			sourceTree = "<group>";
+		};
+		AA000000000000000000001C /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000123 /* ChronoframeUITests.swift */,
+			);
+			path = UITests;
+			sourceTree = "<group>";
+		};
+		AA000000000000000000001D /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000124 /* AppIcon.icns */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		AA000000000000000000001E /* Packaging */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000125 /* Chronoframe.entitlements */,
+			);
+			path = Packaging;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA0000000000000000000301 /* ChronoframeApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000502 /* Build configuration list for PBXNativeTarget "ChronoframeApp" */;
+			buildPhases = (
+				AA0000000000000000000401 /* Frameworks */,
+				AA0000000000000000000411 /* Sources */,
+				AA0000000000000000000421 /* Resources */,
+				AA0000000000000000000431 /* Copy Python Backend */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ChronoframeApp;
+			productName = Chronoframe;
+			productReference = AA0000000000000000000181 /* Chronoframe.app */;
+			productType = "com.apple.product-type.application";
+		};
+		AA0000000000000000000302 /* ChronoframeAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000503 /* Build configuration list for PBXNativeTarget "ChronoframeAppTests" */;
+			buildPhases = (
+				AA0000000000000000000402 /* Frameworks */,
+				AA0000000000000000000412 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA0000000000000000000701 /* PBXTargetDependency */,
+			);
+			name = ChronoframeAppTests;
+			productName = ChronoframeAppTests;
+			productReference = AA0000000000000000000182 /* ChronoframeAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		AA0000000000000000000303 /* ChronoframeUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000504 /* Build configuration list for PBXNativeTarget "ChronoframeUITests" */;
+			buildPhases = (
+				AA0000000000000000000403 /* Frameworks */,
+				AA0000000000000000000413 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA0000000000000000000702 /* PBXTargetDependency */,
+			);
+			name = ChronoframeUITests;
+			productName = ChronoframeUITests;
+			productReference = AA0000000000000000000183 /* ChronoframeUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					AA0000000000000000000301 = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					AA0000000000000000000302 = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = AA0000000000000000000301;
+					};
+					AA0000000000000000000303 = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = AA0000000000000000000301;
+					};
+				};
+			};
+			buildConfigurationList = AA0000000000000000000501 /* Build configuration list for PBXProject "Chronoframe" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AA0000000000000000000002;
+			productRefGroup = AA0000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA0000000000000000000301 /* ChronoframeApp */,
+				AA0000000000000000000302 /* ChronoframeAppTests */,
+				AA0000000000000000000303 /* ChronoframeUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AA0000000000000000000421 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000000000000000000021B /* AppIcon.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		AA0000000000000000000431 /* Copy Python Backend */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(PROJECT_DIR)/../chronoframe.py",
+				"$(PROJECT_DIR)/../requirements.txt",
+				"$(PROJECT_DIR)/../chronoframe",
+			);
+			name = "Copy Python Backend";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Backend/chronoframe.py",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Backend/requirements.txt",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Backend/chronoframe",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nBACKEND_DIR=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Backend\"\nREPO_ROOT=\"$PROJECT_DIR/..\"\nrm -rf \"$BACKEND_DIR\"\nmkdir -p \"$BACKEND_DIR\"\ncp \"$REPO_ROOT/chronoframe.py\" \"$BACKEND_DIR/\"\ncp \"$REPO_ROOT/requirements.txt\" \"$BACKEND_DIR/\"\nditto \"$REPO_ROOT/chronoframe\" \"$BACKEND_DIR/chronoframe\"\nfind \"$BACKEND_DIR/chronoframe\" -type d -name __pycache__ -prune -exec rm -rf {} +\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AA0000000000000000000411 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000201 /* AppCommands.swift in Sources */,
+				AA0000000000000000000202 /* AppState.swift in Sources */,
+				AA0000000000000000000203 /* ChronoframeApp.swift in Sources */,
+				AA0000000000000000000204 /* CurrentRunView.swift in Sources */,
+				AA0000000000000000000205 /* ProfilesView.swift in Sources */,
+				AA0000000000000000000206 /* RootSplitView.swift in Sources */,
+				AA0000000000000000000207 /* RunHistoryView.swift in Sources */,
+				AA0000000000000000000208 /* SettingsView.swift in Sources */,
+				AA0000000000000000000209 /* SetupView.swift in Sources */,
+				AA000000000000000000020A /* SharedViews.swift in Sources */,
+				AA000000000000000000020B /* SidebarView.swift in Sources */,
+				AA000000000000000000020C /* Exports.swift in Sources */,
+				AA000000000000000000020D /* FinderService.swift in Sources */,
+				AA000000000000000000020E /* FolderAccessService.swift in Sources */,
+				AA000000000000000000020F /* OrganizerEngine.swift in Sources */,
+				AA0000000000000000000210 /* ProfilesRepository.swift in Sources */,
+				AA0000000000000000000211 /* PythonOrganizerEngine.swift in Sources */,
+				AA0000000000000000000212 /* RunHistoryIndexer.swift in Sources */,
+				AA0000000000000000000213 /* HistoryStore.swift in Sources */,
+				AA0000000000000000000214 /* PreferencesStore.swift in Sources */,
+				AA0000000000000000000215 /* RunLogStore.swift in Sources */,
+				AA0000000000000000000216 /* RunSessionStore.swift in Sources */,
+				AA0000000000000000000217 /* SetupStore.swift in Sources */,
+				AA0000000000000000000218 /* RuntimePaths.swift in Sources */,
+				AA0000000000000000000219 /* ProfileModels.swift in Sources */,
+				AA000000000000000000021A /* RunModels.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000412 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000000000000000000021C /* AppStateTests.swift in Sources */,
+				AA000000000000000000021D /* TestSupport.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000413 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000000000000000000021E /* ChronoframeUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AA0000000000000000000701 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000301 /* ChronoframeApp */;
+			targetProxy = AA0000000000000000000711 /* PBXContainerItemProxy */;
+		};
+		AA0000000000000000000702 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000301 /* ChronoframeApp */;
+			targetProxy = AA0000000000000000000712 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		AA0000000000000000000601 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000602 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		AA0000000000000000000611 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Packaging/Chronoframe.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Packaging/Chronoframe-Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 3.0;
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nishith.chronoframe;
+				PRODUCT_MODULE_NAME = ChronoframeApp;
+				PRODUCT_NAME = Chronoframe;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000612 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Packaging/Chronoframe.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Packaging/Chronoframe-Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 3.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nishith.chronoframe;
+				PRODUCT_MODULE_NAME = ChronoframeApp;
+				PRODUCT_NAME = Chronoframe;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		AA0000000000000000000621 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nishith.chronoframe.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Chronoframe.app/Contents/MacOS/Chronoframe";
+				TEST_TARGET_NAME = ChronoframeApp;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000622 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nishith.chronoframe.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Chronoframe.app/Contents/MacOS/Chronoframe";
+				TEST_TARGET_NAME = ChronoframeApp;
+			};
+			name = Release;
+		};
+		AA0000000000000000000631 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nishith.chronoframe.ui-tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = ChronoframeApp;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000632 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nishith.chronoframe.ui-tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = ChronoframeApp;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA0000000000000000000501 /* Build configuration list for PBXProject "Chronoframe" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000601 /* Debug */,
+				AA0000000000000000000602 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000502 /* Build configuration list for PBXNativeTarget "ChronoframeApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000611 /* Debug */,
+				AA0000000000000000000612 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000503 /* Build configuration list for PBXNativeTarget "ChronoframeAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000621 /* Debug */,
+				AA0000000000000000000622 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000504 /* Build configuration list for PBXNativeTarget "ChronoframeUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000631 /* Debug */,
+				AA0000000000000000000632 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AA0000000000000000000001 /* Project object */;
+}
