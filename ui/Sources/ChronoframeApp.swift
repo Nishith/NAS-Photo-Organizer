@@ -2,16 +2,16 @@ import SwiftUI
 import Foundation
 
 extension Notification.Name {
-    static let chooseSourceFolder = Notification.Name("nasOrganizer.chooseSourceFolder")
-    static let chooseDestinationFolder = Notification.Name("nasOrganizer.chooseDestinationFolder")
-    static let activateProfileField = Notification.Name("nasOrganizer.activateProfileField")
-    static let triggerPreviewRun = Notification.Name("nasOrganizer.triggerPreviewRun")
-    static let triggerTransferRun = Notification.Name("nasOrganizer.triggerTransferRun")
-    static let toggleActivityPane = Notification.Name("nasOrganizer.toggleActivityPane")
+    static let chooseSourceFolder = Notification.Name("chronoframe.chooseSourceFolder")
+    static let chooseDestinationFolder = Notification.Name("chronoframe.chooseDestinationFolder")
+    static let activateProfileField = Notification.Name("chronoframe.activateProfileField")
+    static let triggerPreviewRun = Notification.Name("chronoframe.triggerPreviewRun")
+    static let triggerTransferRun = Notification.Name("chronoframe.triggerTransferRun")
+    static let toggleActivityPane = Notification.Name("chronoframe.toggleActivityPane")
 }
 
 @main
-struct NASOrganizerApp: App {
+struct ChronoframeApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()

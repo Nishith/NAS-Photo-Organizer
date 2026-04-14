@@ -75,10 +75,10 @@ class RunLogger:
 # ── CLI ─────────────────────────────────────────────────────────────────────
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="NAS Photo Organizer v3")
+    parser = argparse.ArgumentParser(description="Chronoframe")
     parser.add_argument("--source", type=str, default=None, help="Source folder")
     parser.add_argument("--dest", type=str, default=None, help="Destination folder")
-    parser.add_argument("--profile", type=str, default=None, help="Use paths from nas_profiles.yaml")
+    parser.add_argument("--profile", type=str, default=None, help="Use paths from profiles.yaml")
     parser.add_argument("--dry-run", action="store_true", help="Generate CSV report without copying")
     parser.add_argument("--rebuild-cache", action="store_true", help="Force database re-index")
     parser.add_argument("--verify", action="store_true", help="Re-hash each file after copy to verify integrity")
@@ -91,8 +91,8 @@ def parse_args():
 
 
 def _find_profiles_yaml():
-    """Look for nas_profiles.yaml next to the project root (not cwd)."""
-    return os.path.join(_PROJECT_DIR, "nas_profiles.yaml")
+    """Look for profiles.yaml next to the project root (not cwd)."""
+    return os.path.join(_PROJECT_DIR, "profiles.yaml")
 
 
 def load_profile(profile_name):
@@ -105,7 +105,7 @@ def load_profile(profile_name):
         profiles = yaml.safe_load(f)
 
     if not profiles or profile_name not in profiles:
-        console.print(f"[red]Error:[/red] Profile '{profile_name}' not defined in nas_profiles.yaml")
+        console.print(f"[red]Error:[/red] Profile '{profile_name}' not defined in profiles.yaml")
         sys.exit(1)
 
     return profiles[profile_name].get('source'), profiles[profile_name].get('dest')
@@ -290,7 +290,7 @@ def main():
     os.makedirs(dst, exist_ok=True)
 
     console.print(Panel(
-        f"[bold cyan]NAS Photo Organizer v3[/bold cyan]\n"
+        f"[bold cyan]Chronoframe[/bold cyan]\n"
         f"[white]Source:[/white]  {src}\n"
         f"[white]Dest:[/white]    {dst}\n"
         f"[white]Workers:[/white] {workers}",

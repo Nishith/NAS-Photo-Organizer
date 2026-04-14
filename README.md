@@ -1,4 +1,4 @@
-# NAS Photo Organizer v3
+# Chronoframe
 
 A high-safety photo and video organizer for large local or NAS-backed libraries.
 
@@ -13,7 +13,7 @@ The organizer is designed for very large libraries where correctness matters mor
 
 | Overview | Setup Detail |
 | :--- | :--- |
-| ![NAS Organizer overview](docs/screenshots/ui-overview.png) | ![NAS Organizer setup detail](docs/screenshots/ui-setup-detail.png) |
+| ![Chronoframe overview](docs/screenshots/ui-overview.png) | ![Chronoframe setup detail](docs/screenshots/ui-setup-detail.png) |
 
 ## What The Project Does
 
@@ -86,7 +86,7 @@ The queue is written before transfers begin, so an interrupted run can be resume
 
 ### Atomic Copy Path
 
-`safe_copy_atomic()` in [`nas_organizer/io.py`](nas_organizer/io.py) performs the write path:
+`safe_copy_atomic()` in [`chronoframe/io.py`](chronoframe/io.py) performs the write path:
 
 1. Ensure the destination directory exists.
 2. Check available disk space with a 10 MB safety buffer.
@@ -134,7 +134,7 @@ If no reliable date can be determined, the file is routed into `Unknown_Date/`.
 
 ## CLI And App Flow
 
-The backend is implemented in [`nas_organizer/core.py`](nas_organizer/core.py) and orchestrates these phases:
+The backend is implemented in [`chronoframe/core.py`](chronoframe/core.py) and orchestrates these phases:
 
 1. Startup
 2. Discovery
@@ -178,7 +178,7 @@ Important payload fields currently used by the UI include:
 
 ## macOS UI
 
-The macOS app lives under [`nas_ui/`](nas_ui/).
+The macOS app lives under [`ui/`](ui/).
 
 Current UI behavior:
 
@@ -198,12 +198,12 @@ Current UI behavior:
 
 Core UI files:
 
-- [`nas_ui/Sources/ContentView.swift`](nas_ui/Sources/ContentView.swift)
-- [`nas_ui/Sources/BackendRunner.swift`](nas_ui/Sources/BackendRunner.swift)
-- [`nas_ui/Sources/NASOrganizerApp.swift`](nas_ui/Sources/NASOrganizerApp.swift)
-- [`nas_ui/Tools/IconGenerator.swift`](nas_ui/Tools/IconGenerator.swift)
+- [`ui/Sources/ContentView.swift`](ui/Sources/ContentView.swift)
+- [`ui/Sources/BackendRunner.swift`](ui/Sources/BackendRunner.swift)
+- [`ui/Sources/ChronoframeApp.swift`](ui/Sources/ChronoframeApp.swift)
+- [`ui/Tools/IconGenerator.swift`](ui/Tools/IconGenerator.swift)
 
-The build script at [`nas_ui/build.sh`](nas_ui/build.sh) packages a `.app` bundle without needing an Xcode project, generates the app icon, and writes the bundle metadata.
+The build script at [`ui/build.sh`](ui/build.sh) packages a `.app` bundle without needing an Xcode project, generates the app icon, and writes the bundle metadata.
 
 ## Installation
 
@@ -214,28 +214,28 @@ Python dependencies are listed in [`requirements.txt`](requirements.txt):
 - `rich`
 - `pyyaml`
 
-The bootstrap wrapper [`organize_nas.py`](organize_nas.py) checks for these packages and offers to install them if they are missing.
+The bootstrap wrapper [`chronoframe.py`](chronoframe.py) checks for these packages and offers to install them if they are missing.
 
 ### CLI Usage
 
 ```bash
 # explicit source and destination
-python3 organize_nas.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos
+python3 chronoframe.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos
 
-# use a named profile from nas_profiles.yaml
-python3 organize_nas.py --profile mobile_backup
+# use a named profile from profiles.yaml
+python3 chronoframe.py --profile mobile_backup
 
 # plan only, write a CSV, do not copy
-python3 organize_nas.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos --dry-run
+python3 chronoframe.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos --dry-run
 
 # skip prompts for unattended use
-python3 organize_nas.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos -y
+python3 chronoframe.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos -y
 
 # verify every completed copy by re-hashing the destination
-python3 organize_nas.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos --verify
+python3 chronoframe.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos --verify
 
 # reuse cached destination index for repeated previews
-python3 organize_nas.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos --fast-dest --dry-run
+python3 chronoframe.py --source /Volumes/photo/Incoming --dest /Volumes/home/Organized_Photos --fast-dest --dry-run
 ```
 
 ### CLI Flags
@@ -244,7 +244,7 @@ python3 organize_nas.py --source /Volumes/photo/Incoming --dest /Volumes/home/Or
 | :--- | :--- |
 | `--source PATH` | Source directory to scan |
 | `--dest PATH` | Destination root for organized output |
-| `--profile NAME` | Load source and destination from `nas_profiles.yaml` |
+| `--profile NAME` | Load source and destination from `profiles.yaml` |
 | `--dry-run` | Build the copy plan and write a CSV without copying |
 | `--verify` | Re-hash the destination after each copy |
 | `--rebuild-cache` | Force a full rebuild of the destination cache |
@@ -257,19 +257,19 @@ python3 organize_nas.py --source /Volumes/photo/Incoming --dest /Volumes/home/Or
 
 **Download the latest release:**
 
-1. Go to the [Releases page](https://github.com/Nishith/NAS-Photo-Organizer/releases) and download `NAS.Organizer.vX.Y.Z.zip`.
-2. Unzip and drag **NAS Organizer UI.app** to `/Applications`.
+1. Go to the [Releases page](https://github.com/Nishith/NAS-Photo-Organizer/releases) and download `Chronoframe.vX.Y.Z.zip`.
+2. Unzip and drag **Chronoframe.app** to `/Applications`.
 3. **First launch only:** macOS Gatekeeper will block the app because it is not notarized. Right-click (or Control-click) the app, choose **Open**, then confirm in the dialog.
 
 **Build from source:**
 
 ```bash
-cd nas_ui
+cd ui
 ./build.sh
-open "build/NAS Organizer UI.app"
+open "build/Chronoframe.app"
 ```
 
-The app launches the Python backend using `python3 organize_nas.py --json --yes ...`.
+The app launches the Python backend using `python3 chronoframe.py --json --yes ...`.
 
 Useful keyboard shortcuts in the current app:
 
@@ -282,7 +282,7 @@ Useful keyboard shortcuts in the current app:
 
 ## Configuration Profiles
 
-Profiles live in `nas_profiles.yaml` at the project root.
+Profiles live in `profiles.yaml` at the project root.
 
 Example:
 
@@ -301,7 +301,7 @@ Resolution behavior:
 - `--profile NAME` uses that named profile
 - otherwise, if `--source` or `--dest` is missing, the tool falls back to the `default` profile if it exists
 
-`nas_profiles.yaml` is intentionally ignored by Git in this repository because it is expected to contain machine-local paths.
+`profiles.yaml` is intentionally ignored by Git in this repository because it is expected to contain machine-local paths.
 
 ## Generated Files
 
@@ -314,45 +314,45 @@ The organizer writes run state and reports into the destination root:
 | `.organize_logs/dry_run_report_*.csv` | Dry-run plan export |
 | `.organize_logs/audit_receipt_*.json` | Executed transfer receipt |
 
-The app build output under `nas_ui/build/` is also ignored by Git.
+The app build output under `ui/build/` is also ignored by Git.
 
 ## Repository Layout
 
 ```text
-NAS-Photo-Organizer/
+Chronoframe/
   docs/
     screenshots/
       ui-overview.png
       ui-setup-detail.png
-  organize_nas.py
+  chronoframe.py
   requirements.txt
   README.md
-  nas_organizer/
+  chronoframe/
     __init__.py
     __main__.py
     core.py
     database.py
     io.py
     metadata.py
-  nas_ui/
+  ui/
     Sources/
       BackendRunner.swift
       ContentView.swift
-      NASOrganizerApp.swift
+      ChronoframeApp.swift
     Tools/
       IconGenerator.swift
     build.sh
-  test_organize_nas.py
+  test_chronoframe.py
 ```
 
 ## Testing
 
-The current repository test suite contains 209 unit and integration tests in [`test_organize_nas.py`](test_organize_nas.py).
+The current repository test suite contains 209 unit and integration tests in [`test_chronoframe.py`](test_chronoframe.py).
 
 Run the suite with:
 
 ```bash
-python3 -m unittest test_organize_nas.py -v
+python3 -m unittest test_chronoframe.py -v
 ```
 
 Representative coverage areas include:

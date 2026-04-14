@@ -140,8 +140,8 @@ class BackendRunner: ObservableObject {
         let scriptPath = bundleURL
             .deletingLastPathComponent() // removes .app
             .deletingLastPathComponent() // removes build/
-            .deletingLastPathComponent() // removes nas_ui/
-            .appendingPathComponent("organize_nas.py")
+            .deletingLastPathComponent() // removes ui/
+            .appendingPathComponent("chronoframe.py")
             .path
 
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")

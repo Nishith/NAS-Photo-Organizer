@@ -13,10 +13,10 @@ PHOTO_EXTS = {'.jpg', '.jpeg', '.heic', '.png', '.gif', '.bmp', '.tiff', '.tif',
               '.dng', '.nef', '.cr2', '.arw', '.raf', '.orf'}
 VIDEO_EXTS = {'.mov', '.mp4', '.m4v', '.avi', '.mkv', '.wmv', '.3gp'}
 ALL_EXTS   = PHOTO_EXTS | VIDEO_EXTS
-SKIP_FILES = {'organize_nas.py', 'organize_nas_v2.py', 'run_organize.sh',
+SKIP_FILES = {'chronoframe.py', 'chronoframe_v2.py', 'run_organize.sh',
               'run_new_folder.sh', 'reorganize_structure.sh',
-              'nas_profiles.yaml', 'requirements.txt', 'README.md',
-              'test_organize_nas.py'}
+              'profiles.yaml', 'requirements.txt', 'README.md',
+              'test_chronoframe.py'}
 
 def get_date_exifread(path):
     try:

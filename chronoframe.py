@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NAS Photo Organizer - L7 Architected Setup Wrapper
+Chronoframe - Setup Wrapper
 """
 
 import sys
@@ -34,5 +34,5 @@ def check_and_install_dependencies():
 if __name__ == "__main__":
     check_and_install_dependencies()
     # Import the actual module now that dependencies are verified
-    from nas_organizer import __main__
+    from chronoframe import __main__
     __main__.main()

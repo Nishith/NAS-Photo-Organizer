@@ -16,5 +16,5 @@ audit_receipt_*.json
 .coverage
 htmlcov/
 .claude/
-nas_profiles.yaml
-nas_ui/build/
+profiles.yaml
+ui/build/

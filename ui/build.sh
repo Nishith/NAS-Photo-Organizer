@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-APP_NAME="NAS Organizer UI"
+APP_NAME="Chronoframe"
 BUILD_DIR="build"
 APP_DIR="${BUILD_DIR}/${APP_NAME}.app"
 MACOS_DIR="${APP_DIR}/Contents/MacOS"
@@ -25,7 +25,7 @@ echo "🔨 Compiling Swift sources..."
 swiftc \
   Sources/BackendRunner.swift \
   Sources/ContentView.swift \
-  Sources/NASOrganizerApp.swift \
+  Sources/ChronoframeApp.swift \
   -o "$MACOS_DIR/$APP_NAME" \
   -target x86_64-apple-macosx13.0 \
   -target arm64-apple-macosx13.0 \
@@ -42,9 +42,9 @@ cat <<EOF > "${APP_DIR}/Contents/Info.plist"
     <key>CFBundleExecutable</key>
     <string>${APP_NAME}</string>
     <key>CFBundleIdentifier</key>
-    <string>com.nishith.nasorganizerui</string>
+    <string>com.nishith.chronoframe</string>
     <key>CFBundleDisplayName</key>
-    <string>NAS Organizer</string>
+    <string>Chronoframe</string>
     <key>CFBundleName</key>
     <string>${APP_NAME}</string>
     <key>CFBundlePackageType</key>

@@ -509,7 +509,7 @@ struct ContentView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("NAS Organizer")
+                    Text("Chronoframe")
                         .font(.system(size: 25, weight: .bold, design: .rounded))
                         .foregroundStyle(inkPrimary)
                     Text("Preview and organize large photo libraries with calm, auditable control.")
@@ -578,7 +578,7 @@ struct ContentView: View {
 
                     Text(usingProfile
                          ? "This profile takes precedence over the manual source and destination fields for the next run."
-                         : "Use a named profile from nas_profiles.yaml for repeatable source and destination pairings.")
+                         : "Use a named profile from profiles.yaml for repeatable source and destination pairings.")
                         .font(.footnote)
                         .foregroundStyle(inkSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -599,7 +599,7 @@ struct ContentView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Profiles")
                                 .font(.headline)
-                            Text("Use a profile name to load saved source and destination paths from `nas_profiles.yaml`. When a profile is filled in, it takes priority over the manual fields above.")
+                            Text("Use a profile name to load saved source and destination paths from `profiles.yaml`. When a profile is filled in, it takes priority over the manual fields above.")
                                 .font(.callout)
                                 .foregroundStyle(inkSecondary)
                                 .frame(width: 280, alignment: .leading)

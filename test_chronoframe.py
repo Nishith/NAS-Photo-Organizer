@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Comprehensive test suite for NAS Photo Organizer v3.
-Run: python3 -m pytest test_organize_nas.py -v
-  or: python3 -m unittest test_organize_nas.py -v
+Comprehensive test suite for Chronoframe.
+Run: python3 -m pytest test_chronoframe.py -v
+  or: python3 -m unittest test_chronoframe.py -v
 """
 
 import errno
@@ -22,16 +22,16 @@ import subprocess
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, MofNCompleteColumn
 
-from nas_organizer.database import CacheDB
-from nas_organizer.io import (
+from chronoframe.database import CacheDB
+from chronoframe.io import (
     fast_hash, safe_copy_atomic, verify_copy, process_single_file,
     cleanup_tmp_files, check_disk_space, _is_retryable_error,
 )
-from nas_organizer.metadata import (
+from chronoframe.metadata import (
     get_file_date, get_date_from_filename, get_date_mdls,
     ALL_EXTS, PHOTO_EXTS, VIDEO_EXTS, SKIP_FILES, HAS_EXIFREAD,
 )
-from nas_organizer.core import (
+from chronoframe.core import (
     build_dest_index, generate_dry_run_report, generate_audit_receipt,
     load_profile, RunLogger, SEQ_WIDTH, MAX_CONSECUTIVE_FAILURES,
     MAX_TOTAL_FAILURES, DEFAULT_WORKERS, parse_args, _format_seq,
@@ -449,34 +449,34 @@ class TestGetDateFromFilename(unittest.TestCase):
 
 class TestGetFileDate(TempDirMixin, unittest.TestCase):
 
-    @patch('nas_organizer.metadata.get_date_mdls', return_value=None)
+    @patch('chronoframe.metadata.get_date_mdls', return_value=None)
     def test_filename_fallback_when_no_mdls(self, mock_mdls):
         p = self._mkfile("IMG_20210501_120000.jpg", b"data")
         dt = get_file_date(p)
         self.assertEqual(dt, datetime(2021, 5, 1))
 
-    @patch('nas_organizer.metadata.get_date_mdls')
+    @patch('chronoframe.metadata.get_date_mdls')
     def test_mdls_used_when_filename_fails(self, mock_mdls):
         mock_mdls.return_value = datetime(2020, 6, 15, 10, 30, 0)
         p = self._mkfile("random_name.jpg", b"data")
-        with patch('nas_organizer.metadata.HAS_EXIFREAD', False):
+        with patch('chronoframe.metadata.HAS_EXIFREAD', False):
             dt = get_file_date(p)
         self.assertEqual(dt.year, 2020)
         self.assertEqual(dt.month, 6)
 
     def test_mtime_fallback(self):
         p = self._mkfile("nodate.jpg", b"data")
-        with patch('nas_organizer.metadata.get_date_mdls', return_value=None):
-            with patch('nas_organizer.metadata.HAS_EXIFREAD', False):
+        with patch('chronoframe.metadata.get_date_mdls', return_value=None):
+            with patch('chronoframe.metadata.HAS_EXIFREAD', False):
                 dt = get_file_date(p)
         # Should return mtime which is recent
         self.assertGreater(dt.year, 2020)
 
-    @patch('nas_organizer.metadata.get_date_mdls', return_value=datetime(1970, 1, 1))
+    @patch('chronoframe.metadata.get_date_mdls', return_value=datetime(1970, 1, 1))
     def test_mdls_1970_rejected(self, mock_mdls):
         """Dates ≤ 1971 from mdls are rejected; fallback to mtime."""
         p = self._mkfile("nodate.jpg", b"data")
-        with patch('nas_organizer.metadata.HAS_EXIFREAD', False):
+        with patch('chronoframe.metadata.HAS_EXIFREAD', False):
             dt = get_file_date(p)
         self.assertGreater(dt.year, 1971)
 
@@ -509,18 +509,18 @@ class TestExtensionSets(unittest.TestCase):
 class TestSkipFiles(unittest.TestCase):
 
     def test_organize_script_skipped(self):
-        self.assertIn('organize_nas.py', SKIP_FILES)
+        self.assertIn('chronoframe.py', SKIP_FILES)
 
     def test_shell_scripts_skipped(self):
         self.assertIn('run_organize.sh', SKIP_FILES)
         self.assertIn('reorganize_structure.sh', SKIP_FILES)
 
     def test_config_files_skipped(self):
-        self.assertIn('nas_profiles.yaml', SKIP_FILES)
+        self.assertIn('profiles.yaml', SKIP_FILES)
         self.assertIn('requirements.txt', SKIP_FILES)
 
     def test_test_file_skipped(self):
-        self.assertIn('test_organize_nas.py', SKIP_FILES)
+        self.assertIn('test_chronoframe.py', SKIP_FILES)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -749,12 +749,12 @@ class TestProfileLoading(TempDirMixin, unittest.TestCase):
 
     def _write_yaml(self, content):
         import yaml
-        path = os.path.join(self.tmpdir, "nas_profiles.yaml")
+        path = os.path.join(self.tmpdir, "profiles.yaml")
         with open(path, 'w') as f:
             yaml.dump(content, f)
         return path
 
-    @patch('nas_organizer.core._find_profiles_yaml')
+    @patch('chronoframe.core._find_profiles_yaml')
     def test_load_valid_profile(self, mock_find):
         path = self._write_yaml({
             "my_profile": {"source": "/src", "dest": "/dst"}
@@ -764,16 +764,16 @@ class TestProfileLoading(TempDirMixin, unittest.TestCase):
         self.assertEqual(src, "/src")
         self.assertEqual(dst, "/dst")
 
-    @patch('nas_organizer.core._find_profiles_yaml')
+    @patch('chronoframe.core._find_profiles_yaml')
     def test_missing_profile_exits(self, mock_find):
         path = self._write_yaml({"other": {"source": "/a", "dest": "/b"}})
         mock_find.return_value = path
         with self.assertRaises(SystemExit):
             load_profile("nonexistent")
 
-    @patch('nas_organizer.core._find_profiles_yaml')
+    @patch('chronoframe.core._find_profiles_yaml')
     def test_missing_yaml_exits(self, mock_find):
-        mock_find.return_value = "/nonexistent/nas_profiles.yaml"
+        mock_find.return_value = "/nonexistent/profiles.yaml"
         with self.assertRaises(SystemExit):
             load_profile("anything")
 
@@ -1110,7 +1110,7 @@ class TestExecuteJobs(TempDirMixin, unittest.TestCase):
         return src_dir, dst_dir, db
 
     def test_copies_files_and_updates_db(self):
-        from nas_organizer.core import execute_jobs
+        from chronoframe.core import execute_jobs
         src_dir, dst_dir, db = self._setup_env()
 
         # Create real source files
@@ -1150,7 +1150,7 @@ class TestExecuteJobs(TempDirMixin, unittest.TestCase):
         db.close()
 
     def test_handles_missing_source_gracefully(self):
-        from nas_organizer.core import execute_jobs
+        from chronoframe.core import execute_jobs
         src_dir, dst_dir, db = self._setup_env()
 
         # Source file doesn't exist
@@ -1167,7 +1167,7 @@ class TestExecuteJobs(TempDirMixin, unittest.TestCase):
         db.close()
 
     def test_verify_flag_detects_mismatch(self):
-        from nas_organizer.core import execute_jobs
+        from chronoframe.core import execute_jobs
         src_dir, dst_dir, db = self._setup_env()
 
         src = os.path.join(src_dir, "photo.jpg")
@@ -1197,7 +1197,7 @@ class TestExecuteJobs(TempDirMixin, unittest.TestCase):
         db.close()
 
     def test_audit_receipt_uses_actual_collision_path(self):
-        from nas_organizer.core import execute_jobs
+        from chronoframe.core import execute_jobs
         src_dir, dst_dir, db = self._setup_env()
 
         src = os.path.join(src_dir, "photo.jpg")
@@ -1221,7 +1221,7 @@ class TestExecuteJobs(TempDirMixin, unittest.TestCase):
         db.close()
 
     def test_consecutive_failure_aborts(self):
-        from nas_organizer.core import execute_jobs
+        from chronoframe.core import execute_jobs
         _, dst_dir, db = self._setup_env()
 
         # Create 6 jobs all pointing to nonexistent sources
@@ -1240,7 +1240,7 @@ class TestExecuteJobs(TempDirMixin, unittest.TestCase):
 
     def test_execute_with_no_run_log(self):
         """execute_jobs should work even if run_log is None."""
-        from nas_organizer.core import execute_jobs
+        from chronoframe.core import execute_jobs
         src_dir, dst_dir, db = self._setup_env()
 
         src = os.path.join(src_dir, "photo.jpg")
@@ -1270,9 +1270,9 @@ class TestMainDryRun(TempDirMixin, unittest.TestCase):
         os.makedirs(dst)
         return src, dst
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_dry_run_generates_csv(self, _mock_yaml):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src, dst = self._setup_src_dst()
 
         # Create source files with date-parseable names
@@ -1297,9 +1297,9 @@ class TestMainDryRun(TempDirMixin, unittest.TestCase):
         self.assertEqual(len(rows), 3)
         self.assertEqual(rows[0], ["Source", "Destination", "Hash", "Status"])
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_dry_run_creates_missing_destination_root(self, _mock_yaml):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest_missing")
         os.makedirs(src)
@@ -1313,9 +1313,9 @@ class TestMainDryRun(TempDirMixin, unittest.TestCase):
         self.assertTrue(os.path.isdir(dst))
         self.assertTrue(os.path.exists(os.path.join(dst, ".organize_cache.db")))
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_dry_run_empty_source(self, _mock_yaml):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src, dst = self._setup_src_dst()
         # Empty source — no media files
 
@@ -1330,9 +1330,9 @@ class TestMainDryRun(TempDirMixin, unittest.TestCase):
             reports = [f for f in os.listdir(log_dir) if f.startswith("dry_run_report_")]
         self.assertEqual(len(reports), 0)
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_dry_run_with_existing_dest_files(self, _mock_yaml):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src, dst = self._setup_src_dst()
 
         content = b"identical_file_content"
@@ -1371,9 +1371,9 @@ class TestMainCopy(TempDirMixin, unittest.TestCase):
         os.makedirs(dst)
         return src, dst
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_copy_with_yes_flag(self, _mock_yaml):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src, dst = self._setup_src_dst()
 
         with open(os.path.join(src, "IMG_20230615_120000.jpg"), 'wb') as f:
@@ -1388,10 +1388,10 @@ class TestMainCopy(TempDirMixin, unittest.TestCase):
         with open(expected, 'rb') as f:
             self.assertEqual(f.read(), b"photo_bytes_here")
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_copy_nothing_to_do(self, _mock_yaml):
         """When all files are already in dest, nothing to copy."""
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src, dst = self._setup_src_dst()
 
         content = b"already_organized"
@@ -1407,9 +1407,9 @@ class TestMainCopy(TempDirMixin, unittest.TestCase):
 
         # No new files should appear
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_copy_with_internal_duplicates(self, _mock_yaml):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src, dst = self._setup_src_dst()
 
         content = b"duplicate_content"
@@ -1427,9 +1427,9 @@ class TestMainCopy(TempDirMixin, unittest.TestCase):
         self.assertTrue(os.path.exists(main_file))
         self.assertTrue(os.path.exists(dup_file))
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_copy_with_verify_flag(self, _mock_yaml):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src, dst = self._setup_src_dst()
 
         with open(os.path.join(src, "IMG_20230615_120000.jpg"), 'wb') as f:
@@ -1441,9 +1441,9 @@ class TestMainCopy(TempDirMixin, unittest.TestCase):
         expected = os.path.join(dst, "2023", "06", "15", "2023-06-15_001.jpg")
         self.assertTrue(os.path.exists(expected))
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_copy_unknown_date_file(self, _mock_yaml):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src, dst = self._setup_src_dst()
 
         # File with no parseable date and mock mdls to return None
@@ -1451,8 +1451,8 @@ class TestMainCopy(TempDirMixin, unittest.TestCase):
             f.write(b"mystery_photo")
 
         with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '-y']):
-            with patch('nas_organizer.metadata.get_date_mdls', return_value=None):
-                with patch('nas_organizer.metadata.HAS_EXIFREAD', False):
+            with patch('chronoframe.metadata.get_date_mdls', return_value=None):
+                with patch('chronoframe.metadata.HAS_EXIFREAD', False):
                     main()
 
         # Should end up in the date-based directory using mtime (which is recent)
@@ -1472,10 +1472,10 @@ class TestMainResume(TempDirMixin, unittest.TestCase):
         os.makedirs(dst)
         return src, dst
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_resume_with_yes_flag(self, _mock_yaml):
         """--yes should auto-resume pending jobs without prompting."""
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src, dst = self._setup_src_dst()
 
         # Create a real source file and pre-populate the queue
@@ -1493,10 +1493,10 @@ class TestMainResume(TempDirMixin, unittest.TestCase):
 
         self.assertTrue(os.path.exists(dst_path))
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_resume_declined_then_flush(self, _mock_yaml):
         """User declines resume, then flushes queue. Should proceed to fresh scan."""
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src, dst = self._setup_src_dst()
 
         src_file = os.path.join(src, "IMG_20230101_120000.jpg")
@@ -1525,10 +1525,10 @@ class TestMainResume(TempDirMixin, unittest.TestCase):
 
 class TestMainProfileResolution(TempDirMixin, unittest.TestCase):
 
-    @patch('nas_organizer.core._find_profiles_yaml')
+    @patch('chronoframe.core._find_profiles_yaml')
     def test_default_profile_fallback(self, mock_find):
         """When no --source/--dest given, should fall back to 'default' profile."""
-        from nas_organizer.core import main
+        from chronoframe.core import main
         import yaml
 
         src = os.path.join(self.tmpdir, "source")
@@ -1536,7 +1536,7 @@ class TestMainProfileResolution(TempDirMixin, unittest.TestCase):
         os.makedirs(src)
         os.makedirs(dst)
 
-        yaml_path = os.path.join(self.tmpdir, "nas_profiles.yaml")
+        yaml_path = os.path.join(self.tmpdir, "profiles.yaml")
         with open(yaml_path, 'w') as f:
             yaml.dump({"default": {"source": src, "dest": dst}}, f)
         mock_find.return_value = yaml_path
@@ -1545,9 +1545,9 @@ class TestMainProfileResolution(TempDirMixin, unittest.TestCase):
         with patch('sys.argv', ['prog', '--dry-run']):
             main()
 
-    @patch('nas_organizer.core._find_profiles_yaml')
+    @patch('chronoframe.core._find_profiles_yaml')
     def test_named_profile(self, mock_find):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         import yaml
 
         src = os.path.join(self.tmpdir, "source")
@@ -1555,7 +1555,7 @@ class TestMainProfileResolution(TempDirMixin, unittest.TestCase):
         os.makedirs(src)
         os.makedirs(dst)
 
-        yaml_path = os.path.join(self.tmpdir, "nas_profiles.yaml")
+        yaml_path = os.path.join(self.tmpdir, "profiles.yaml")
         with open(yaml_path, 'w') as f:
             yaml.dump({"work": {"source": src, "dest": dst}}, f)
         mock_find.return_value = yaml_path
@@ -1570,8 +1570,8 @@ class TestMainProfileResolution(TempDirMixin, unittest.TestCase):
         self.assertTrue(os.path.isdir(log_dir))
 
     def test_no_source_no_dest_no_profile_exits(self):
-        from nas_organizer.core import main
-        with patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/yaml'):
+        from chronoframe.core import main
+        with patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/yaml'):
             with patch('sys.argv', ['prog']):
                 with self.assertRaises(SystemExit):
                     main()
@@ -1658,7 +1658,7 @@ class TestExifreadParsing(TempDirMixin, unittest.TestCase):
     @unittest.skipUnless(HAS_EXIFREAD, "exifread not installed")
     def test_non_image_returns_none(self):
         """exifread on a non-image file should not crash."""
-        from nas_organizer.metadata import get_date_exifread
+        from chronoframe.metadata import get_date_exifread
         p = self._mkfile("fake.jpg", b"not a real jpeg")
         result = get_date_exifread(p)
         self.assertIsNone(result)
@@ -1667,8 +1667,8 @@ class TestExifreadParsing(TempDirMixin, unittest.TestCase):
     def test_exifread_used_for_photo_exts(self):
         """get_file_date should attempt exifread for photo extensions."""
         p = self._mkfile("test.jpg", b"not real exif data")
-        with patch('nas_organizer.metadata.get_date_exifread', return_value=datetime(2023, 6, 15)) as mock_exif:
-            with patch('nas_organizer.metadata.HAS_EXIFREAD', True):
+        with patch('chronoframe.metadata.get_date_exifread', return_value=datetime(2023, 6, 15)) as mock_exif:
+            with patch('chronoframe.metadata.HAS_EXIFREAD', True):
                 dt = get_file_date(p)
         mock_exif.assert_called_once_with(p)
         self.assertEqual(dt, datetime(2023, 6, 15))
@@ -1676,7 +1676,7 @@ class TestExifreadParsing(TempDirMixin, unittest.TestCase):
     def test_exifread_skipped_for_video(self):
         """get_file_date should NOT use exifread for video files."""
         p = self._mkfile("IMG_20230615_120000.mov", b"video data")
-        with patch('nas_organizer.metadata.get_date_exifread') as mock_exif:
+        with patch('chronoframe.metadata.get_date_exifread') as mock_exif:
             dt = get_file_date(p)
         mock_exif.assert_not_called()
         self.assertEqual(dt, datetime(2023, 6, 15))
@@ -1688,30 +1688,30 @@ class TestExifreadParsing(TempDirMixin, unittest.TestCase):
 
 class TestMdlsParsing(TempDirMixin, unittest.TestCase):
 
-    @patch('nas_organizer.metadata.subprocess.run')
+    @patch('chronoframe.metadata.subprocess.run')
     def test_mdls_valid_date(self, mock_run):
-        from nas_organizer.metadata import get_date_mdls
+        from chronoframe.metadata import get_date_mdls
         mock_run.return_value = MagicMock(stdout="2023-06-15 10:30:00 +0000")
         result = get_date_mdls("/any/path.jpg")
         self.assertEqual(result, datetime(2023, 6, 15, 10, 30, 0))
 
-    @patch('nas_organizer.metadata.subprocess.run')
+    @patch('chronoframe.metadata.subprocess.run')
     def test_mdls_null_result(self, mock_run):
-        from nas_organizer.metadata import get_date_mdls
+        from chronoframe.metadata import get_date_mdls
         mock_run.return_value = MagicMock(stdout="(null)")
         result = get_date_mdls("/any/path.jpg")
         self.assertIsNone(result)
 
-    @patch('nas_organizer.metadata.subprocess.run')
+    @patch('chronoframe.metadata.subprocess.run')
     def test_mdls_timeout(self, mock_run):
-        from nas_organizer.metadata import get_date_mdls
+        from chronoframe.metadata import get_date_mdls
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="mdls", timeout=5)
         result = get_date_mdls("/any/path.jpg")
         self.assertIsNone(result)
 
-    @patch('nas_organizer.metadata.subprocess.run')
+    @patch('chronoframe.metadata.subprocess.run')
     def test_mdls_empty_output(self, mock_run):
-        from nas_organizer.metadata import get_date_mdls
+        from chronoframe.metadata import get_date_mdls
         mock_run.return_value = MagicMock(stdout="")
         result = get_date_mdls("/any/path.jpg")
         self.assertIsNone(result)
@@ -1725,14 +1725,14 @@ class TestSafeCopyAtomicEdgeCases(TempDirMixin, unittest.TestCase):
 
     def test_tmp_cleanup_on_rename_failure(self):
         """If os.rename fails, the .tmp file should be cleaned up."""
-        from nas_organizer.io import safe_copy_atomic as wrapped_fn
+        from chronoframe.io import safe_copy_atomic as wrapped_fn
         # Access the unwrapped function to bypass tenacity retries
         raw_fn = wrapped_fn.__wrapped__
 
         src = self._mkfile("src/photo.jpg", b"data")
         dst = os.path.join(self.tmpdir, "dst", "photo.jpg")
 
-        with patch('nas_organizer.io.os.rename', side_effect=OSError("rename failed")):
+        with patch('chronoframe.io.os.rename', side_effect=OSError("rename failed")):
             with self.assertRaises(OSError):
                 raw_fn(src, dst)
 
@@ -1741,7 +1741,7 @@ class TestSafeCopyAtomicEdgeCases(TempDirMixin, unittest.TestCase):
 
     def test_tmp_cleanup_failure_doesnt_crash(self):
         """If both rename AND tmp removal fail, should still raise without crashing."""
-        from nas_organizer.io import safe_copy_atomic as wrapped_fn
+        from chronoframe.io import safe_copy_atomic as wrapped_fn
         raw_fn = wrapped_fn.__wrapped__
 
         src = self._mkfile("src/photo.jpg", b"data")
@@ -1750,8 +1750,8 @@ class TestSafeCopyAtomicEdgeCases(TempDirMixin, unittest.TestCase):
         def mock_remove(path):
             raise OSError("remove also failed")
 
-        with patch('nas_organizer.io.os.rename', side_effect=OSError("rename failed")):
-            with patch('nas_organizer.io.os.remove', side_effect=mock_remove):
+        with patch('chronoframe.io.os.rename', side_effect=OSError("rename failed")):
+            with patch('chronoframe.io.os.remove', side_effect=mock_remove):
                 with self.assertRaises(OSError):
                     raw_fn(src, dst)
 
@@ -1763,9 +1763,9 @@ class TestSafeCopyAtomicEdgeCases(TempDirMixin, unittest.TestCase):
 class TestFindProfilesYaml(unittest.TestCase):
 
     def test_returns_path_relative_to_project(self):
-        from nas_organizer.core import _find_profiles_yaml, _PROJECT_DIR
+        from chronoframe.core import _find_profiles_yaml, _PROJECT_DIR
         result = _find_profiles_yaml()
-        self.assertEqual(result, os.path.join(_PROJECT_DIR, "nas_profiles.yaml"))
+        self.assertEqual(result, os.path.join(_PROJECT_DIR, "profiles.yaml"))
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1818,7 +1818,7 @@ class TestCleanupTmpFiles(TempDirMixin, unittest.TestCase):
     def test_unremovable_tmp_silently_skipped(self):
         """If os.remove raises (e.g. permissions), the error is silenced and count stays 0."""
         self._mkfile("stuck.jpg.tmp", b"data")
-        with patch('nas_organizer.io.os.remove', side_effect=OSError("permission denied")):
+        with patch('chronoframe.io.os.remove', side_effect=OSError("permission denied")):
             count = cleanup_tmp_files(self.tmpdir)
         self.assertEqual(count, 0)
 
@@ -1836,7 +1836,7 @@ class TestCheckDiskSpace(TempDirMixin, unittest.TestCase):
 
     def test_insufficient_space_raises_enospc(self):
         src = self._mkfile("test.jpg", b"x" * 1000)
-        with patch('nas_organizer.io.shutil.disk_usage') as mock_du:
+        with patch('chronoframe.io.shutil.disk_usage') as mock_du:
             mock_du.return_value = MagicMock(free=50)  # only 50 bytes free
             with self.assertRaises(OSError) as ctx:
                 check_disk_space(src, self.tmpdir)
@@ -1844,7 +1844,7 @@ class TestCheckDiskSpace(TempDirMixin, unittest.TestCase):
 
     def test_error_message_contains_mb_info(self):
         src = self._mkfile("test.jpg", b"x" * (2 * 1024 * 1024))  # 2 MB file
-        with patch('nas_organizer.io.shutil.disk_usage') as mock_du:
+        with patch('chronoframe.io.shutil.disk_usage') as mock_du:
             mock_du.return_value = MagicMock(free=1024 * 1024)  # 1 MB free
             with self.assertRaises(OSError) as ctx:
                 check_disk_space(src, self.tmpdir)
@@ -1854,7 +1854,7 @@ class TestCheckDiskSpace(TempDirMixin, unittest.TestCase):
     def test_exactly_at_threshold_raises(self):
         """File size + 10 MB buffer exactly equal to free space should still raise."""
         src = self._mkfile("test.jpg", b"x" * 1024)
-        with patch('nas_organizer.io.shutil.disk_usage') as mock_du:
+        with patch('chronoframe.io.shutil.disk_usage') as mock_du:
             # free == needed + 10 MB exactly — should raise (strictly less than required)
             mock_du.return_value = MagicMock(free=1024 + 10 * 1024 * 1024 - 1)
             with self.assertRaises(OSError):
@@ -1862,11 +1862,11 @@ class TestCheckDiskSpace(TempDirMixin, unittest.TestCase):
 
     def test_enospc_propagated_through_safe_copy(self):
         """ENOSPC from check_disk_space bubbles through safe_copy_atomic __wrapped__."""
-        from nas_organizer.io import safe_copy_atomic
+        from chronoframe.io import safe_copy_atomic
         raw = safe_copy_atomic.__wrapped__
         src = self._mkfile("test.jpg", b"x" * 1000)
         dst = os.path.join(self.tmpdir, "out.jpg")
-        with patch('nas_organizer.io.shutil.disk_usage') as mock_du:
+        with patch('chronoframe.io.shutil.disk_usage') as mock_du:
             mock_du.return_value = MagicMock(free=50)
             with self.assertRaises(OSError) as ctx:
                 raw(src, dst)
@@ -1994,7 +1994,7 @@ class TestTotalFailAbortIntegration(TempDirMixin, unittest.TestCase):
 
         safe_copy_atomic is mocked so no real retry backoff occurs.
         """
-        from nas_organizer.core import execute_jobs
+        from chronoframe.core import execute_jobs
         src_dir, dst_dir, db = self._setup_env()
 
         jobs = []
@@ -2020,7 +2020,7 @@ class TestTotalFailAbortIntegration(TempDirMixin, unittest.TestCase):
             shutil.copy2(src, dst)
             return dst
 
-        with patch('nas_organizer.core.safe_copy_atomic', side_effect=mock_copy):
+        with patch('chronoframe.core.safe_copy_atomic', side_effect=mock_copy):
             execute_jobs(db.get_pending_jobs(), db, dst_dir)
 
         cur = db.conn.execute("SELECT COUNT(*) FROM CopyJobs WHERE status = 'PENDING'")
@@ -2142,7 +2142,7 @@ class TestExecuteJobsBytesTracking(TempDirMixin, unittest.TestCase):
 
     def test_bytes_tracking_does_not_break_execution(self):
         """Bytes pre-computation and tracking should not interfere with normal copy."""
-        from nas_organizer.core import execute_jobs
+        from chronoframe.core import execute_jobs
         src_dir, dst_dir, db = self._setup_env()
 
         src = os.path.join(src_dir, "a.jpg")
@@ -2159,7 +2159,7 @@ class TestExecuteJobsBytesTracking(TempDirMixin, unittest.TestCase):
 
     def test_missing_source_still_tracks_bytes(self):
         """If getsize fails for a missing source, bytes_total degrades gracefully."""
-        from nas_organizer.core import execute_jobs
+        from chronoframe.core import execute_jobs
         src_dir, dst_dir, db = self._setup_env()
 
         # Job with nonexistent source — getsize will fail silently
@@ -2169,7 +2169,7 @@ class TestExecuteJobsBytesTracking(TempDirMixin, unittest.TestCase):
 
     def test_workers_param_accepted(self):
         """execute_jobs should accept a workers keyword without error."""
-        from nas_organizer.core import execute_jobs
+        from chronoframe.core import execute_jobs
         src_dir, dst_dir, db = self._setup_env()
 
         src = os.path.join(src_dir, "b.jpg")
@@ -2191,10 +2191,10 @@ class TestExecuteJobsBytesTracking(TempDirMixin, unittest.TestCase):
 class TestParallelClassification(TempDirMixin, unittest.TestCase):
     """Integration: verify parallel date extraction produces the same results as serial."""
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_parallel_classification_correct_dates(self, _):
         """Files with date-parseable names should land in the right YYYY/MM/DD dirs."""
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest")
         os.makedirs(src)
@@ -2212,10 +2212,10 @@ class TestParallelClassification(TempDirMixin, unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(dst, "2023", "06", "15")))
         self.assertTrue(os.path.exists(os.path.join(dst, "2023", "12", "25")))
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_parallel_classification_with_mdls_fallback(self, _):
         """Files without EXIF or filename dates should still be classified via mdls/mtime."""
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest")
         os.makedirs(src)
@@ -2225,8 +2225,8 @@ class TestParallelClassification(TempDirMixin, unittest.TestCase):
             f.write(b"no date info")
 
         with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '-y']):
-            with patch('nas_organizer.metadata.HAS_EXIFREAD', False):
-                with patch('nas_organizer.metadata.get_date_mdls', return_value=None):
+            with patch('chronoframe.metadata.HAS_EXIFREAD', False):
+                with patch('chronoframe.metadata.get_date_mdls', return_value=None):
                     main()  # Should fall back to mtime, complete without error
 
 
@@ -2236,13 +2236,13 @@ class TestParallelClassification(TempDirMixin, unittest.TestCase):
 
 class TestSeqOverflowWarning(TempDirMixin, unittest.TestCase):
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_overflow_warning_logged(self, _):
         """When a date has >999 new files, a warning is written to the run log.
 
         Uses 1001 tiny files so the hashing phase stays fast.
         """
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest")
         os.makedirs(src)
@@ -2281,10 +2281,10 @@ class TestSeqOverflowWarning(TempDirMixin, unittest.TestCase):
 
 class TestRunLoggerCloseOnException(TempDirMixin, unittest.TestCase):
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_logger_closed_after_no_media(self, _):
         """main() exits early (no media) — log file must still be flushed/closed."""
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest")
         os.makedirs(src)
@@ -2307,10 +2307,10 @@ class TestRunLoggerCloseOnException(TempDirMixin, unittest.TestCase):
 
 class TestMainCleansOrphanTmp(TempDirMixin, unittest.TestCase):
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_orphan_tmp_files_removed_on_startup(self, _):
         """main() should clean orphaned .tmp files in dest at startup."""
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest")
         os.makedirs(src)
@@ -2342,9 +2342,9 @@ class TestMainJsonCompleteEvent(TempDirMixin, unittest.TestCase):
         os.makedirs(dst)
         return src, dst
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_dry_run_complete_event_contains_dest_and_report(self, _):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src, dst = self._setup_src_dst()
         with open(os.path.join(src, "IMG_20230615_120000.jpg"), 'wb') as f:
             f.write(b"data")
@@ -2373,9 +2373,9 @@ class TestMainJsonCompleteEvent(TempDirMixin, unittest.TestCase):
         self.assertEqual(evt.get('dest'), dst)
         self.assertIn('report', evt)
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_copy_complete_event_contains_dest(self, _):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src, dst = self._setup_src_dst()
         with open(os.path.join(src, "IMG_20230615_120000.jpg"), 'wb') as f:
             f.write(b"data")
@@ -2454,7 +2454,7 @@ class TestBuildDestIndexWorkerException(TempDirMixin, unittest.TestCase):
 
         db = CacheDB(os.path.join(self.tmpdir, "test.db"))
 
-        with patch('nas_organizer.core.process_single_file', side_effect=RuntimeError("worker crash")):
+        with patch('chronoframe.core.process_single_file', side_effect=RuntimeError("worker crash")):
             # Should not raise — exceptions must be caught
             hi, seq, dup_seq = build_dest_index(dst, db)
 
@@ -2465,9 +2465,9 @@ class TestBuildDestIndexWorkerException(TempDirMixin, unittest.TestCase):
 class TestSrcHashWorkerException(TempDirMixin, unittest.TestCase):
     """Lines 401-402: exception from src_hash future.result() must be swallowed."""
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_src_hash_exception_caught(self, _):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest")
         os.makedirs(src)
@@ -2476,14 +2476,14 @@ class TestSrcHashWorkerException(TempDirMixin, unittest.TestCase):
         with open(os.path.join(src, "IMG_20230101_120000.jpg"), 'wb') as f:
             f.write(b"content")
 
-        from nas_organizer.io import process_single_file as original_psf
+        from chronoframe.io import process_single_file as original_psf
 
         def raise_for_src(path, cached_data):
             if "source" in path:
                 raise RuntimeError("src hash crash")
             return original_psf(path, cached_data)
 
-        with patch('nas_organizer.core.process_single_file', side_effect=raise_for_src):
+        with patch('chronoframe.core.process_single_file', side_effect=raise_for_src):
             with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '-y']):
                 main()  # Must not raise; hash errors silently absorbed
 
@@ -2491,9 +2491,9 @@ class TestSrcHashWorkerException(TempDirMixin, unittest.TestCase):
 class TestHashErrors(TempDirMixin, unittest.TestCase):
     """Lines 422-423 and 473: files whose hash returns None hit the hash_errors counter."""
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_hash_none_increments_error_count(self, _):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest")
         os.makedirs(src)
@@ -2502,14 +2502,14 @@ class TestHashErrors(TempDirMixin, unittest.TestCase):
         with open(os.path.join(src, "IMG_20230101_120000.jpg"), 'wb') as f:
             f.write(b"content")
 
-        from nas_organizer.io import process_single_file as original_psf
+        from chronoframe.io import process_single_file as original_psf
 
         def return_none_for_src(path, cached_data):
             if "source" in path:
                 return None, 0, 0, False  # h=None triggers hash_errors
             return original_psf(path, cached_data)
 
-        with patch('nas_organizer.core.process_single_file', side_effect=return_none_for_src):
+        with patch('chronoframe.core.process_single_file', side_effect=return_none_for_src):
             with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
                 main()  # Must complete; hash_errors printed to console
 
@@ -2517,9 +2517,9 @@ class TestHashErrors(TempDirMixin, unittest.TestCase):
 class TestClassificationException(TempDirMixin, unittest.TestCase):
     """Lines 450-454: get_file_date raising inside classification executor uses mtime fallback."""
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_get_file_date_exception_falls_back_to_mtime(self, _):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest")
         os.makedirs(src)
@@ -2528,14 +2528,14 @@ class TestClassificationException(TempDirMixin, unittest.TestCase):
         with open(os.path.join(src, "nondescript.jpg"), 'wb') as f:
             f.write(b"no exif no filename date")
 
-        with patch('nas_organizer.core.get_file_date', side_effect=RuntimeError("date crash")):
+        with patch('chronoframe.core.get_file_date', side_effect=RuntimeError("date crash")):
             with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
                 main()  # Should complete using mtime fallback
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_get_file_date_exception_and_mtime_also_fails(self, _):
         """Lines 453-454: if mtime also raises, file_dates[path] = None (Unknown_Date)."""
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest")
         os.makedirs(src)
@@ -2544,8 +2544,8 @@ class TestClassificationException(TempDirMixin, unittest.TestCase):
         with open(os.path.join(src, "nondescript.jpg"), 'wb') as f:
             f.write(b"data")
 
-        with patch('nas_organizer.core.get_file_date', side_effect=RuntimeError("date crash")):
-            with patch('nas_organizer.core.os.path.getmtime', side_effect=OSError("mtime fail")):
+        with patch('chronoframe.core.get_file_date', side_effect=RuntimeError("date crash")):
+            with patch('chronoframe.core.os.path.getmtime', side_effect=OSError("mtime fail")):
                 with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
                     main()  # file_dates[path] = None → Unknown_Date
 
@@ -2553,10 +2553,10 @@ class TestClassificationException(TempDirMixin, unittest.TestCase):
 class TestUnknownDatePath(TempDirMixin, unittest.TestCase):
     """Lines 487-488 and 509-510: files classified as Unknown_Date land in Unknown_Date dir."""
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_unknown_date_in_copy_plan(self, _):
         """Lines 487-488: copy plan uses Unknown_Date subdir when dt is None."""
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest")
         os.makedirs(src)
@@ -2566,7 +2566,7 @@ class TestUnknownDatePath(TempDirMixin, unittest.TestCase):
             f.write(b"data")
 
         # Return a 1970 datetime so date_str becomes "Unknown_Date"
-        with patch('nas_organizer.core.get_file_date', return_value=datetime(1970, 1, 1)):
+        with patch('chronoframe.core.get_file_date', return_value=datetime(1970, 1, 1)):
             with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
                 main()
 
@@ -2578,10 +2578,10 @@ class TestUnknownDatePath(TempDirMixin, unittest.TestCase):
             content = f.read()
         self.assertIn("Unknown_Date", content)
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_unknown_date_for_src_dups(self, _):
         """Lines 509-510: duplicate files with Unknown_Date land in Duplicate/Unknown_Date."""
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest")
         os.makedirs(src)
@@ -2593,7 +2593,7 @@ class TestUnknownDatePath(TempDirMixin, unittest.TestCase):
                 f.write(b"identical content here")
 
         # Return 1970 for all date queries → Unknown_Date for both copy plan and dups
-        with patch('nas_organizer.core.get_file_date', return_value=datetime(1970, 1, 1)):
+        with patch('chronoframe.core.get_file_date', return_value=datetime(1970, 1, 1)):
             with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
                 main()
 
@@ -2611,7 +2611,7 @@ class TestExecuteJobsWithRunLog(TempDirMixin, unittest.TestCase):
 
     def test_run_log_error_on_copy_failure(self):
         """Line 608: run_log.error is called when a copy fails."""
-        from nas_organizer.core import execute_jobs, RunLogger
+        from chronoframe.core import execute_jobs, RunLogger
         src_dir, dst_dir, db = self._setup_env()
 
         log_path = os.path.join(dst_dir, "test.log")
@@ -2630,7 +2630,7 @@ class TestExecuteJobsWithRunLog(TempDirMixin, unittest.TestCase):
 
     def test_run_log_error_on_abort(self):
         """Line 616: run_log.error is called in the abort message."""
-        from nas_organizer.core import execute_jobs, RunLogger
+        from chronoframe.core import execute_jobs, RunLogger
         src_dir, dst_dir, db = self._setup_env()
 
         log_path = os.path.join(dst_dir, "abort.log")
@@ -2659,7 +2659,7 @@ class TestExecuteJobsGetSizeOSError(TempDirMixin, unittest.TestCase):
 
     def test_getsize_oserror_uses_stat_size_fallback(self):
         """Lines 601-602: if os.path.getsize fails post-copy, st_size is used instead."""
-        from nas_organizer.core import execute_jobs
+        from chronoframe.core import execute_jobs
         src_dir = os.path.join(self.tmpdir, "source")
         dst_dir = os.path.join(self.tmpdir, "dest")
         os.makedirs(src_dir)
@@ -2685,7 +2685,7 @@ class TestExecuteJobsGetSizeOSError(TempDirMixin, unittest.TestCase):
                 raise OSError("getsize failed")
             return original_getsize(path)
 
-        with patch('nas_organizer.core.os.path.getsize', side_effect=getsize_raises_once):
+        with patch('chronoframe.core.os.path.getsize', side_effect=getsize_raises_once):
             execute_jobs(db.get_pending_jobs(), db, dst_dir)
 
         self.assertTrue(os.path.exists(dst_path))
@@ -2695,15 +2695,15 @@ class TestExecuteJobsGetSizeOSError(TempDirMixin, unittest.TestCase):
 class TestHasExifreadFalseWarning(TempDirMixin, unittest.TestCase):
     """Line 299: console prints warning when HAS_EXIFREAD is False."""
 
-    @patch('nas_organizer.core._find_profiles_yaml', return_value='/nonexistent/nas_profiles.yaml')
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_no_exifread_prints_warning(self, _):
-        from nas_organizer.core import main
+        from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest")
         os.makedirs(src)
         os.makedirs(dst)
 
-        with patch('nas_organizer.core.HAS_EXIFREAD', False):
+        with patch('chronoframe.core.HAS_EXIFREAD', False):
             with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
                 main()  # Must complete; line 299 hit when HAS_EXIFREAD is False
 
@@ -2713,7 +2713,7 @@ class TestExifreadTagFound(unittest.TestCase):
 
     def test_get_date_exifread_with_datetime_original(self):
         """Lines 28-33: when EXIF DateTimeOriginal is present, return parsed datetime."""
-        from nas_organizer.metadata import get_date_exifread
+        from chronoframe.metadata import get_date_exifread
 
         fake_tags = {'EXIF DateTimeOriginal': '2023:06:15 12:30:00'}
 
@@ -2733,7 +2733,7 @@ class TestExifreadTagFound(unittest.TestCase):
 
     def test_get_date_exifread_zero_timestamp_returns_none(self):
         """The all-zero timestamp is treated as missing and returns None."""
-        from nas_organizer.metadata import get_date_exifread
+        from chronoframe.metadata import get_date_exifread
 
         fake_tags = {'EXIF DateTimeOriginal': '0000:00:00 00:00:00'}
 
