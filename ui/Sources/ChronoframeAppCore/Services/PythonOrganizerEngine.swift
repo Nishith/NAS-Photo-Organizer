@@ -2,7 +2,6 @@
 import ChronoframeCore
 #endif
 import Foundation
-import SQLite3
 
 public struct DependencyStatus: Decodable, Equatable, Sendable {
     public var ok: Bool
@@ -387,22 +386,12 @@ public final class PythonOrganizerEngine: OrganizerEngine {
         let dbURL = URL(fileURLWithPath: destinationRoot).appendingPathComponent(".organize_cache.db")
         guard FileManager.default.fileExists(atPath: dbURL.path) else { return 0 }
 
-        var database: OpaquePointer?
-        guard sqlite3_open_v2(dbURL.path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
-            sqlite3_close(database)
+        do {
+            let database = try OrganizerDatabase(url: dbURL, readOnly: true)
+            defer { database.close() }
+            return try database.pendingJobCount()
+        } catch {
             return 0
         }
-        defer { sqlite3_close(database) }
-
-        let statementText = "SELECT COUNT(*) FROM CopyJobs WHERE status = 'PENDING'"
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(database, statementText, -1, &statement, nil) == SQLITE_OK else {
-            sqlite3_finalize(statement)
-            return 0
-        }
-        defer { sqlite3_finalize(statement) }
-
-        guard sqlite3_step(statement) == SQLITE_ROW else { return 0 }
-        return Int(sqlite3_column_int(statement, 0))
     }
 }

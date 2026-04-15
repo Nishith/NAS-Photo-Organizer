@@ -1,7 +1,7 @@
 import Foundation
-import SQLite3
 import XCTest
 @testable import ChronoframeAppCore
+@testable import ChronoframeCore
 
 final class PythonOrganizerEngineIntegrationTests: XCTestCase {
     private var tempRootURL: URL!
@@ -156,24 +156,20 @@ final class PythonOrganizerEngineIntegrationTests: XCTestCase {
     }
 
     private func seedPendingJobsDatabase(at url: URL, count: Int) throws {
-        var database: OpaquePointer?
-        XCTAssertEqual(sqlite3_open(url.path, &database), SQLITE_OK)
-        defer { sqlite3_close(database) }
+        let database = try OrganizerDatabase(url: url)
+        defer { database.close() }
 
-        XCTAssertEqual(
-            sqlite3_exec(
-                database,
-                "CREATE TABLE CopyJobs (src_path TEXT PRIMARY KEY, dst_path TEXT, hash TEXT, status TEXT);",
-                nil,
-                nil,
-                nil
-            ),
-            SQLITE_OK
-        )
-
+        var jobs: [CopyJobRecord] = []
         for index in 0..<count {
-            let statement = "INSERT INTO CopyJobs (src_path, dst_path, hash, status) VALUES ('/src/\(index)', '/dst/\(index)', 'hash\(index)', 'PENDING');"
-            XCTAssertEqual(sqlite3_exec(database, statement, nil, nil, nil), SQLITE_OK)
+            jobs.append(
+                CopyJobRecord(
+                    sourcePath: "/src/\(index)",
+                    destinationPath: "/dst/\(index)",
+                    identity: FileIdentity(size: Int64(index + 1), digest: "hash\(index)"),
+                    status: .pending
+                )
+            )
         }
+        try database.enqueueJobs(jobs)
     }
 }

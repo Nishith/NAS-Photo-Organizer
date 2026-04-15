@@ -14,14 +14,14 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "ChronoframeCore"
-        ),
-        .target(
-            name: "ChronoframeAppCore",
-            dependencies: ["ChronoframeCore"],
+            name: "ChronoframeCore",
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
             ]
+        ),
+        .target(
+            name: "ChronoframeAppCore",
+            dependencies: ["ChronoframeCore"]
         ),
         .executableTarget(
             name: "ChronoframeApp",
