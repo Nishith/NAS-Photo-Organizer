@@ -213,6 +213,10 @@ public final class RunSessionStore: ObservableObject {
         case let .phaseProgress(phase, completed, total, bytesCopied, bytesTotal):
             if total > 0 {
                 progress = Double(completed) / Double(total)
+            } else {
+                // total == 0 means indeterminate (count is known, total is not).
+                // Show the running count in the title so the user sees forward progress.
+                currentTaskTitle = "\(phase.runningTitle) \(completed.formatted()) files…"
             }
 
             guard phase == .copy, let bytesCopied, let bytesTotal, bytesTotal > 0 else { return }
@@ -251,7 +255,14 @@ public final class RunSessionStore: ObservableObject {
                 metrics.copiedCount = result.copiedCount ?? metrics.copiedCount
                 metrics.failedCount = result.failedCount ?? metrics.failedCount
                 logStore.append("Copy complete: \(result.copiedCount ?? 0) succeeded, \(result.failedCount ?? 0) failed.")
-            case .sourceHashing, .destinationIndexing:
+            case .sourceHashing:
+                // The planner carries the final discovered count in the sourceHashing
+                // phaseCompleted. Propagate it so the Discovered metric card updates
+                // as soon as the walk finishes (before the discovery summary fires).
+                if let found = result.found {
+                    metrics.discoveredCount = found
+                }
+            case .destinationIndexing:
                 break
             }
 

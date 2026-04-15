@@ -99,10 +99,15 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             let planner = self.planner
             let task = Task.detached(priority: .userInitiated) {
                 do {
+                    // Yield startup immediately so the UI transitions out of "Preparing…"
+                    // before the (potentially long) planning walk begins.
+                    continuation.yield(.startup)
+
                     let result = try planner.plan(
                         sourceRoot: URL(fileURLWithPath: configuration.sourcePath, isDirectory: true),
                         destinationRoot: URL(fileURLWithPath: configuration.destinationPath, isDirectory: true),
-                        fastDestination: configuration.useFastDestinationScan
+                        fastDestination: configuration.useFastDestinationScan,
+                        onEvent: { continuation.yield($0) }
                     )
 
                     if Task.isCancelled {
@@ -122,8 +127,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                         hashErrorCount: result.counts.hashErrorCount
                     )
 
-                    continuation.yield(.startup)
-                    Self.emitPlanningEvents(for: result, into: continuation)
+                    Self.emitPostPlanningEvents(for: result, into: continuation)
                     continuation.yield(
                         .complete(
                             RunSummary(
@@ -257,7 +261,8 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
         let result = try planner.plan(
             sourceRoot: URL(fileURLWithPath: configuration.sourcePath, isDirectory: true),
             destinationRoot: destinationURL,
-            fastDestination: configuration.useFastDestinationScan
+            fastDestination: configuration.useFastDestinationScan,
+            onEvent: { continuation.yield($0) }
         )
 
         if Task.isCancelled {
@@ -265,7 +270,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             return
         }
 
-        emitPlanningEvents(for: result, into: continuation)
+        emitPostPlanningEvents(for: result, into: continuation)
         runLogger.log(
             "Classification: \(result.counts.alreadyInDestinationCount) already in dest, \(result.counts.newCount) new, \(result.counts.duplicateCount) internal dups, \(result.counts.hashErrorCount) hash errors"
         )
@@ -459,16 +464,18 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
         continuation.finish()
     }
 
-    private nonisolated static func emitPlanningEvents(
+    /// Emits the summary events that follow the planner walk.
+    /// `destinationIndexing` and `sourceHashing` are already streamed live by the
+    /// planner via `onEvent`; this method emits the classification summary and the
+    /// final `copyPlanReady` event after `plan()` returns.
+    private nonisolated static func emitPostPlanningEvents(
         for result: DryRunPlanningResult,
         into continuation: AsyncThrowingStream<RunEvent, Error>.Continuation
     ) {
+        // discovery summary — feeds metrics.discoveredCount in the UI
         continuation.yield(.phaseStarted(phase: .discovery, total: result.discoveredSourceCount))
         continuation.yield(.phaseCompleted(phase: .discovery, result: RunPhaseResult(found: result.discoveredSourceCount)))
-        continuation.yield(.phaseStarted(phase: .destinationIndexing, total: result.destinationIndexedCount))
-        continuation.yield(.phaseCompleted(phase: .destinationIndexing, result: RunPhaseResult()))
-        continuation.yield(.phaseStarted(phase: .sourceHashing, total: result.sourceHashedCount))
-        continuation.yield(.phaseCompleted(phase: .sourceHashing, result: RunPhaseResult()))
+
         continuation.yield(.phaseStarted(phase: .classification, total: result.counts.newCount))
         continuation.yield(
             .phaseCompleted(

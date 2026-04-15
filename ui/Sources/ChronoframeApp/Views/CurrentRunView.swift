@@ -34,10 +34,23 @@ struct CurrentRunView: View {
                             statusBadge
                         }
 
-                        ProgressView(value: runSessionStore.progress)
-                            .tint(.accentColor)
-                            .accessibilityLabel("Run progress")
-                            .accessibilityValue("\(Int(runSessionStore.progress * 100))%")
+                        // Show an indeterminate spinner during planning phases where we
+                        // don't yet know the total file count; deterministic bar otherwise.
+                        if runSessionStore.isRunning
+                            && runSessionStore.progress == 0
+                            && runSessionStore.currentPhase != nil
+                            && runSessionStore.currentPhase != .copy {
+                            ProgressView()
+                                .progressViewStyle(.linear)
+                                .tint(.accentColor)
+                                .accessibilityLabel("Run progress")
+                                .accessibilityValue("Scanning…")
+                        } else {
+                            ProgressView(value: runSessionStore.progress)
+                                .tint(.accentColor)
+                                .accessibilityLabel("Run progress")
+                                .accessibilityValue("\(Int(runSessionStore.progress * 100))%")
+                        }
 
                         phaseView
                     }

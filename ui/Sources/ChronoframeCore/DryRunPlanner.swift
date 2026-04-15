@@ -73,12 +73,19 @@ public struct DryRunPlanner: Sendable {
         self.dateResolver = dateResolver
     }
 
+    /// Number of files processed between incremental progress events during planning.
+    /// Low enough for responsive UI on slow volumes; high enough to avoid event flood.
+    public static let planningProgressStride = 100
+
     public func plan(
         sourceRoot: URL,
         destinationRoot: URL,
         databaseURL: URL? = nil,
         fastDestination: Bool = false,
-        namingRules: PlannerNamingRules = .pythonReference
+        namingRules: PlannerNamingRules = .pythonReference,
+        /// Called with incremental `RunEvent`s while the walks are in progress.
+        /// Allows callers to stream progress to the UI without waiting for `plan()` to return.
+        onEvent: (@Sendable (RunEvent) -> Void)? = nil
     ) throws -> DryRunPlanningResult {
         let organizerDatabaseURL = databaseURL
             ?? destinationRoot.appendingPathComponent(EngineArtifactLayout.pythonReference.queueDatabaseFilename)
@@ -89,7 +96,8 @@ public struct DryRunPlanner: Sendable {
             destinationRoot: destinationRoot,
             database: database,
             fastDestination: fastDestination,
-            namingRules: namingRules
+            namingRules: namingRules,
+            onEvent: onEvent
         )
 
         let sourceCacheByPath = try loadTypedCacheRecordsByPath(namespace: .source, database: database)
@@ -99,8 +107,15 @@ public struct DryRunPlanner: Sendable {
         var counts = CopyPlanCounts()
         var sourceSeen: Set<FileIdentity> = []
 
+        onEvent?(.phaseStarted(phase: .sourceHashing, total: nil))
+
         try MediaDiscovery.enumerateMediaFiles(at: sourceRoot) { path in
             discoveredSourceCount += 1
+            if discoveredSourceCount % Self.planningProgressStride == 0 {
+                // total: 0 signals an indeterminate count — UI shows a spinner + count.
+                onEvent?(.phaseProgress(phase: .sourceHashing, completed: discoveredSourceCount,
+                                        total: 0, bytesCopied: nil, bytesTotal: nil))
+            }
             let result = fileHasher.processFile(at: path, cachedRecord: sourceCacheByPath[path])
 
             if let identity = result.identity, result.wasHashed {
@@ -153,6 +168,8 @@ public struct DryRunPlanner: Sendable {
         }
 
         try database.saveCacheRecords(sourceUpdates)
+
+        onEvent?(.phaseCompleted(phase: .sourceHashing, result: RunPhaseResult(found: discoveredSourceCount)))
 
         var primarySequences = destinationIndex.snapshot.sequenceState.primaryByDate
         var duplicateSequences = destinationIndex.snapshot.sequenceState.duplicatesByDate
@@ -242,8 +259,11 @@ public struct DryRunPlanner: Sendable {
         destinationRoot: URL,
         database: OrganizerDatabase,
         fastDestination: Bool,
-        namingRules: PlannerNamingRules
+        namingRules: PlannerNamingRules,
+        onEvent: (@Sendable (RunEvent) -> Void)? = nil
     ) throws -> DestinationIndexBuildResult {
+        onEvent?(.phaseStarted(phase: .destinationIndexing, total: nil))
+
         if fastDestination {
             var snapshotBuilder = DestinationIndexSnapshotBuilder(namingRules: namingRules)
             var indexedCount = 0
@@ -252,7 +272,12 @@ public struct DryRunPlanner: Sendable {
                 for row in batch {
                     snapshotBuilder.consume(path: row.path, identity: row.parsedIdentity)
                 }
+                if indexedCount % Self.planningProgressStride == 0 {
+                    onEvent?(.phaseProgress(phase: .destinationIndexing, completed: indexedCount,
+                                            total: 0, bytesCopied: nil, bytesTotal: nil))
+                }
             }
+            onEvent?(.phaseCompleted(phase: .destinationIndexing, result: RunPhaseResult()))
             return DestinationIndexBuildResult(
                 indexedFileCount: indexedCount,
                 snapshot: snapshotBuilder.snapshot
@@ -268,6 +293,11 @@ public struct DryRunPlanner: Sendable {
             indexedFileCount += 1
             let result = fileHasher.processFile(at: path, cachedRecord: cachedRowsByPath[path])
             snapshotBuilder.consume(path: path, identity: result.identity)
+
+            if indexedFileCount % Self.planningProgressStride == 0 {
+                onEvent?(.phaseProgress(phase: .destinationIndexing, completed: indexedFileCount,
+                                        total: 0, bytesCopied: nil, bytesTotal: nil))
+            }
 
             if let identity = result.identity, result.wasHashed {
                 destinationUpdates.append(
@@ -287,6 +317,7 @@ public struct DryRunPlanner: Sendable {
         }
 
         try database.saveCacheRecords(destinationUpdates)
+        onEvent?(.phaseCompleted(phase: .destinationIndexing, result: RunPhaseResult()))
 
         return DestinationIndexBuildResult(
             indexedFileCount: indexedFileCount,

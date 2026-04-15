@@ -85,14 +85,16 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
         )
         let events = try await Self.collect(stream)
 
+        // dest_hash and src_hash are streamed live from the planner during the walk;
+        // discovery summary and classification are emitted after plan() returns.
         XCTAssertEqual(Self.render(events), [
             "startup",
-            "phaseStarted:discovery",
-            "phaseCompleted:discovery",
             "phaseStarted:dest_hash",
             "phaseCompleted:dest_hash",
             "phaseStarted:src_hash",
             "phaseCompleted:src_hash",
+            "phaseStarted:discovery",
+            "phaseCompleted:discovery",
             "phaseStarted:classification",
             "phaseCompleted:classification",
             "copyPlanReady:1",
@@ -159,12 +161,12 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
 
         XCTAssertEqual(Self.render(events), [
             "startup",
-            "phaseStarted:discovery",
-            "phaseCompleted:discovery",
             "phaseStarted:dest_hash",
             "phaseCompleted:dest_hash",
             "phaseStarted:src_hash",
             "phaseCompleted:src_hash",
+            "phaseStarted:discovery",
+            "phaseCompleted:discovery",
             "phaseStarted:classification",
             "phaseCompleted:classification",
             "copyPlanReady:1",
