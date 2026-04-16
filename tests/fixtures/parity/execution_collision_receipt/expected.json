@@ -1,0 +1,38 @@
+{
+  "scenario": "execution_collision_receipt",
+  "description": "Actual copy collisions must rename the destination and record the collision path in the audit receipt while preserving the queued destination path.",
+  "runner": "execute_jobs",
+  "events": null,
+  "queue_rows": [
+    {
+      "src": "source/incoming/photo.jpg",
+      "dst": "dest/photo.jpg",
+      "hash": "8_5c841c1e9e29975c39b942d5b1914dc04416a1bb41597b384c7e2a96e121f20029a656b9268d767450116a8e465dc538b01506123771ce8050b62658c5b2272a",
+      "status": "COPIED"
+    }
+  ],
+  "dest_cache_rows": [
+    {
+      "path": "dest/photo_collision_1.jpg",
+      "hash": "8_5c841c1e9e29975c39b942d5b1914dc04416a1bb41597b384c7e2a96e121f20029a656b9268d767450116a8e465dc538b01506123771ce8050b62658c5b2272a",
+      "size": 8
+    }
+  ],
+  "dest_files": [
+    "dest/photo.jpg",
+    "dest/photo_collision_1.jpg"
+  ],
+  "audit_receipt": {
+    "present": true,
+    "total_jobs": 1,
+    "status": "COMPLETED",
+    "transfers": [
+      {
+        "source": "source/incoming/photo.jpg",
+        "dest": "dest/photo_collision_1.jpg",
+        "hash": "8_5c841c1e9e29975c39b942d5b1914dc04416a1bb41597b384c7e2a96e121f20029a656b9268d767450116a8e465dc538b01506123771ce8050b62658c5b2272a"
+      }
+    ]
+  },
+  "log_markers": {}
+}

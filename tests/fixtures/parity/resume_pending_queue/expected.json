@@ -1,0 +1,49 @@
+{
+  "scenario": "resume_pending_queue",
+  "description": "CLI resume with --yes should execute the persisted pending queue and finish without rebuilding a fresh plan.",
+  "runner": "main_cli",
+  "events": {
+    "event_types": [
+      "startup",
+      "copy:start",
+      "task_progress",
+      "copy:complete",
+      "complete"
+    ],
+    "complete_status": "finished"
+  },
+  "queue_rows": [
+    {
+      "src": "source/incoming/photo.jpg",
+      "dst": "dest/2023/06/15/2023-06-15_001.jpg",
+      "hash": "h1",
+      "status": "COPIED"
+    }
+  ],
+  "dest_cache_rows": [
+    {
+      "path": "dest/2023/06/15/2023-06-15_001.jpg",
+      "hash": "h1",
+      "size": 11
+    }
+  ],
+  "dest_files": [
+    "dest/2023/06/15/2023-06-15_001.jpg"
+  ],
+  "audit_receipt": {
+    "present": true,
+    "total_jobs": 1,
+    "status": "COMPLETED",
+    "transfers": [
+      {
+        "source": "source/incoming/photo.jpg",
+        "dest": "dest/2023/06/15/2023-06-15_001.jpg",
+        "hash": "h1"
+      }
+    ]
+  },
+  "log_markers": {
+    "Found 1 pending jobs from interrupted session": true,
+    "Resumed session complete": true
+  }
+}

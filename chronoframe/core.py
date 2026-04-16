@@ -91,7 +91,10 @@ def parse_args():
 
 
 def _find_profiles_yaml():
-    """Look for profiles.yaml next to the project root (not cwd)."""
+    """Look for profiles.yaml via override first, then next to the project root."""
+    override = os.environ.get("CHRONOFRAME_PROFILES_PATH")
+    if override:
+        return override
     return os.path.join(_PROJECT_DIR, "profiles.yaml")
 
 

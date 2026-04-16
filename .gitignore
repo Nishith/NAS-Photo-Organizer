@@ -15,6 +15,10 @@ dry_run_report_*.csv
 audit_receipt_*.json
 .coverage
 htmlcov/
+.cache/
+.swift-home/
 .claude/
 profiles.yaml
 ui/build/
+ui/.build/
+ui/.tmp/

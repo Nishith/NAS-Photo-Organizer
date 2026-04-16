@@ -1,0 +1,25 @@
+{
+  "description": "Actual copy collisions must rename the destination and record the collision path in the audit receipt while preserving the queued destination path.",
+  "runner": "execute_jobs",
+  "verify": false,
+  "files": [
+    {
+      "root": "source",
+      "path": "incoming/photo.jpg",
+      "content_text": "new-data"
+    },
+    {
+      "root": "dest",
+      "path": "photo.jpg",
+      "content_text": "existing-data"
+    }
+  ],
+  "seed_copy_jobs": [
+    {
+      "src": "source/incoming/photo.jpg",
+      "dst": "dest/photo.jpg",
+      "hash": "actual:source/incoming/photo.jpg",
+      "status": "PENDING"
+    }
+  ]
+}

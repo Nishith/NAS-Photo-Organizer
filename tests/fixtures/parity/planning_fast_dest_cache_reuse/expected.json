@@ -1,0 +1,37 @@
+{
+  "scenario": "planning_fast_dest_cache_reuse",
+  "description": "Fast-dest dry runs reuse cached destination hashes and sequence counters without scanning the filesystem.",
+  "phase_sequence": [
+    "startup",
+    "discovery:start",
+    "discovery:complete",
+    "dest_hash:start",
+    "dest_hash:complete",
+    "src_hash:start",
+    "src_hash:complete",
+    "classification:start",
+    "classification:complete",
+    "copy_plan_ready",
+    "complete"
+  ],
+  "counts": {
+    "discovery_found": 2,
+    "dest_hash_total": 2,
+    "src_hash_total": 2,
+    "classification_already_in_dst": 1,
+    "classification_new": 1,
+    "classification_dups": 0,
+    "classification_errors": 0,
+    "copy_plan_ready": 1,
+    "complete_status": "dry_run_finished"
+  },
+  "warning_messages": [],
+  "report_rows": [
+    {
+      "source": "source/batch/IMG_20240214_080100.jpg",
+      "destination": "dest/2024/02/14/2024-02-14_003.jpg",
+      "hash": "10_5a7eee071f4f7696eb3302591f590306572419e48a831a03cb084d6494c811dc1ed308141cd6dc89e1e26b9c16cfcd548e27aa84eaae77b429c24da29dae3d23",
+      "status": "PENDING"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "description": "Extends sequence numbering past the default width and emits a warning instead of truncating the planned filename.",
+  "files": [
+    {
+      "root": "source",
+      "path": "batch/IMG_20240214_230000.jpg",
+      "content_text": "overflow-new"
+    },
+    {
+      "root": "dest",
+      "path": "2024/02/14/2024-02-14_999.jpg",
+      "content_text": "existing-999"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "scenario": "execution_verify_cleanup",
+  "description": "Verification failures must remove the unverified destination, mark the queue row FAILED, and emit an empty audit receipt.",
+  "runner": "execute_jobs",
+  "events": null,
+  "queue_rows": [
+    {
+      "src": "source/incoming/photo.jpg",
+      "dst": "dest/photo.jpg",
+      "hash": "deliberately_wrong_hash",
+      "status": "FAILED"
+    }
+  ],
+  "dest_cache_rows": [],
+  "dest_files": [],
+  "audit_receipt": {
+    "present": true,
+    "total_jobs": 0,
+    "status": "COMPLETED",
+    "transfers": []
+  },
+  "log_markers": {
+    "Verification failed": true
+  }
+}

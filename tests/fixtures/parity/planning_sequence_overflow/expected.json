@@ -1,0 +1,39 @@
+{
+  "scenario": "planning_sequence_overflow",
+  "description": "Extends sequence numbering past the default width and emits a warning instead of truncating the planned filename.",
+  "phase_sequence": [
+    "startup",
+    "discovery:start",
+    "discovery:complete",
+    "dest_hash:start",
+    "dest_hash:complete",
+    "src_hash:start",
+    "src_hash:complete",
+    "classification:start",
+    "classification:complete",
+    "copy_plan_ready",
+    "complete"
+  ],
+  "counts": {
+    "discovery_found": 1,
+    "dest_hash_total": 1,
+    "src_hash_total": 1,
+    "classification_already_in_dst": 0,
+    "classification_new": 1,
+    "classification_dups": 0,
+    "classification_errors": 0,
+    "copy_plan_ready": 1,
+    "complete_status": "dry_run_finished"
+  },
+  "warning_messages": [
+    "Sequence overflow on dates (>999 files/day): 2024-02-14"
+  ],
+  "report_rows": [
+    {
+      "source": "source/batch/IMG_20240214_230000.jpg",
+      "destination": "dest/2024/02/14/2024-02-14_1000.jpg",
+      "hash": "12_879b3aae4cfbdad4f16fc7952e8a13e97e6c06e11b6da00acbcd9b7f4a1e87e52743d843ac87a4630b39285907e1ba5cebf9e13637a3ae4a41bd74deeaeae31b",
+      "status": "PENDING"
+    }
+  ]
+}

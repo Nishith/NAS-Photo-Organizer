@@ -1,0 +1,23 @@
+{
+  "description": "Verification failures must remove the unverified destination, mark the queue row FAILED, and emit an empty audit receipt.",
+  "runner": "execute_jobs",
+  "verify": true,
+  "log_markers": [
+    "Verification failed"
+  ],
+  "files": [
+    {
+      "root": "source",
+      "path": "incoming/photo.jpg",
+      "content_text": "payload"
+    }
+  ],
+  "seed_copy_jobs": [
+    {
+      "src": "source/incoming/photo.jpg",
+      "dst": "dest/photo.jpg",
+      "hash": "deliberately_wrong_hash",
+      "status": "PENDING"
+    }
+  ]
+}

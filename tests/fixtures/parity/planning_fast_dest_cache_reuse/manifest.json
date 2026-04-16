@@ -1,0 +1,30 @@
+{
+  "description": "Fast-dest dry runs reuse cached destination hashes and sequence counters without scanning the filesystem.",
+  "fast_dest": true,
+  "files": [
+    {
+      "root": "source",
+      "path": "batch/IMG_20240214_080000.jpg",
+      "content_text": "cached-hit"
+    },
+    {
+      "root": "source",
+      "path": "batch/IMG_20240214_080100.jpg",
+      "content_text": "needs-plan"
+    }
+  ],
+  "seed_destination_cache": [
+    {
+      "path": "dest/2024/02/14/2024-02-14_001.jpg",
+      "hash": "actual:source/batch/IMG_20240214_080000.jpg",
+      "size": 10,
+      "mtime": 1700000000
+    },
+    {
+      "path": "dest/2024/02/14/2024-02-14_002.jpg",
+      "hash": "seed_hash_existing_002",
+      "size": 12,
+      "mtime": 1700000001
+    }
+  ]
+}

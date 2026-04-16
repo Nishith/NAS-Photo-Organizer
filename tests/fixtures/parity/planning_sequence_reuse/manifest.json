@@ -1,0 +1,35 @@
+{
+  "description": "Reuses destination and duplicate sequence counters so new plans continue numbering from the existing library state.",
+  "files": [
+    {
+      "root": "source",
+      "path": "batch/IMG_20240214_080000.jpg",
+      "content_text": "new-one"
+    },
+    {
+      "root": "source",
+      "path": "batch/IMG_20240214_080100.jpg",
+      "content_text": "new-two"
+    },
+    {
+      "root": "source",
+      "path": "batch/VID_20240214_080200.mov",
+      "content_text": "new-one"
+    },
+    {
+      "root": "dest",
+      "path": "2024/02/14/2024-02-14_001.jpg",
+      "content_text": "existing-1"
+    },
+    {
+      "root": "dest",
+      "path": "2024/02/14/2024-02-14_002.jpg",
+      "content_text": "existing-2"
+    },
+    {
+      "root": "dest",
+      "path": "Duplicate/2024/02/14/2024-02-14_003.jpg",
+      "content_text": "duplicate-seed"
+    }
+  ]
+}

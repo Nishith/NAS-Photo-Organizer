@@ -1,0 +1,56 @@
+{
+  "scenario": "execution_missing_source_abort",
+  "description": "Missing sources fail fast, trigger the consecutive failure abort threshold, and leave later queued jobs pending for resume.",
+  "runner": "execute_jobs",
+  "events": null,
+  "queue_rows": [
+    {
+      "src": "source/missing/photo_01.jpg",
+      "dst": "dest/out/photo_01.jpg",
+      "hash": "missing_hash_01",
+      "status": "FAILED"
+    },
+    {
+      "src": "source/missing/photo_02.jpg",
+      "dst": "dest/out/photo_02.jpg",
+      "hash": "missing_hash_02",
+      "status": "FAILED"
+    },
+    {
+      "src": "source/missing/photo_03.jpg",
+      "dst": "dest/out/photo_03.jpg",
+      "hash": "missing_hash_03",
+      "status": "FAILED"
+    },
+    {
+      "src": "source/missing/photo_04.jpg",
+      "dst": "dest/out/photo_04.jpg",
+      "hash": "missing_hash_04",
+      "status": "FAILED"
+    },
+    {
+      "src": "source/missing/photo_05.jpg",
+      "dst": "dest/out/photo_05.jpg",
+      "hash": "missing_hash_05",
+      "status": "FAILED"
+    },
+    {
+      "src": "source/missing/photo_06.jpg",
+      "dst": "dest/out/photo_06.jpg",
+      "hash": "missing_hash_06",
+      "status": "PENDING"
+    }
+  ],
+  "dest_cache_rows": [],
+  "dest_files": [],
+  "audit_receipt": {
+    "present": true,
+    "total_jobs": 0,
+    "status": "COMPLETED",
+    "transfers": []
+  },
+  "log_markers": {
+    "Copy failed": true,
+    "Aborting: 5 consecutive failures": true
+  }
+}

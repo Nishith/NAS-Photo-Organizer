@@ -194,7 +194,7 @@ Current UI behavior:
 - segmented activity area with summary and filterable console modes
 - keyboard shortcuts and app command menus for common actions
 - a stronger completion experience with destination, report, and log follow-up actions
-- generated custom app icon and cleaner app bundle metadata
+- checked-in custom app icon assets and cleaner app bundle metadata
 
 Core UI files:
 
@@ -203,7 +203,9 @@ Core UI files:
 - [`ui/Sources/ChronoframeApp.swift`](ui/Sources/ChronoframeApp.swift)
 - [`ui/Tools/IconGenerator.swift`](ui/Tools/IconGenerator.swift)
 
-The build script at [`ui/build.sh`](ui/build.sh) packages a `.app` bundle without needing an Xcode project, generates the app icon, and writes the bundle metadata.
+The macOS app now builds from the checked-in [`ui/Chronoframe.xcodeproj`](ui/Chronoframe.xcodeproj). [`ui/build.sh`](ui/build.sh) is the thin local-development wrapper around `xcodebuild`, while [`ui/archive.sh`](ui/archive.sh) produces a Release archive from the same project. The source artwork still lives in [`ui/Resources/AppIcon.iconset`](ui/Resources/AppIcon.iconset), and the checked-in bundle icon is [`ui/Resources/AppIcon.icns`](ui/Resources/AppIcon.icns).
+
+Both packaging scripts run [`ui/Packaging/validate_app_bundle.py`](ui/Packaging/validate_app_bundle.py) after signing so bundle-structure regressions fail fast. Local `build.sh` output is ad hoc signed for sealed-resource validation. For distribution archives, set `CHRONOFRAME_CODESIGN_IDENTITY` to a Developer ID Application identity before running `archive.sh`; the Release archive will then be checked for Developer ID signing, hardened runtime, and timestamped signatures using [`ui/Packaging/Chronoframe.entitlements`](ui/Packaging/Chronoframe.entitlements).
 
 ## Installation
 
@@ -259,7 +261,7 @@ python3 chronoframe.py --source /Volumes/photo/Incoming --dest /Volumes/home/Org
 
 1. Go to the [Releases page](https://github.com/Nishith/NAS-Photo-Organizer/releases) and download `Chronoframe.vX.Y.Z.zip`.
 2. Unzip and drag **Chronoframe.app** to `/Applications`.
-3. **First launch only:** macOS Gatekeeper will block the app because it is not notarized. Right-click (or Control-click) the app, choose **Open**, then confirm in the dialog.
+3. If the release is signed but not yet notarized, macOS Gatekeeper may still block the first launch. Right-click (or Control-click) the app, choose **Open**, then confirm in the dialog.
 
 **Build from source:**
 
@@ -267,6 +269,19 @@ python3 chronoframe.py --source /Volumes/photo/Incoming --dest /Volumes/home/Org
 cd ui
 ./build.sh
 open "build/Chronoframe.app"
+```
+
+To produce a Release archive and zip from the Xcode project:
+
+```bash
+cd ui
+./archive.sh
+```
+
+To validate an existing bundle directly:
+
+```bash
+python3 ui/Packaging/validate_app_bundle.py ui/build/Chronoframe.app
 ```
 
 The app launches the Python backend using `python3 chronoframe.py --json --yes ...`.
@@ -347,7 +362,7 @@ Chronoframe/
 
 ## Testing
 
-The current repository test suite contains 209 unit and integration tests in [`test_chronoframe.py`](test_chronoframe.py).
+The current repository test suite contains Python backend tests in [`test_chronoframe.py`](test_chronoframe.py), macOS packaging smoke tests in [`test_ui_build.py`](test_ui_build.py), and packaging validator tests in [`test_ui_packaging.py`](test_ui_packaging.py).
 
 Run the suite with:
 

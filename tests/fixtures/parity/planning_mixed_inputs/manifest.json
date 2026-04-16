@@ -1,0 +1,36 @@
+{
+  "description": "Mixes already-in-destination files, internal source duplicates, and Unknown_Date routing in one dry-run plan.",
+  "files": [
+    {
+      "root": "source",
+      "path": "camera/IMG_20240102_101010.jpg",
+      "content_text": "alpha"
+    },
+    {
+      "root": "source",
+      "path": "camera/IMG_20240102_111111.jpg",
+      "content_text": "bravo"
+    },
+    {
+      "root": "source",
+      "path": "camera/IMG_20240103_010101.jpg",
+      "content_text": "already-there"
+    },
+    {
+      "root": "source",
+      "path": "camera/VID_20240102_121212.mov",
+      "content_text": "alpha"
+    },
+    {
+      "root": "source",
+      "path": "misc/orphan.mov",
+      "content_text": "unknown-dated",
+      "mtime_epoch": 0
+    },
+    {
+      "root": "dest",
+      "path": "2024/01/03/2024-01-03_001.jpg",
+      "content_text": "already-there"
+    }
+  ]
+}

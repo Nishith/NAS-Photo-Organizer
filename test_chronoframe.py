@@ -6,14 +6,18 @@ Run: python3 -m pytest test_chronoframe.py -v
 """
 
 import errno
+import importlib.util
 import unittest
 import tempfile
 import shutil
 import os
+import sys
 import json
 import csv
 import sqlite3
 import time
+import runpy
+import types
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 from collections import defaultdict
@@ -28,7 +32,7 @@ from chronoframe.io import (
     cleanup_tmp_files, check_disk_space, _is_retryable_error,
 )
 from chronoframe.metadata import (
-    get_file_date, get_date_from_filename, get_date_mdls,
+    get_file_date, get_date_from_filename, get_date_mdls, parse_mdls_creation_date,
     ALL_EXTS, PHOTO_EXTS, VIDEO_EXTS, SKIP_FILES, HAS_EXIFREAD,
 )
 from chronoframe.core import (
@@ -56,6 +60,14 @@ class TempDirMixin:
         with open(path, 'wb') as f:
             f.write(content)
         return path
+
+
+def load_wrapper_module():
+    wrapper_path = os.path.join(os.path.dirname(__file__), "chronoframe.py")
+    spec = importlib.util.spec_from_file_location("chronoframe_wrapper", wrapper_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -381,6 +393,41 @@ class TestCacheDB(TempDirMixin, unittest.TestCase):
         db = self._make_db()
         cur = db.conn.execute("PRAGMA journal_mode;")
         self.assertEqual(cur.fetchone()[0], "wal")
+        db.close()
+
+    def test_synchronous_mode_enabled(self):
+        db = self._make_db()
+        cur = db.conn.execute("PRAGMA synchronous;")
+        # SQLite may return the symbolic value as an integer for PRAGMA reads.
+        self.assertEqual(cur.fetchone()[0], 1)
+        db.close()
+
+    def test_database_schema_contract_remains_stable(self):
+        db = self._make_db()
+
+        file_cache_columns = db.conn.execute("PRAGMA table_info(FileCache);").fetchall()
+        copy_jobs_columns = db.conn.execute("PRAGMA table_info(CopyJobs);").fetchall()
+
+        self.assertEqual(
+            [(row[1], row[2], row[5]) for row in file_cache_columns],
+            [
+                ("id", "INTEGER", 1),
+                ("path", "TEXT", 2),
+                ("hash", "TEXT", 0),
+                ("size", "INTEGER", 0),
+                ("mtime", "REAL", 0),
+            ],
+        )
+        self.assertEqual(
+            [(row[1], row[2], row[5]) for row in copy_jobs_columns],
+            [
+                ("src_path", "TEXT", 1),
+                ("dst_path", "TEXT", 0),
+                ("hash", "TEXT", 0),
+                ("status", "TEXT", 0),
+            ],
+        )
+
         db.close()
 
 
@@ -858,12 +905,14 @@ class TestParseArgs(unittest.TestCase):
         self.assertFalse(args.rebuild_cache)
         self.assertFalse(args.verify)
         self.assertFalse(args.yes)
+        self.assertFalse(args.json)
+        self.assertFalse(args.fast_dest)
         self.assertEqual(args.workers, DEFAULT_WORKERS)
 
     def test_all_flags(self):
         with patch('sys.argv', ['prog', '--source', '/s', '--dest', '/d',
                                 '--profile', 'p', '--dry-run', '--rebuild-cache',
-                                '--verify', '-y', '--workers', '4']):
+                                '--verify', '-y', '--json', '--fast-dest', '--workers', '4']):
             args = parse_args()
         self.assertEqual(args.source, '/s')
         self.assertEqual(args.dest, '/d')
@@ -872,6 +921,8 @@ class TestParseArgs(unittest.TestCase):
         self.assertTrue(args.rebuild_cache)
         self.assertTrue(args.verify)
         self.assertTrue(args.yes)
+        self.assertTrue(args.json)
+        self.assertTrue(args.fast_dest)
         self.assertEqual(args.workers, 4)
 
     def test_workers_flag(self):
@@ -888,6 +939,9 @@ class TestConstants(unittest.TestCase):
 
     def test_max_consecutive_failures(self):
         self.assertEqual(MAX_CONSECUTIVE_FAILURES, 5)
+
+    def test_max_total_failures(self):
+        self.assertEqual(MAX_TOTAL_FAILURES, 20)
 
     def test_default_workers(self):
         self.assertGreater(DEFAULT_WORKERS, 0)
@@ -1494,6 +1548,27 @@ class TestMainResume(TempDirMixin, unittest.TestCase):
         self.assertTrue(os.path.exists(dst_path))
 
     @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
+    @patch('chronoframe.core.Confirm.ask', return_value=True)
+    def test_resume_prompt_accepts_pending_queue(self, _mock_confirm, _mock_yaml):
+        """Interactive resume should execute the existing queue and return."""
+        from chronoframe.core import main
+        src, dst = self._setup_src_dst()
+
+        src_file = os.path.join(src, "photo.jpg")
+        with open(src_file, 'wb') as f:
+            f.write(b"resume_prompt_data")
+
+        dst_path = os.path.join(dst, "2023", "06", "15", "2023-06-15_001.jpg")
+        db = CacheDB(os.path.join(dst, ".organize_cache.db"))
+        db.enqueue_jobs([(src_file, dst_path, "h1", "PENDING")])
+        db.close()
+
+        with patch('sys.argv', ['prog', '--source', src, '--dest', dst]):
+            main()
+
+        self.assertTrue(os.path.exists(dst_path))
+
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
     def test_resume_declined_then_flush(self, _mock_yaml):
         """User declines resume, then flushes queue. Should proceed to fresh scan."""
         from chronoframe.core import main
@@ -1517,6 +1592,31 @@ class TestMainResume(TempDirMixin, unittest.TestCase):
         if os.path.isdir(log_dir):
             reports = [f for f in os.listdir(log_dir) if f.startswith("dry_run_report_")]
             self.assertGreaterEqual(len(reports), 1)
+
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
+    @patch('chronoframe.core.Confirm.ask', side_effect=[False, True, True])
+    def test_resume_declined_then_flush_and_continue_copy(self, _mock_confirm, _mock_yaml):
+        """Declining resume and flushing should rescan, then continue with a new copy."""
+        from chronoframe.core import main
+        src, dst = self._setup_src_dst()
+
+        src_file = os.path.join(src, "IMG_20230101_120000.jpg")
+        with open(src_file, 'wb') as f:
+            f.write(b"fresh_scan_data")
+
+        db = CacheDB(os.path.join(dst, ".organize_cache.db"))
+        db.enqueue_jobs([("/old/stale.jpg", "/dst/stale.jpg", "old_hash", "PENDING")])
+        db.close()
+
+        with patch('sys.argv', ['prog', '--source', src, '--dest', dst]):
+            main()
+
+        copied = os.path.join(dst, "2023", "01", "01", "2023-01-01_001.jpg")
+        self.assertTrue(os.path.exists(copied))
+
+        db = CacheDB(os.path.join(dst, ".organize_cache.db"))
+        self.assertEqual(db.get_pending_jobs(), [])
+        db.close()
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1688,33 +1788,123 @@ class TestExifreadParsing(TempDirMixin, unittest.TestCase):
 
 class TestMdlsParsing(TempDirMixin, unittest.TestCase):
 
-    @patch('chronoframe.metadata.subprocess.run')
-    def test_mdls_valid_date(self, mock_run):
-        from chronoframe.metadata import get_date_mdls
-        mock_run.return_value = MagicMock(stdout="2023-06-15 10:30:00 +0000")
-        result = get_date_mdls("/any/path.jpg")
+    def test_mdls_valid_date(self):
+        result = parse_mdls_creation_date("2023-06-15 10:30:00 +0000")
         self.assertEqual(result, datetime(2023, 6, 15, 10, 30, 0))
 
-    @patch('chronoframe.metadata.subprocess.run')
-    def test_mdls_null_result(self, mock_run):
-        from chronoframe.metadata import get_date_mdls
-        mock_run.return_value = MagicMock(stdout="(null)")
-        result = get_date_mdls("/any/path.jpg")
+    def test_mdls_null_result(self):
+        result = parse_mdls_creation_date("(null)")
         self.assertIsNone(result)
 
     @patch('chronoframe.metadata.subprocess.run')
     def test_mdls_timeout(self, mock_run):
         from chronoframe.metadata import get_date_mdls
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="mdls", timeout=5)
-        result = get_date_mdls("/any/path.jpg")
+        with patch('chronoframe.metadata.os.path.isfile', return_value=True):
+            result = get_date_mdls("/any/path.jpg")
         self.assertIsNone(result)
 
-    @patch('chronoframe.metadata.subprocess.run')
-    def test_mdls_empty_output(self, mock_run):
-        from chronoframe.metadata import get_date_mdls
-        mock_run.return_value = MagicMock(stdout="")
-        result = get_date_mdls("/any/path.jpg")
+    def test_mdls_empty_output(self):
+        result = parse_mdls_creation_date("")
         self.assertIsNone(result)
+
+    def test_mdls_missing_file_returns_none(self):
+        self.assertIsNone(get_date_mdls("/any/missing/path.jpg"))
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Wrapper dependency preflight
+# ════════════════════════════════════════════════════════════════════════════
+
+class TestWrapperDependencyPreflight(unittest.TestCase):
+
+    def test_dependency_status_reports_missing_packages(self):
+        wrapper = load_wrapper_module()
+
+        def fake_find_spec(name):
+            return None if name in {"exifread", "yaml"} else object()
+
+        with patch('importlib.util.find_spec', side_effect=fake_find_spec):
+            status = wrapper.dependency_status()
+
+        self.assertFalse(status["ok"])
+        self.assertEqual(status["missing"], ["exifread", "pyyaml"])
+
+    @patch.dict(os.environ, {"CHRONOFRAME_NONINTERACTIVE": "1"}, clear=False)
+    @patch('subprocess.check_call')
+    def test_noninteractive_dependency_check_does_not_prompt_or_install(self, mock_check_call):
+        wrapper = load_wrapper_module()
+
+        def fake_find_spec(name):
+            return None if name == "rich" else object()
+
+        with patch('importlib.util.find_spec', side_effect=fake_find_spec):
+            with self.assertRaises(SystemExit) as exc:
+                wrapper.check_and_install_dependencies()
+
+        self.assertEqual(exc.exception.code, 1)
+        mock_check_call.assert_not_called()
+
+    @patch('builtins.input', return_value='n')
+    def test_interactive_dependency_check_exits_when_user_declines_install(self, _mock_input):
+        wrapper = load_wrapper_module()
+
+        def fake_find_spec(name):
+            return None if name == "rich" else object()
+
+        with patch('importlib.util.find_spec', side_effect=fake_find_spec):
+            with self.assertRaises(SystemExit) as exc:
+                wrapper.check_and_install_dependencies(noninteractive=False)
+
+        self.assertEqual(exc.exception.code, 1)
+
+    @patch('builtins.input', return_value='y')
+    @patch('subprocess.check_call')
+    def test_interactive_dependency_check_installs_when_user_accepts(self, mock_check_call, _mock_input):
+        wrapper = load_wrapper_module()
+
+        call_state = {"count": 0}
+
+        def fake_find_spec(name):
+            if name == "rich" and call_state["count"] == 0:
+                return None
+            return object()
+
+        def fake_check_call(_args):
+            call_state["count"] += 1
+
+        with patch('importlib.util.find_spec', side_effect=fake_find_spec):
+            with patch('os.path.exists', return_value=True):
+                mock_check_call.side_effect = fake_check_call
+                status = wrapper.check_and_install_dependencies(noninteractive=False)
+
+        self.assertTrue(status["ok"])
+        self.assertEqual(status["missing"], [])
+        mock_check_call.assert_called_once()
+
+    def test_main_guard_check_deps_json_outputs_status(self):
+        wrapper_path = os.path.join(os.path.dirname(__file__), "chronoframe.py")
+
+        with patch('sys.argv', [wrapper_path, '--check-deps-json']):
+            with patch('importlib.util.find_spec', return_value=object()):
+                with patch('builtins.print') as mock_print:
+                    with self.assertRaises(SystemExit) as exc:
+                        runpy.run_path(wrapper_path, run_name="__main__")
+
+        self.assertEqual(exc.exception.code, 0)
+        mock_print.assert_called_once()
+
+    def test_main_guard_imports_backend_entrypoint_after_dependency_check(self):
+        wrapper_path = os.path.join(os.path.dirname(__file__), "chronoframe.py")
+        fake_main = MagicMock()
+        fake_module = types.SimpleNamespace(main=fake_main)
+
+        with patch('sys.argv', [wrapper_path]):
+            with patch('importlib.util.find_spec', return_value=object()):
+                with patch.dict(sys.modules, {'chronoframe.__main__': fake_module}, clear=False):
+                    runpy.run_path(wrapper_path, run_name="__main__")
+
+        fake_main.assert_called_once_with()
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1766,6 +1956,11 @@ class TestFindProfilesYaml(unittest.TestCase):
         from chronoframe.core import _find_profiles_yaml, _PROJECT_DIR
         result = _find_profiles_yaml()
         self.assertEqual(result, os.path.join(_PROJECT_DIR, "profiles.yaml"))
+
+    @patch.dict(os.environ, {"CHRONOFRAME_PROFILES_PATH": "/tmp/chronoframe-tests/profiles.yaml"}, clear=False)
+    def test_prefers_environment_override(self):
+        from chronoframe.core import _find_profiles_yaml
+        self.assertEqual(_find_profiles_yaml(), "/tmp/chronoframe-tests/profiles.yaml")
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1893,6 +2088,14 @@ class TestIsRetryableError(unittest.TestCase):
 
     def test_enotdir_is_not_retryable(self):
         e = OSError(errno.ENOTDIR, "not a directory")
+        self.assertFalse(_is_retryable_error(e))
+
+    def test_eisdir_is_not_retryable(self):
+        e = OSError(errno.EISDIR, "is a directory")
+        self.assertFalse(_is_retryable_error(e))
+
+    def test_einval_is_not_retryable(self):
+        e = OSError(errno.EINVAL, "invalid argument")
         self.assertFalse(_is_retryable_error(e))
 
     def test_non_oserror_is_not_retryable(self):
@@ -2653,6 +2856,57 @@ class TestExecuteJobsWithRunLog(TempDirMixin, unittest.TestCase):
         self.assertIn("Aborting", content)
         db.close()
 
+    def test_run_log_warns_when_unverified_copy_cleanup_fails(self):
+        """Verification cleanup failures should be logged as warnings before the job is failed."""
+        from chronoframe.core import execute_jobs, RunLogger
+        src_dir, dst_dir, db = self._setup_env()
+
+        src = os.path.join(src_dir, "photo.jpg")
+        with open(src, 'wb') as f:
+            f.write(b"data")
+        dst_path = os.path.join(dst_dir, "photo.jpg")
+
+        log_path = os.path.join(dst_dir, "cleanup.log")
+        run_log = RunLogger(log_path)
+        run_log.open()
+
+        db.enqueue_jobs([(src, dst_path, "wrong_hash", "PENDING")])
+        with patch('chronoframe.core.os.remove', side_effect=OSError("cleanup failed")):
+            execute_jobs(db.get_pending_jobs(), db, dst_dir, run_log=run_log, verify=True)
+        run_log.close()
+
+        with open(log_path) as f:
+            content = f.read()
+        self.assertIn("Failed to remove unverified copy", content)
+        self.assertIn("Verification failed", content)
+        db.close()
+
+    def test_run_log_error_on_abort_after_verification_failures(self):
+        """Repeated verification failures should log the abort threshold message."""
+        from chronoframe.core import execute_jobs, RunLogger
+        src_dir, dst_dir, db = self._setup_env()
+
+        jobs = []
+        for index in range(MAX_CONSECUTIVE_FAILURES):
+            src = os.path.join(src_dir, f"photo_{index}.jpg")
+            with open(src, 'wb') as f:
+                f.write(f"payload-{index}".encode("utf-8"))
+            jobs.append((src, os.path.join(dst_dir, f"photo_{index}.jpg"), f"wrong_hash_{index}", "PENDING"))
+
+        log_path = os.path.join(dst_dir, "verify_abort.log")
+        run_log = RunLogger(log_path)
+        run_log.open()
+
+        db.enqueue_jobs(jobs)
+        execute_jobs(db.get_pending_jobs(), db, dst_dir, run_log=run_log, verify=True)
+        run_log.close()
+
+        with open(log_path) as f:
+            content = f.read()
+        self.assertIn("Aborting", content)
+        self.assertIn("Verification failed", content)
+        db.close()
+
 
 class TestExecuteJobsGetSizeOSError(TempDirMixin, unittest.TestCase):
     """Lines 601-602: fallback to st_size when getsize raises OSError after successful copy."""
@@ -2747,6 +3001,49 @@ class TestExifreadTagFound(unittest.TestCase):
                 os.unlink(tmp)
 
         self.assertIsNone(result)
+
+    def test_get_date_exifread_exception_returns_none(self):
+        """Unexpected EXIF parser failures should safely return None."""
+        from chronoframe.metadata import get_date_exifread
+
+        with patch('exifread.process_file', side_effect=RuntimeError("bad exif")):
+            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as f:
+                f.write(b"fake jpeg")
+                tmp = f.name
+            try:
+                result = get_date_exifread(tmp)
+            finally:
+                os.unlink(tmp)
+
+        self.assertIsNone(result)
+
+    def test_parse_mdls_creation_date_invalid_string_returns_none(self):
+        self.assertIsNone(parse_mdls_creation_date("not-a-date"))
+
+
+class TestMainCopyCancellation(TempDirMixin, unittest.TestCase):
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
+    @patch('chronoframe.core.Confirm.ask', return_value=False)
+    def test_copy_cancelled_by_confirmation_prompt(self, _mock_confirm, _mock_yaml):
+        from chronoframe.core import main
+
+        src = os.path.join(self.tmpdir, "source")
+        dst = os.path.join(self.tmpdir, "dest")
+        os.makedirs(src)
+        os.makedirs(dst)
+
+        with open(os.path.join(src, "IMG_20230101_120000.jpg"), 'wb') as f:
+            f.write(b"cancel-me")
+
+        with patch('sys.argv', ['prog', '--source', src, '--dest', dst]):
+            main()
+
+        expected_dst = os.path.join(dst, "2023", "01", "01", "2023-01-01_001.jpg")
+        self.assertFalse(os.path.exists(expected_dst))
+
+        db = CacheDB(os.path.join(dst, ".organize_cache.db"))
+        self.assertEqual(db.get_pending_jobs(), [])
+        db.close()
 
 
 if __name__ == '__main__':

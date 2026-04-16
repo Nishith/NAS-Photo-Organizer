@@ -33,16 +33,23 @@ def get_date_exifread(path):
         pass
     return None
 
+def parse_mdls_creation_date(raw_value):
+    val = (raw_value or "").strip()
+    if not val or val == '(null)':
+        return None
+
+    try:
+        return datetime.strptime(val[:19], '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        return None
+
 def get_date_mdls(path):
     try:
         if not os.path.isfile(path):
             return None
         result = subprocess.run(['mdls', '-name', 'kMDItemContentCreationDate', '-raw', path],
                                 capture_output=True, text=True, timeout=5)
-        val = result.stdout.strip()
-        if val and val != '(null)':
-            dt = datetime.strptime(val[:19], '%Y-%m-%d %H:%M:%S')
-            return dt
+        return parse_mdls_creation_date(result.stdout)
     except Exception:
         pass
     return None

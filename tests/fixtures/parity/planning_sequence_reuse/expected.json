@@ -1,0 +1,49 @@
+{
+  "scenario": "planning_sequence_reuse",
+  "description": "Reuses destination and duplicate sequence counters so new plans continue numbering from the existing library state.",
+  "phase_sequence": [
+    "startup",
+    "discovery:start",
+    "discovery:complete",
+    "dest_hash:start",
+    "dest_hash:complete",
+    "src_hash:start",
+    "src_hash:complete",
+    "classification:start",
+    "classification:complete",
+    "copy_plan_ready",
+    "complete"
+  ],
+  "counts": {
+    "discovery_found": 3,
+    "dest_hash_total": 3,
+    "src_hash_total": 3,
+    "classification_already_in_dst": 0,
+    "classification_new": 2,
+    "classification_dups": 1,
+    "classification_errors": 0,
+    "copy_plan_ready": 3,
+    "complete_status": "dry_run_finished"
+  },
+  "warning_messages": [],
+  "report_rows": [
+    {
+      "source": "source/batch/IMG_20240214_080000.jpg",
+      "destination": "dest/2024/02/14/2024-02-14_003.jpg",
+      "hash": "7_9214ad6c3632c66e7463291b2d9d33e5f6de837d0a819547b7e182ea5e6d4cde51489ab0478a32e78c92c4ce99ad723ac14cd0a524057beb12cec890e1006464",
+      "status": "PENDING"
+    },
+    {
+      "source": "source/batch/IMG_20240214_080100.jpg",
+      "destination": "dest/2024/02/14/2024-02-14_004.jpg",
+      "hash": "7_3b3401f420f2dc47c0792e0e4fafc0acfe038df4cc83e32e12837b3f85faec7a6d82e89bbcf2c1067328a38301f55bf817466d82c241a5f1eedaee74a30434ce",
+      "status": "PENDING"
+    },
+    {
+      "source": "source/batch/VID_20240214_080200.mov",
+      "destination": "dest/Duplicate/2024/02/14/2024-02-14_004.mov",
+      "hash": "7_9214ad6c3632c66e7463291b2d9d33e5f6de837d0a819547b7e182ea5e6d4cde51489ab0478a32e78c92c4ce99ad723ac14cd0a524057beb12cec890e1006464",
+      "status": "PENDING"
+    }
+  ]
+}
