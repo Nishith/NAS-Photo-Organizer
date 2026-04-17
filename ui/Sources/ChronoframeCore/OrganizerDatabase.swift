@@ -467,6 +467,19 @@ public final class OrganizerDatabase {
         try queuedJobCount(status: .pending)
     }
 
+    /// Deletes all rows from `CopyJobs` whose status is `.pending`.
+    public func clearPendingJobs() throws {
+        try execute("DELETE FROM CopyJobs WHERE status = 'pending'")
+    }
+
+    /// Truncates the entire `CopyJobs` table.
+    /// Call this before a "Start Fresh" transfer so that stale records left by
+    /// a previous run (including foreign entries from the Python backend) do not
+    /// block `enqueuePlannedTransfers`'s `INSERT OR IGNORE` logic.
+    public func clearAllJobs() throws {
+        try execute("DELETE FROM CopyJobs")
+    }
+
     public func updateJobStatus(sourcePath: String, status: CopyJobStatus) throws {
         let statement = try prepare("UPDATE CopyJobs SET status = ? WHERE src_path = ?")
         defer { sqlite3_finalize(statement) }

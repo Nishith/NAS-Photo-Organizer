@@ -119,6 +119,17 @@ public final class RunSessionStore: ObservableObject {
         }
     }
 
+    /// Discards the stale pending queue at the destination and starts a full
+    /// re-plan + transfer, identical to a first-time transfer run.
+    public func confirmPromptStartFresh() {
+        guard let prompt, let preflight = prompt.preflight else {
+            dismissPrompt()
+            return
+        }
+        clearAllJobs(at: preflight.resolvedDestinationPath)
+        beginStream(using: preflight, resumePendingJobs: false)
+    }
+
     public func dismissPrompt() {
         prompt = nil
         if status == .preflighting {
@@ -162,6 +173,21 @@ public final class RunSessionStore: ObservableObject {
         logStore.clear()
         copySpeedLastSampleDate = Date()
         copySpeedLastBytes = 0
+    }
+
+    private func clearAllJobs(at destinationPath: String) {
+        let dbURL = URL(fileURLWithPath: destinationPath)
+            .appendingPathComponent(".organize_cache.db")
+        guard FileManager.default.fileExists(atPath: dbURL.path) else { return }
+        do {
+            let database = try OrganizerDatabase(url: dbURL)
+            defer { database.close() }
+            try database.clearAllJobs()
+        } catch {
+            // Non-fatal: if we can't clear the old queue the fresh plan will
+            // still run; some jobs may be skipped by INSERT OR IGNORE but the
+            // transfer will proceed as best it can.
+        }
     }
 
     private func beginStream(using preflight: RunPreflight, resumePendingJobs: Bool) {
@@ -217,6 +243,12 @@ public final class RunSessionStore: ObservableObject {
                 // total == 0 means indeterminate (count is known, total is not).
                 // Show the running count in the title so the user sees forward progress.
                 currentTaskTitle = "\(phase.runningTitle) \(completed.formatted()) files…"
+            }
+
+            // Keep the Copied metric card updated live during the copy phase
+            // so the user sees forward progress rather than "0" the whole time.
+            if phase == .copy {
+                metrics.copiedCount = completed
             }
 
             guard phase == .copy, let bytesCopied, let bytesTotal, bytesTotal > 0 else { return }
@@ -285,6 +317,23 @@ public final class RunSessionStore: ObservableObject {
             metrics = summary.metrics
             artifacts = summary.artifacts
             self.summary = summary
+            // Record this source path in the per-destination "completed sources" log
+            // before refreshing, so the refresh re-reads the updated file.
+            if summary.status == .finished || summary.status == .nothingToCopy {
+                let sourcePath = lastPreflight?.resolvedSourcePath
+                    ?? lastPreflight?.configuration.sourcePath
+                    ?? ""
+                // Don't record drag-and-drop staging dirs: their paths are
+                // ephemeral (cleared on next launch) so "Use as source
+                // again" would be broken and the entry would look like gibberish.
+                if !DroppedItemStager.isStagingPath(sourcePath) {
+                    historyStore.recordSuccessfulTransfer(
+                        sourcePath: sourcePath,
+                        destinationRoot: summary.artifacts.destinationRoot,
+                        copiedCount: summary.metrics.copiedCount
+                    )
+                }
+            }
             historyStore.refresh(destinationRoot: summary.artifacts.destinationRoot)
             logStore.append("Finished: \(summary.title)")
             postRunCompletionNotification(summary: summary)

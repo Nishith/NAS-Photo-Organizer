@@ -63,9 +63,19 @@ struct RootSplitView: View {
             )
         ) {
             switch runSessionStore.prompt?.kind {
-            case .confirmTransfer, .resumePendingJobs:
+            case .confirmTransfer:
                 Button("Continue") {
-                    Task { await appState.confirmRunPrompt() }
+                    appState.confirmRunPrompt()
+                }
+                Button("Cancel", role: .cancel) {
+                    appState.dismissRunPrompt()
+                }
+            case .resumePendingJobs:
+                Button("Resume") {
+                    appState.confirmRunPrompt()
+                }
+                Button("Start Fresh") {
+                    appState.confirmRunPromptStartFresh()
                 }
                 Button("Cancel", role: .cancel) {
                     appState.dismissRunPrompt()

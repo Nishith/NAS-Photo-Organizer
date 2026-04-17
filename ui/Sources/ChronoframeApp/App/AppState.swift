@@ -19,6 +19,7 @@ final class AppState: ObservableObject {
     private let folderAccessService: any FolderAccessServicing
     private let finderService: any FinderServicing
     private let profilesRepository: any ProfilesRepositorying
+    private let droppedItemStager: DroppedItemStager
     private let showSettingsWindowAction: @MainActor () -> Void
 
     convenience init() {
@@ -64,6 +65,7 @@ final class AppState: ObservableObject {
         folderAccessService: any FolderAccessServicing,
         finderService: any FinderServicing,
         profilesRepository: any ProfilesRepositorying,
+        droppedItemStager: DroppedItemStager = DroppedItemStager(),
         showSettingsWindowAction: @escaping @MainActor () -> Void = {
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
         }
@@ -78,7 +80,12 @@ final class AppState: ObservableObject {
         self.folderAccessService = folderAccessService
         self.finderService = finderService
         self.profilesRepository = profilesRepository
+        self.droppedItemStager = droppedItemStager
         self.showSettingsWindowAction = showSettingsWindowAction
+
+        // Reclaim disk from staging dirs left over by previous sessions.
+        // These are just symlink trees, but they accumulate.
+        droppedItemStager.cleanupAllStagingDirectories()
 
         restoreManualPaths()
         refreshProfiles()
@@ -102,11 +109,38 @@ final class AppState: ObservableObject {
                 return
             }
             setupStore.sourcePath = url.path
+            setupStore.clearDroppedSource()
             preferencesStore.lastManualSourcePath = url.path
             persistBookmark(for: url, key: bookmarkKey(for: .source, profileName: nil))
             if !setupStore.usingProfile {
                 preferencesStore.lastSelectedProfileName = ""
             }
+        }
+    }
+
+    /// Handles files/folders dragged onto the app. Single-folder drops
+    /// are used directly; file drops and multi-item drops get staged into
+    /// a symlink directory so the existing pipeline can walk them. Falls
+    /// back to `transientErrorMessage` on failure.
+    func applyDrop(urls: [URL]) async {
+        guard !urls.isEmpty else { return }
+        do {
+            let staged = try droppedItemStager.stage(urls: urls)
+            if setupStore.usingProfile {
+                setupStore.clearProfileSelection()
+                preferencesStore.lastSelectedProfileName = ""
+            }
+            setupStore.sourcePath = staged.sourceDirectory.path
+            if staged.wasSingleFolder {
+                setupStore.clearDroppedSource()
+                preferencesStore.lastManualSourcePath = staged.sourceDirectory.path
+            } else {
+                setupStore.droppedSourceLabel = staged.displayLabel
+                setupStore.droppedSourceItemCount = staged.itemCount
+            }
+            selection = .setup
+        } catch {
+            transientErrorMessage = error.localizedDescription
         }
     }
 
@@ -219,8 +253,12 @@ final class AppState: ObservableObject {
         await runSessionStore.requestRun(mode: .transfer, configuration: setupStore.makeConfiguration(preferences: preferencesStore, mode: .transfer))
     }
 
-    func confirmRunPrompt() async {
+    func confirmRunPrompt() {
         runSessionStore.confirmPrompt()
+    }
+
+    func confirmRunPromptStartFresh() {
+        runSessionStore.confirmPromptStartFresh()
     }
 
     func dismissRunPrompt() {
@@ -257,6 +295,26 @@ final class AppState: ObservableObject {
 
     func openHistoryEntry(_ entry: RunHistoryEntry) {
         finderService.openPath(entry.path)
+    }
+
+    /// Repopulates the Setup view with a previously-used source path and switches to it.
+    /// Clears any active profile selection so the manual source path takes effect.
+    func useHistoricalSource(_ record: TransferredSourceRecord) {
+        if setupStore.usingProfile {
+            setupStore.clearProfileSelection()
+            preferencesStore.lastSelectedProfileName = ""
+        }
+        setupStore.sourcePath = record.sourcePath
+        preferencesStore.lastManualSourcePath = record.sourcePath
+        selection = .setup
+    }
+
+    func revealTransferredSource(_ record: TransferredSourceRecord) {
+        finderService.revealInFinder(record.sourcePath)
+    }
+
+    func forgetTransferredSource(_ record: TransferredSourceRecord) {
+        historyStore.removeTransferredSource(record)
     }
 
     private func bookmarkKey(for role: FolderRole, profileName: String?) -> String {

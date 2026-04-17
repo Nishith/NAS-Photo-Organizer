@@ -52,6 +52,8 @@
 		AA000000000000000000022B /* TransferExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000131 /* TransferExecutor.swift */; };
 		AA000000000000000000022C /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000132 /* DesignTokens.swift */; };
 		AA000000000000000000022D /* AccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000133 /* AccessibilityTests.swift */; };
+		AA000000000000000000022E /* TransferredSourcesLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000134 /* TransferredSourcesLog.swift */; };
+		AA000000000000000000022F /* DroppedItemStager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000135 /* DroppedItemStager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -117,6 +119,8 @@
 		AA0000000000000000000131 /* TransferExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferExecutor.swift; sourceTree = "<group>"; };
 		AA0000000000000000000132 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		AA0000000000000000000133 /* AccessibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000134 /* TransferredSourcesLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferredSourcesLog.swift; sourceTree = "<group>"; };
+		AA0000000000000000000135 /* DroppedItemStager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DroppedItemStager.swift; sourceTree = "<group>"; };
 		AA0000000000000000000181 /* Chronoframe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Chronoframe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000182 /* ChronoframeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000183 /* ChronoframeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -237,6 +241,8 @@
 				AA0000000000000000000111 /* PythonOrganizerEngine.swift */,
 				AA0000000000000000000127 /* SwiftOrganizerEngine.swift */,
 				AA0000000000000000000112 /* RunHistoryIndexer.swift */,
+				AA0000000000000000000134 /* TransferredSourcesLog.swift */,
+				AA0000000000000000000135 /* DroppedItemStager.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -485,6 +491,8 @@
 				AA0000000000000000000211 /* PythonOrganizerEngine.swift in Sources */,
 				AA0000000000000000000221 /* SwiftOrganizerEngine.swift in Sources */,
 				AA0000000000000000000212 /* RunHistoryIndexer.swift in Sources */,
+				AA000000000000000000022E /* TransferredSourcesLog.swift in Sources */,
+				AA000000000000000000022F /* DroppedItemStager.swift in Sources */,
 				AA0000000000000000000213 /* HistoryStore.swift in Sources */,
 				AA0000000000000000000214 /* PreferencesStore.swift in Sources */,
 				AA0000000000000000000215 /* RunLogStore.swift in Sources */,

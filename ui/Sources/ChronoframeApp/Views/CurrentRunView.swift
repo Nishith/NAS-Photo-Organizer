@@ -53,6 +53,10 @@ struct CurrentRunView: View {
                         }
 
                         phaseView
+
+                        if runSessionStore.status == .dryRunFinished {
+                            postPreviewActionBar
+                        }
                     }
                 }
 
@@ -184,6 +188,36 @@ struct CurrentRunView: View {
             .background(.thinMaterial, in: Capsule())
             .accessibilityLabel("Status: \(statusTitle)")
             .accessibilityIdentifier("statusBadge")
+    }
+
+    private var postPreviewActionBar: some View {
+        HStack(spacing: 12) {
+            let plannedCount = runSessionStore.metrics.plannedCount
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(plannedCount > 0
+                     ? "Ready to copy \(plannedCount.formatted()) files to your destination."
+                     : "Nothing new to copy — the destination already has everything.")
+                    .font(.subheadline)
+                Text("Review the plan below, then start the transfer when ready.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                Task { await appState.startTransfer() }
+            } label: {
+                Label("Start Transfer", systemImage: "arrow.right.circle.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(plannedCount == 0 || !appState.canStartRun)
+            .accessibilityLabel("Start transfer now")
+            .accessibilityIdentifier("startTransferFromPreviewButton")
+        }
+        .padding(.top, 4)
     }
 
     private var phaseView: some View {

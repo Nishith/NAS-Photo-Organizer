@@ -11,18 +11,40 @@ public final class SetupStore: ObservableObject {
     @Published public var newProfileName: String
     @Published public var profiles: [Profile]
 
+    /// Set when the user populated the source by dragging files/folders
+    /// instead of picking a directory. Used to show a friendly label in
+    /// the UI and to suppress the transferred-sources history record
+    /// (staging paths are ephemeral).
+    @Published public var droppedSourceLabel: String?
+    @Published public var droppedSourceItemCount: Int
+
     public init(
         sourcePath: String = "",
         destinationPath: String = "",
         selectedProfileName: String = "",
         newProfileName: String = "",
-        profiles: [Profile] = []
+        profiles: [Profile] = [],
+        droppedSourceLabel: String? = nil,
+        droppedSourceItemCount: Int = 0
     ) {
         self.sourcePath = sourcePath
         self.destinationPath = destinationPath
         self.selectedProfileName = selectedProfileName
         self.newProfileName = newProfileName
         self.profiles = profiles
+        self.droppedSourceLabel = droppedSourceLabel
+        self.droppedSourceItemCount = droppedSourceItemCount
+    }
+
+    public var usingDroppedSource: Bool {
+        droppedSourceLabel != nil
+    }
+
+    /// Clears the "source is from drag-and-drop" metadata. Call whenever
+    /// the source is replaced via a manual picker, profile, or reset.
+    public func clearDroppedSource() {
+        droppedSourceLabel = nil
+        droppedSourceItemCount = 0
     }
 
     public var usingProfile: Bool {
@@ -47,6 +69,7 @@ public final class SetupStore: ObservableObject {
         guard let profile = profiles.first(where: { $0.name == trimmed }) else { return }
         sourcePath = profile.sourcePath
         destinationPath = profile.destinationPath
+        clearDroppedSource()
     }
 
     public func clearProfileSelection() {
