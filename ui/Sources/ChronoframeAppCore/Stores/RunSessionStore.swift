@@ -317,6 +317,18 @@ public final class RunSessionStore: ObservableObject {
             metrics = summary.metrics
             artifacts = summary.artifacts
             self.summary = summary
+            // Record this source path in the per-destination "completed sources" log
+            // before refreshing, so the refresh re-reads the updated file.
+            if summary.status == .finished || summary.status == .nothingToCopy {
+                let sourcePath = lastPreflight?.resolvedSourcePath
+                    ?? lastPreflight?.configuration.sourcePath
+                    ?? ""
+                historyStore.recordSuccessfulTransfer(
+                    sourcePath: sourcePath,
+                    destinationRoot: summary.artifacts.destinationRoot,
+                    copiedCount: summary.metrics.copiedCount
+                )
+            }
             historyStore.refresh(destinationRoot: summary.artifacts.destinationRoot)
             logStore.append("Finished: \(summary.title)")
             postRunCompletionNotification(summary: summary)

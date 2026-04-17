@@ -263,6 +263,26 @@ final class AppState: ObservableObject {
         finderService.openPath(entry.path)
     }
 
+    /// Repopulates the Setup view with a previously-used source path and switches to it.
+    /// Clears any active profile selection so the manual source path takes effect.
+    func useHistoricalSource(_ record: TransferredSourceRecord) {
+        if setupStore.usingProfile {
+            setupStore.clearProfileSelection()
+            preferencesStore.lastSelectedProfileName = ""
+        }
+        setupStore.sourcePath = record.sourcePath
+        preferencesStore.lastManualSourcePath = record.sourcePath
+        selection = .setup
+    }
+
+    func revealTransferredSource(_ record: TransferredSourceRecord) {
+        finderService.revealInFinder(record.sourcePath)
+    }
+
+    func forgetTransferredSource(_ record: TransferredSourceRecord) {
+        historyStore.removeTransferredSource(record)
+    }
+
     private func bookmarkKey(for role: FolderRole, profileName: String?) -> String {
         if let profileName {
             return "profile.\(profileName).\(role.rawValue)"

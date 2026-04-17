@@ -31,6 +31,34 @@ struct RunHistoryView: View {
                 }
             }
 
+            Section("Completed Source Paths") {
+                if historyStore.transferredSources.isEmpty {
+                    EmptyStateView(
+                        title: "No Completed Sources Yet",
+                        message: "After you successfully transfer from a source folder, it will appear here so you can see what's already been copied into this destination.",
+                        systemImage: "folder.badge.questionmark"
+                    )
+                    .listRowInsets(EdgeInsets())
+                } else {
+                    ForEach(historyStore.transferredSources) { record in
+                        transferredSourceRow(for: record)
+                            .padding(.vertical, 4)
+                            .contextMenu {
+                                Button("Use as source again") {
+                                    appState.useHistoricalSource(record)
+                                }
+                                Button("Reveal in Finder") {
+                                    appState.revealTransferredSource(record)
+                                }
+                                Divider()
+                                Button("Forget this source", role: .destructive) {
+                                    appState.forgetTransferredSource(record)
+                                }
+                            }
+                    }
+                }
+            }
+
             Section("Artifacts") {
                 if historyStore.entries.isEmpty {
                     EmptyStateView(
@@ -70,6 +98,48 @@ struct RunHistoryView: View {
                 }
             }
         }
+    }
+
+    private func transferredSourceRow(for record: TransferredSourceRecord) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 12) {
+                Label {
+                    Text(record.sourcePath)
+                        .font(.body.monospaced())
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } icon: {
+                    Image(systemName: "folder.fill")
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 12)
+
+                Text(record.lastTransferredAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 10) {
+                Text("\(record.runCount) run\(record.runCount == 1 ? "" : "s")")
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.thinMaterial, in: Capsule())
+
+                Text("\(record.totalCopiedCount) file\(record.totalCopiedCount == 1 ? "" : "s") copied")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if record.lastCopiedCount != record.totalCopiedCount {
+                    Text("(\(record.lastCopiedCount) last run)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Source \(record.sourcePath), last transferred \(record.lastTransferredAt.formatted()), \(record.runCount) runs, \(record.totalCopiedCount) files copied")
     }
 
     private func historyRow(for entry: RunHistoryEntry) -> some View {
