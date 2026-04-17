@@ -494,29 +494,46 @@ struct ContentView: View {
     private var appIdentityCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
+                // Meridian icon mark — dark navy squircle with aperture + amber waypoint
                 ZStack {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [statusStyle.tint.opacity(0.24), Color.white.opacity(0.86)],
+                                colors: [
+                                    Color(red: 0.10, green: 0.08, blue: 0.20),
+                                    Color(red: 0.05, green: 0.05, blue: 0.10)
+                                ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                         .frame(width: 50, height: 50)
-                    Image(systemName: "photo.stack.fill")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(statusStyle.tint)
+
+                    // Aperture ring
+                    Image(systemName: "camera.aperture")
+                        .font(.system(size: 22, weight: .light))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.90), Color.white.opacity(0.55)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+
+                    // Amber meridian waypoint
+                    Circle()
+                        .fill(Color(red: 0.96, green: 0.62, blue: 0.04))
+                        .frame(width: 6, height: 6)
+                        .shadow(color: Color(red: 0.96, green: 0.62, blue: 0.04).opacity(0.8), radius: 4, x: 0, y: 0)
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Chronoframe")
                         .font(.system(size: 25, weight: .bold, design: .rounded))
                         .foregroundStyle(inkPrimary)
-                    Text("Preview and organize large photo libraries with calm, auditable control.")
+                    Text("Photo library organizer")
                         .font(.callout)
                         .foregroundStyle(inkSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
