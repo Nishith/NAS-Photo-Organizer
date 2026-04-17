@@ -323,11 +323,16 @@ public final class RunSessionStore: ObservableObject {
                 let sourcePath = lastPreflight?.resolvedSourcePath
                     ?? lastPreflight?.configuration.sourcePath
                     ?? ""
-                historyStore.recordSuccessfulTransfer(
-                    sourcePath: sourcePath,
-                    destinationRoot: summary.artifacts.destinationRoot,
-                    copiedCount: summary.metrics.copiedCount
-                )
+                // Don't record drag-and-drop staging dirs: their paths are
+                // ephemeral (cleared on next launch) so "Use as source
+                // again" would be broken and the entry would look like gibberish.
+                if !DroppedItemStager.isStagingPath(sourcePath) {
+                    historyStore.recordSuccessfulTransfer(
+                        sourcePath: sourcePath,
+                        destinationRoot: summary.artifacts.destinationRoot,
+                        copiedCount: summary.metrics.copiedCount
+                    )
+                }
             }
             historyStore.refresh(destinationRoot: summary.artifacts.destinationRoot)
             logStore.append("Finished: \(summary.title)")
