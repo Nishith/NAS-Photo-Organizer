@@ -4,6 +4,8 @@ import XCTest
 @testable import ChronoframeCore
 
 final class PythonOrganizerEngineIntegrationTests: XCTestCase {
+    private static let mediaFixtureName = "IMG_20240101_010101.png"
+
     private var tempRootURL: URL!
     private var profilesURL: URL!
     private var originalProfilesPath: String?
@@ -72,7 +74,7 @@ final class PythonOrganizerEngineIntegrationTests: XCTestCase {
         XCTAssertEqual(preflight.configuration.profileName, "travel")
         XCTAssertEqual(preflight.pendingJobCount, 3)
         XCTAssertEqual(preflight.profilesFilePath, profilesURL.path)
-        XCTAssertTrue(preflight.missingDependencies.isEmpty)
+        XCTAssertEqual(preflight.missingDependencies.sorted(), try dependencyProbe().missing.sorted())
     }
 
     @MainActor
@@ -104,8 +106,12 @@ final class PythonOrganizerEngineIntegrationTests: XCTestCase {
         try FileManager.default.createDirectory(at: sourceURL, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: destinationURL, withIntermediateDirectories: true)
 
-        let mediaURL = sourceURL.appendingPathComponent("VID_20240101_010101.mov")
-        try Data("chronoframe".utf8).write(to: mediaURL)
+        let dependencyStatus = try dependencyProbe()
+        if !dependencyStatus.missing.isEmpty {
+            throw XCTSkip("Skipping real backend preview assertions because the Python environment is missing: \(dependencyStatus.missing.joined(separator: ", ")).")
+        }
+
+        _ = try copyMediaFixture(into: sourceURL)
 
         let engine = PythonOrganizerEngine()
         let stream = try engine.start(
@@ -155,6 +161,13 @@ final class PythonOrganizerEngineIntegrationTests: XCTestCase {
             .deletingLastPathComponent()
     }
 
+    private static func mediaFixtureURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures", isDirectory: true)
+            .appendingPathComponent(mediaFixtureName)
+    }
+
     private func seedPendingJobsDatabase(at url: URL, count: Int) throws {
         let database = try OrganizerDatabase(url: url)
         defer { database.close() }
@@ -171,5 +184,42 @@ final class PythonOrganizerEngineIntegrationTests: XCTestCase {
             )
         }
         try database.enqueueJobs(jobs)
+    }
+
+    private func copyMediaFixture(into directory: URL) throws -> URL {
+        let destinationURL = directory.appendingPathComponent(Self.mediaFixtureName)
+        try FileManager.default.copyItem(at: Self.mediaFixtureURL(), to: destinationURL)
+        return destinationURL
+    }
+
+    private func dependencyProbe() throws -> DependencyStatus {
+        let process = Process()
+        let output = Pipe()
+        let backendScriptURL = Self.repositoryRootURL().appendingPathComponent("chronoframe.py")
+
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", backendScriptURL.path, "--check-deps-json"]
+        process.environment = backendEnvironment()
+        process.standardOutput = output
+        process.standardError = output
+
+        try process.run()
+        process.waitUntilExit()
+
+        let data = try output.fileHandleForReading.readToEnd() ?? Data()
+        return try JSONDecoder().decode(DependencyStatus.self, from: data)
+    }
+
+    private func backendEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        environment["CHRONOFRAME_NONINTERACTIVE"] = "1"
+        environment["CHRONOFRAME_PROFILES_PATH"] = profilesURL.path
+
+        let repositoryRoot = Self.repositoryRootURL()
+        environment["PYTHONPATH"] = [repositoryRoot.path, environment["PYTHONPATH"]]
+            .compactMap { $0 }
+            .joined(separator: ":")
+
+        return environment
     }
 }
