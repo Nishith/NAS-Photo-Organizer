@@ -10,7 +10,6 @@ struct RunHeroSection: View {
 
     var body: some View {
         DetailHeroCard(
-            eyebrow: "Run Workspace",
             title: model.heroState.title,
             message: model.heroState.message,
             badgeTitle: model.heroState.badgeTitle,
@@ -46,6 +45,7 @@ struct RunHeroSection: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .accessibilityHint("Opens the Setup workspace to adjust source, destination, or profile")
 
         case .preview:
             Button {
@@ -56,6 +56,7 @@ struct RunHeroSection: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(!appState.canStartRun)
+            .accessibilityHint(appState.canStartRun ? "Generates a copy plan without moving any files" : "Choose both folders or a saved profile in Setup first")
 
         case .transfer:
             Button {
@@ -66,6 +67,7 @@ struct RunHeroSection: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(!model.canStartTransferFromPreview)
+            .accessibilityHint(model.canStartTransferFromPreview ? "Copies files from the source to the destination" : "Run a preview first")
 
         case .cancel:
             Button(role: .destructive) {
@@ -75,6 +77,7 @@ struct RunHeroSection: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .accessibilityHint("Stops the current run. Already-copied files remain in place")
 
         case .openDestination:
             Button {
@@ -85,6 +88,7 @@ struct RunHeroSection: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(model.destinationRoot == nil)
+            .accessibilityHint("Reveals the destination folder in Finder")
 
         case .showIssues:
             Button {
@@ -94,6 +98,7 @@ struct RunHeroSection: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .accessibilityHint("Opens the issues tab below to review warnings and errors")
         }
     }
 }
@@ -108,7 +113,7 @@ struct RunProgressSurface: View {
                     .accessibilityLabel("Run progress")
                     .accessibilityValue(model.progressAccessibilityValue)
 
-                RunPhaseTimeline(model: model)
+                RunPhaseStrip(model: model)
             }
         }
     }
@@ -193,6 +198,56 @@ struct RunMetricsGridSection: View {
                 )
             }
         }
+    }
+}
+
+struct RunTickerSection: View {
+    let model: RunWorkspaceModel
+
+    var body: some View {
+        TickerRow(entries: entries)
+    }
+
+    private var entries: [TickerRow.Entry] {
+        let metrics = model.context.metrics
+        return [
+            TickerRow.Entry(
+                id: "discovered",
+                value: metrics.discoveredCount.formatted(),
+                label: "discovered",
+                tone: .neutral
+            ),
+            TickerRow.Entry(
+                id: "planned",
+                value: metrics.plannedCount.formatted(),
+                label: "planned",
+                tone: .neutral
+            ),
+            TickerRow.Entry(
+                id: "copied",
+                value: metrics.copiedCount.formatted(),
+                label: "copied",
+                tone: .success
+            ),
+            TickerRow.Entry(
+                id: "already",
+                value: metrics.alreadyInDestinationCount.formatted(),
+                label: "already there",
+                tone: .neutral
+            ),
+            TickerRow.Entry(
+                id: "duplicates",
+                value: metrics.duplicateCount.formatted(),
+                label: "duplicates",
+                tone: metrics.duplicateCount > 0 ? .warning : .neutral
+            ),
+            TickerRow.Entry(
+                id: "issues",
+                value: "\(model.context.issueCount)",
+                label: "issues",
+                tone: model.context.issueCount > 0 ? .danger : .neutral
+            ),
+        ]
     }
 }
 
@@ -288,11 +343,6 @@ struct RunArtifactsPanel: View {
                     .lineLimit(3)
                     .truncationMode(.middle)
 
-                Text("Open the destination, dry-run report, or logs to inspect what Chronoframe produced.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) {
                         artifactButtons
@@ -331,6 +381,17 @@ struct RunArtifactsPanel: View {
     }
 }
 
+private func accessibilityPrefix(for tone: RunWorkspaceTone) -> String {
+    switch tone {
+    case .danger:
+        return "Error"
+    case .warning:
+        return "Warning"
+    default:
+        return "Notice"
+    }
+}
+
 struct RunIssuesPanel: View {
     let model: RunWorkspaceModel
 
@@ -338,13 +399,8 @@ struct RunIssuesPanel: View {
         VStack(alignment: .leading, spacing: 16) {
             MeridianSurfaceCard(style: .inner, tint: model.issueTone.color) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Issue Review")
+                    Text("Issues")
                         .font(DesignTokens.Typography.cardTitle)
-
-                    Text(model.issueWorkspaceSummary)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
 
                     SummaryLine(title: "Warnings", value: "\(model.context.warningCount)", valueColor: model.warningTone.color)
                     SummaryLine(title: "Errors", value: "\(model.context.errorCount)", valueColor: model.errorTone.color)
@@ -355,7 +411,7 @@ struct RunIssuesPanel: View {
             if model.issueEntries.isEmpty {
                 EmptyStateView(
                     title: "No Issues Reported",
-                    message: "Warnings and errors will be collected here so you can review them without scanning the full console.",
+                    message: "Warnings and errors will be collected here.",
                     systemImage: "checkmark.shield"
                 )
             } else {
@@ -368,6 +424,13 @@ struct RunIssuesPanel: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .textSelection(.enabled)
                         }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(accessibilityPrefix(for: entry.tone)): \(entry.text)")
+                    }
+                }
+                .accessibilityRotor("Issues") {
+                    ForEach(model.issueEntries) { entry in
+                        AccessibilityRotorEntry(entry.text, id: entry.id)
                     }
                 }
             }
@@ -387,7 +450,7 @@ struct RunConsolePanel: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
                         if model.consoleEntries.isEmpty {
-                            Text("The full backend console will appear here once the organizer starts emitting activity.")
+                            Text("No activity yet.")
                                 .foregroundStyle(.secondary)
                         } else {
                             ForEach(model.consoleEntries, id: \.id) { entry in
@@ -408,58 +471,3 @@ struct RunConsolePanel: View {
     }
 }
 
-struct RunPhaseTimeline: View {
-    let model: RunWorkspaceModel
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            phaseRow(showLabels: true)
-            phaseRow(showLabels: false)
-        }
-    }
-
-    private func phaseRow(showLabels: Bool) -> some View {
-        HStack(spacing: 10) {
-            ForEach(model.phaseEntries) { entry in
-                VStack(spacing: 8) {
-                    Circle()
-                        .fill(fill(for: entry.state))
-                        .frame(width: DesignTokens.Layout.phaseIndicatorSize, height: DesignTokens.Layout.phaseIndicatorSize)
-                        .accessibilityLabel(model.phaseAccessibilityLabel(for: entry.phase))
-
-                    if showLabels {
-                        Text(entry.phase.title)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                if entry.phase != RunPhase.allCases.last {
-                    Capsule()
-                        .fill(connectorFill(after: entry.phase))
-                        .frame(height: DesignTokens.Layout.phaseConnectorHeight)
-                        .accessibilityHidden(true)
-                }
-            }
-        }
-    }
-
-    private func fill(for state: RunPhaseTimelineEntry.State) -> SwiftUI.Color {
-        switch state {
-        case .complete:
-            return DesignTokens.Color.success
-        case .current:
-            return model.heroState.tone.color
-        case .pending:
-            return DesignTokens.Color.inkMuted.opacity(0.25)
-        }
-    }
-
-    private func connectorFill(after phase: RunPhase) -> SwiftUI.Color {
-        guard let phaseIndex = RunPhase.allCases.firstIndex(of: phase) else {
-            return DesignTokens.Color.inkMuted.opacity(0.15)
-        }
-        let currentIndex = RunPhase.allCases.firstIndex(of: model.context.currentPhase ?? phase) ?? 0
-        return phaseIndex < currentIndex ? DesignTokens.Color.success : DesignTokens.Color.inkMuted.opacity(0.15)
-    }
-}

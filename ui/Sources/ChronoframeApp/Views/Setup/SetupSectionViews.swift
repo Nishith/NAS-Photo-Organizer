@@ -10,9 +10,8 @@ struct SetupHeroSection: View {
 
     var body: some View {
         DetailHeroCard(
-            eyebrow: "Meridian Workflow",
-            title: "Set Up Your Library",
-            message: "Choose where files come from, where organized copies should go, and preview before anything is transferred.",
+            title: "Setup",
+            message: "",
             badgeTitle: model.heroBadgeTitle,
             badgeSystemImage: model.heroBadgeSymbol,
             tint: model.heroTone.color,
@@ -33,6 +32,27 @@ struct SetupHeroSection: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .disabled(model.primaryActionDisabled)
+            .accessibilityLabel(model.primaryAction.title)
+            .accessibilityHint(model.primaryActionDisabled ? "Choose both folders to continue" : "Continues to the next setup step")
+        }
+    }
+}
+
+struct SetupContactSheetSection: View {
+    let sourcePath: String
+
+    var body: some View {
+        MeridianSurfaceCard {
+            VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
+                SectionHeading(
+                    title: "Preview",
+                    message: sourcePath.isEmpty
+                        ? "A contact sheet of the first frames will appear here once you choose a source."
+                        : "The first twelve frames discovered in your source, in Finder order."
+                )
+
+                ContactSheetView(sourcePath: sourcePath)
+            }
         }
     }
 }
@@ -85,10 +105,6 @@ struct SetupSavedSetupSection: View {
                             SummaryLine(title: "Destination", value: profile.destinationPath)
                         }
                     }
-                } else {
-                    Text("Manual paths stay available below, then you can save them as a profile once the setup feels right.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -150,8 +166,8 @@ struct SetupSourceStepSection: View {
 
     var body: some View {
         setupStepCard(
-            stepTitle: "1. Choose Your Source",
-            message: "Point Chronoframe at the library you want to organize. Dragging files or folders in is treated as a first-class source path.",
+            stepTitle: "1. Source",
+            message: "The library Chronoframe should organize.",
             stepState: model.sourceStepState
         ) {
             VStack(alignment: .leading, spacing: 12) {
@@ -169,6 +185,7 @@ struct SetupSourceStepSection: View {
                             Spacer(minLength: 12)
 
                             Button("Choose Source…", action: chooseSource)
+                                .accessibilityHint("Opens a folder picker to choose the source library")
                         }
 
                         VStack(alignment: .leading, spacing: 12) {
@@ -179,6 +196,7 @@ struct SetupSourceStepSection: View {
                             )
 
                             Button("Choose Source…", action: chooseSource)
+                                .accessibilityHint("Opens a folder picker to choose the source library")
                         }
                     }
                 }
@@ -215,8 +233,8 @@ struct SetupDestinationStepSection: View {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
                 HStack(alignment: .top, spacing: 12) {
                     SectionHeading(
-                        title: "2. Choose Your Destination",
-                        message: "This is where organized copies, receipts, reports, and queue state will be written. The destination becomes the audit trail for each run."
+                        title: "2. Destination",
+                        message: "Where organized copies and receipts are written."
                     )
                     Spacer(minLength: 12)
                     MeridianStatusBadge(title: model.destinationStepState.title, tint: model.destinationStepState.tone.color)
@@ -234,6 +252,7 @@ struct SetupDestinationStepSection: View {
                             Spacer(minLength: 12)
 
                             Button("Choose Destination…", action: chooseDestination)
+                                .accessibilityHint("Opens a folder picker to choose where organized copies will be written")
                         }
 
                         VStack(alignment: .leading, spacing: 12) {
@@ -244,6 +263,7 @@ struct SetupDestinationStepSection: View {
                             )
 
                             Button("Choose Destination…", action: chooseDestination)
+                                .accessibilityHint("Opens a folder picker to choose where organized copies will be written")
                         }
                     }
                 }
@@ -264,9 +284,8 @@ struct SetupReadinessSection: View {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
                 HStack(alignment: .top, spacing: 12) {
                     SectionHeading(
-                        eyebrow: "Run Readiness",
-                        title: "Preview First, Transfer When Confident",
-                        message: "The preview is the trust-building step. Review what Chronoframe plans to copy before starting the transfer."
+                        title: "Run",
+                        message: "Preview to inspect the plan. Transfer when ready."
                     )
 
                     Spacer(minLength: 12)
@@ -352,20 +371,10 @@ struct SetupDropZone: View {
                         .foregroundStyle(DesignTokens.Color.inkPrimary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-
-                    Text("Chronoframe will organize the staged items as the source while keeping the originals untouched.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
                 } else {
-                    Text(isTargeted ? "Release to use these items as the source" : "Drag photos, videos, or folders here")
+                    Text(isTargeted ? "Release to use as source" : "Drop a folder to begin")
                         .font(.headline)
                         .foregroundStyle(isTargeted ? DesignTokens.Color.sky : DesignTokens.Color.inkPrimary)
-
-                    Text("This is the fastest way to start a one-off import. You can still choose a normal folder source below.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
                 }
             }
             .frame(maxWidth: .infinity)

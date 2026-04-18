@@ -65,6 +65,13 @@
 		AA0000000000000000000238 /* RunWorkspaceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000013E /* RunWorkspaceModel.swift */; };
 		AA0000000000000000000239 /* SetupSectionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000013F /* SetupSectionViews.swift */; };
 		AA000000000000000000023A /* SetupScreenModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000140 /* SetupScreenModel.swift */; };
+		AA000000000000000000023B /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000141 /* Motion.swift */; };
+		AA000000000000000000023C /* PathControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000142 /* PathControl.swift */; };
+		AA000000000000000000023D /* ContactSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000143 /* ContactSheetView.swift */; };
+		AA000000000000000000023E /* TickerRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000144 /* TickerRow.swift */; };
+		AA000000000000000000023F /* RunTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000145 /* RunTimelineView.swift */; };
+		AA0000000000000000000240 /* NowCopyingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000146 /* NowCopyingCard.swift */; };
+		AA0000000000000000000247 /* OnboardingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000147 /* OnboardingCard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -143,6 +150,13 @@
 		AA000000000000000000013E /* RunWorkspaceModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunWorkspaceModel.swift; sourceTree = "<group>"; };
 		AA000000000000000000013F /* SetupSectionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupSectionViews.swift; sourceTree = "<group>"; };
 		AA0000000000000000000140 /* SetupScreenModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupScreenModel.swift; sourceTree = "<group>"; };
+		AA0000000000000000000141 /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
+		AA0000000000000000000142 /* PathControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathControl.swift; sourceTree = "<group>"; };
+		AA0000000000000000000143 /* ContactSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactSheetView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000144 /* TickerRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TickerRow.swift; sourceTree = "<group>"; };
+		AA0000000000000000000145 /* RunTimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunTimelineView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000146 /* NowCopyingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowCopyingCard.swift; sourceTree = "<group>"; };
+		AA0000000000000000000147 /* OnboardingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingCard.swift; sourceTree = "<group>"; };
 		AA0000000000000000000181 /* Chronoframe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Chronoframe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000182 /* ChronoframeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000183 /* ChronoframeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -223,6 +237,7 @@
 				AA0000000000000000000102 /* AppState.swift */,
 				AA0000000000000000000103 /* ChronoframeApp.swift */,
 				AA0000000000000000000132 /* DesignTokens.swift */,
+				AA0000000000000000000141 /* Motion.swift */,
 				AA000000000000000000001F /* Coordinators */,
 				AA0000000000000000000020 /* UITesting */,
 			);
@@ -238,10 +253,22 @@
 				AA0000000000000000000108 /* SettingsView.swift */,
 				AA000000000000000000010A /* SharedViews.swift */,
 				AA000000000000000000010B /* SidebarView.swift */,
+				AA0000000000000000000023 /* Components */,
 				AA0000000000000000000022 /* Setup */,
 				AA0000000000000000000021 /* Run */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000023 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000142 /* PathControl.swift */,
+				AA0000000000000000000143 /* ContactSheetView.swift */,
+				AA0000000000000000000144 /* TickerRow.swift */,
+				AA0000000000000000000147 /* OnboardingCard.swift */,
+			);
+			path = Components;
 			sourceTree = "<group>";
 		};
 		AA000000000000000000001F /* Coordinators */ = {
@@ -271,6 +298,8 @@
 				AA0000000000000000000104 /* CurrentRunView.swift */,
 				AA000000000000000000013D /* RunSectionViews.swift */,
 				AA000000000000000000013E /* RunWorkspaceModel.swift */,
+				AA0000000000000000000145 /* RunTimelineView.swift */,
+				AA0000000000000000000146 /* NowCopyingCard.swift */,
 			);
 			path = Run;
 			sourceTree = "<group>";
@@ -588,6 +617,13 @@
 				AA000000000000000000021A /* RunModels.swift in Sources */,
 				AA000000000000000000022B /* TransferExecutor.swift in Sources */,
 				AA000000000000000000022C /* DesignTokens.swift in Sources */,
+				AA000000000000000000023B /* Motion.swift in Sources */,
+				AA000000000000000000023C /* PathControl.swift in Sources */,
+				AA000000000000000000023D /* ContactSheetView.swift in Sources */,
+				AA000000000000000000023E /* TickerRow.swift in Sources */,
+				AA000000000000000000023F /* RunTimelineView.swift in Sources */,
+				AA0000000000000000000240 /* NowCopyingCard.swift in Sources */,
+				AA0000000000000000000247 /* OnboardingCard.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -10,6 +10,7 @@ struct SetupView: View {
     @ObservedObject private var preferencesStore: PreferencesStore
     @ObservedObject private var runSessionStore: RunSessionStore
     @State private var isDropTargeted = false
+    @AppStorage("didOnboard") private var didOnboard = false
 
     init(appState: AppState) {
         self.appState = appState
@@ -30,6 +31,12 @@ struct SetupView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.sectionSpacing) {
                 SetupHeroSection(model: screenModel, primaryAction: performHeroPrimaryAction)
+
+                if !didOnboard && setupStore.sourcePath.isEmpty {
+                    OnboardingCard(onDismiss: { didOnboard = true })
+                }
+
+                SetupContactSheetSection(sourcePath: setupStore.sourcePath)
 
                 SetupSavedSetupSection(
                     model: screenModel,
@@ -63,7 +70,27 @@ struct SetupView: View {
             .frame(maxWidth: DesignTokens.Layout.setupMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .darkroom()
         .navigationTitle("Setup")
+        .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
+            didOnboard = true
+            return handleDrop(providers: providers)
+        }
+        .overlay {
+            if isDropTargeted {
+                Rectangle()
+                    .fill(DesignTokens.ColorSystem.accentWaypoint.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(DesignTokens.ColorSystem.accentWaypoint.opacity(0.55), lineWidth: 2)
+                            .padding(8)
+                    )
+                    .allowsHitTesting(false)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+            }
+        }
+        .motion(.easeInOut(duration: Motion.Duration.fast), value: isDropTargeted)
     }
 
     private var dropZone: SetupDropZone {

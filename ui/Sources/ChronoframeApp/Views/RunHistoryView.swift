@@ -83,72 +83,100 @@ struct RunHistoryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.sectionSpacing) {
-                heroCard
+                headerStrip
 
                 if let error = historyStore.lastRefreshError, !error.isEmpty {
-                    MeridianSurfaceCard(tint: DesignTokens.Color.warning) {
-                        Text(error)
-                            .foregroundStyle(DesignTokens.Color.warning)
-                    }
+                    refreshErrorStrip(error)
                 }
 
-                reusableSourcesCard
-                archiveCard
+                reusableSourcesSection
+                archiveSection
             }
             .padding(DesignTokens.Layout.contentPadding)
             .frame(maxWidth: DesignTokens.Layout.archiveMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .darkroom()
         .navigationTitle("Run History")
         .searchable(text: $searchText, prompt: "Search artifacts")
     }
 
-    private var heroCard: some View {
-        DetailHeroCard(
-            eyebrow: "Archive",
-            title: "Inspect Reports, Receipts, and Logs",
-            message: "Every preview and transfer leaves behind artifacts that make the run auditable and easy to revisit later.",
-            badgeTitle: historyStore.entries.isEmpty ? "Waiting for First Artifact" : "Archive Active",
-            badgeSystemImage: historyStore.entries.isEmpty ? "clock" : "archivebox.fill",
-            tint: historyStore.entries.isEmpty ? DesignTokens.Color.inkMuted : DesignTokens.Color.aqua,
-            systemImage: "archivebox"
-        ) {
-            VStack(alignment: .leading, spacing: 12) {
-                SummaryLine(title: "Destination", value: historyStore.destinationRoot.isEmpty ? "Choose a destination in Setup to build an archive" : historyStore.destinationRoot)
-                SummaryLine(title: "Artifacts", value: "\(historyStore.entries.count)")
-                SummaryLine(title: "Reusable Sources", value: "\(historyStore.transferredSources.count)")
-                SummaryLine(title: "Focus", value: historyStore.entries.isEmpty ? "Run a preview to create the first report" : "Search, filter, or reopen prior run outputs")
+    // MARK: - Header strip
+
+    private var headerStrip: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Archive")
+                    .font(DesignTokens.Typography.title)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+
+                Text(headerMessage)
+                    .font(DesignTokens.Typography.subtitle)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+                    .lineLimit(2)
             }
-        } actions: {
+
+            Spacer(minLength: DesignTokens.Spacing.md)
+
             Button {
                 appState.openDestination()
             } label: {
                 Label("Open Destination", systemImage: "folder")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .disabled(historyStore.destinationRoot.isEmpty)
         }
     }
 
-    private var reusableSourcesCard: some View {
-        MeridianSurfaceCard {
-            VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
-                SectionHeading(
-                    eyebrow: "Reusable Sources",
-                    title: "Start Again from a Trusted Source",
-                    message: "Completed source paths are saved here so you can quickly reuse a library that already transferred into this destination."
-                )
+    private var headerMessage: String {
+        if historyStore.entries.isEmpty {
+            return historyStore.destinationRoot.isEmpty
+                ? "Choose a destination in Setup, then a preview will create the first report here."
+                : "Run a preview or transfer to build the first entries in this archive."
+        }
+        return "\(historyStore.entries.count) artifacts · \(historyStore.transferredSources.count) reusable sources."
+    }
 
-                if historyStore.transferredSources.isEmpty {
-                    EmptyStateView(
-                        title: "No Reusable Sources Yet",
-                        message: "After a completed transfer, the source folder will appear here so you can use it again without re-entering the path.",
-                        systemImage: "folder.badge.questionmark"
-                    )
-                } else {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(historyStore.transferredSources) { record in
+    private func refreshErrorStrip(_ message: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.sm) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(DesignTokens.ColorSystem.statusWarning)
+            Text(message)
+                .font(DesignTokens.Typography.body)
+                .foregroundStyle(DesignTokens.ColorSystem.statusWarning)
+        }
+        .padding(DesignTokens.Layout.compactPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.Corner.innerCard, style: .continuous)
+                .fill(DesignTokens.ColorSystem.statusWarning.opacity(0.08))
+        )
+    }
+
+    // MARK: - Reusable sources
+
+    private var reusableSourcesSection: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+            SectionHeading(
+                title: "Reusable Sources",
+                message: "Paths from completed transfers into this destination."
+            )
+
+            if historyStore.transferredSources.isEmpty {
+                EmptyStateView(
+                    title: "No Reusable Sources Yet",
+                    message: "After a completed transfer, the source folder will appear here so you can use it again without re-entering the path.",
+                    systemImage: "folder.badge.questionmark"
+                )
+            } else {
+                DarkroomPanel(variant: .panel) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(historyStore.transferredSources.enumerated()), id: \.element.id) { index, record in
+                            if index != 0 {
+                                Rectangle()
+                                    .fill(DesignTokens.ColorSystem.hairline)
+                                    .frame(height: 0.5)
+                            }
                             transferredSourceRow(for: record)
                         }
                     }
@@ -158,119 +186,112 @@ struct RunHistoryView: View {
     }
 
     private func transferredSourceRow(for record: TransferredSourceRecord) -> some View {
-        MeridianSurfaceCard(style: .inner, tint: DesignTokens.Color.amber) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(record.sourcePath)
-                            .font(.body.monospaced())
-                            .foregroundStyle(DesignTokens.Color.inkPrimary)
-                            .lineLimit(2)
-                            .truncationMode(.middle)
+        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.md) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(record.sourcePath)
+                    .font(DesignTokens.Typography.mono)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
 
-                        Text("Last used \(record.lastTransferredAt.formatted(date: .abbreviated, time: .shortened))")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer(minLength: 12)
-
-                    MeridianStatusBadge(
-                        title: "\(record.runCount) run\(record.runCount == 1 ? "" : "s")",
-                        systemImage: "clock.arrow.circlepath",
-                        tint: DesignTokens.Color.amberWaypoint
-                    )
+                HStack(spacing: DesignTokens.Spacing.sm) {
+                    Text("Last used \(record.lastTransferredAt.formatted(date: .abbreviated, time: .shortened))")
+                    Text("·")
+                        .foregroundStyle(DesignTokens.ColorSystem.inkMuted.opacity(0.5))
+                    Text("\(record.runCount) run\(record.runCount == 1 ? "" : "s")")
+                    Text("·")
+                        .foregroundStyle(DesignTokens.ColorSystem.inkMuted.opacity(0.5))
+                    Text("\(record.totalCopiedCount) copied")
                 }
-
-                SummaryLine(title: "Total Copied", value: "\(record.totalCopiedCount) file\(record.totalCopiedCount == 1 ? "" : "s")")
-                SummaryLine(title: "Last Run", value: "\(record.lastCopiedCount) file\(record.lastCopiedCount == 1 ? "" : "s") copied")
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        Button("Use Again") {
-                            appState.useHistoricalSource(record)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("useHistoricalSourceButton")
-
-                        Button("Reveal") {
-                            appState.revealTransferredSource(record)
-                        }
-                        .accessibilityIdentifier("revealHistoricalSourceButton")
-
-                        Menu("More") {
-                            Button("Forget This Source", role: .destructive) {
-                                appState.forgetTransferredSource(record)
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Button("Use Again") {
-                            appState.useHistoricalSource(record)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("useHistoricalSourceButton")
-
-                        HStack(spacing: 8) {
-                            Button("Reveal") {
-                                appState.revealTransferredSource(record)
-                            }
-                            .accessibilityIdentifier("revealHistoricalSourceButton")
-
-                            Menu("More") {
-                                Button("Forget This Source", role: .destructive) {
-                                    appState.forgetTransferredSource(record)
-                                }
-                            }
-                        }
-                    }
-                }
+                .font(DesignTokens.Typography.label)
+                .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
             }
+
+            Spacer(minLength: DesignTokens.Spacing.md)
+
+            Button("Use Again") {
+                appState.useHistoricalSource(record)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityIdentifier("useHistoricalSourceButton")
+
+            Menu {
+                Button("Reveal in Finder") {
+                    appState.revealTransferredSource(record)
+                }
+                .accessibilityIdentifier("revealHistoricalSourceButton")
+                Divider()
+                Button("Forget This Source", role: .destructive) {
+                    appState.forgetTransferredSource(record)
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+                    .frame(width: 22, height: 22)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel("More actions for source")
         }
+        .padding(.horizontal, 2)
+        .padding(.vertical, DesignTokens.Spacing.sm)
         .accessibilityElement(children: .contain)
     }
 
-    private var archiveCard: some View {
-        MeridianSurfaceCard {
-            VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
-                HStack(alignment: .top, spacing: 12) {
-                    SectionHeading(
-                        eyebrow: "Artifacts",
-                        title: "Browse the Archive",
-                        message: "Filter by artifact type and search by name or path to find the exact output you need."
-                    )
+    // MARK: - Archive (artifact list)
 
-                    Spacer(minLength: 12)
+    private var archiveSection: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+            HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.md) {
+                SectionHeading(
+                    title: "Artifacts",
+                    message: "Reports, receipts, and logs from every preview and transfer."
+                )
 
-                    Picker("Filter", selection: $historyFilter) {
-                        ForEach(HistoryFilter.allCases) { filter in
-                            Text(filter.title).tag(filter)
-                        }
+                Spacer(minLength: DesignTokens.Spacing.md)
+
+                Picker("Filter", selection: $historyFilter) {
+                    ForEach(HistoryFilter.allCases) { filter in
+                        Text(filter.title).tag(filter)
                     }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 360)
-                    .accessibilityIdentifier("historyFilterControl")
                 }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 320)
+                .accessibilityIdentifier("historyFilterControl")
+            }
 
-                if filteredEntries.isEmpty {
-                    EmptyStateView(
-                        title: historyStore.entries.isEmpty ? "No Artifacts Yet" : "No Matching Artifacts",
-                        message: historyStore.entries.isEmpty
-                            ? "Run a preview or transfer, then return here to inspect reports, receipts, and logs."
-                            : "Try a different filter or search term to surface another part of the archive.",
-                        systemImage: "doc.text.magnifyingglass"
-                    )
-                } else {
-                    LazyVStack(alignment: .leading, spacing: 18) {
-                        ForEach(groupedEntries) { section in
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text(section.date.formatted(date: .abbreviated, time: .omitted))
-                                    .font(DesignTokens.Typography.cardTitle)
-                                    .foregroundStyle(DesignTokens.Color.inkPrimary)
+            if filteredEntries.isEmpty {
+                EmptyStateView(
+                    title: historyStore.entries.isEmpty ? "No Artifacts Yet" : "No Matching Artifacts",
+                    message: historyStore.entries.isEmpty
+                        ? "Run a preview or transfer, then return here to inspect reports, receipts, and logs."
+                        : "Try a different filter or search term.",
+                    systemImage: "doc.text.magnifyingglass"
+                )
+            } else {
+                DarkroomPanel(variant: .panel) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(groupedEntries.enumerated()), id: \.element.id) { sectionIndex, section in
+                            if sectionIndex != 0 {
+                                Rectangle()
+                                    .fill(DesignTokens.ColorSystem.hairline)
+                                    .frame(height: 0.5)
+                                    .padding(.vertical, DesignTokens.Spacing.sm)
+                            }
 
-                                ForEach(section.entries) { entry in
-                                    historyRow(for: entry)
+                            VStack(alignment: .leading, spacing: 0) {
+                                sectionHeader(for: section.date)
+
+                                ForEach(Array(section.entries.enumerated()), id: \.element.id) { entryIndex, entry in
+                                    if entryIndex != 0 {
+                                        Rectangle()
+                                            .fill(DesignTokens.ColorSystem.hairline.opacity(0.5))
+                                            .frame(height: 0.5)
+                                    }
+                                    artifactRow(for: entry)
                                 }
                             }
                         }
@@ -280,83 +301,84 @@ struct RunHistoryView: View {
         }
     }
 
-    private func historyRow(for entry: RunHistoryEntry) -> some View {
-        MeridianSurfaceCard(style: .inner, tint: tint(for: entry.kind)) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label {
-                            Text(entry.title)
-                                .font(.headline)
-                        } icon: {
-                            Image(systemName: entry.kind.systemImage)
-                                .foregroundStyle(tint(for: entry.kind))
-                        }
+    private func sectionHeader(for date: Date) -> some View {
+        Text(date.formatted(date: .abbreviated, time: .omitted).uppercased())
+            .font(DesignTokens.Typography.label)
+            .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+            .tracking(0.8)
+            .padding(.bottom, DesignTokens.Spacing.xs)
+            .padding(.top, DesignTokens.Spacing.xs)
+    }
 
-                        Text(entry.relativePath)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .truncationMode(.middle)
-                    }
+    private func artifactRow(for entry: RunHistoryEntry) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.md) {
+            Image(systemName: entry.kind.systemImage)
+                .font(.system(size: 14))
+                .foregroundStyle(tint(for: entry.kind))
+                .frame(width: 20, alignment: .leading)
 
-                    Spacer(minLength: 12)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.title)
+                    .font(DesignTokens.Typography.body)
+                    .fontWeight(.medium)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
 
-                    MeridianStatusBadge(
-                        title: entry.kind.title,
-                        systemImage: entry.kind.systemImage,
-                        tint: tint(for: entry.kind)
-                    )
-                }
-
-                SummaryLine(title: "Created", value: entry.createdAt.formatted(date: .abbreviated, time: .shortened))
-                SummaryLine(title: "Size", value: entry.fileSizeBytes.map { Self.fileSizeFormatter.string(fromByteCount: $0) } ?? "—")
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        Button("Open") {
-                            appState.openHistoryEntry(entry)
-                        }
-                        .accessibilityLabel("Open \(entry.title)")
-                        .accessibilityIdentifier("openArtifact_\(entry.id)")
-
-                        Button("Reveal") {
-                            appState.revealHistoryEntry(entry)
-                        }
-                        .accessibilityLabel("Reveal \(entry.title) in Finder")
-                        .accessibilityIdentifier("revealArtifact_\(entry.id)")
-
-                        Menu("More") {
-                            Button("Move to Trash", role: .destructive) {
-                                historyStore.remove(entry: entry)
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Button("Open") {
-                            appState.openHistoryEntry(entry)
-                        }
-                        .accessibilityLabel("Open \(entry.title)")
-                        .accessibilityIdentifier("openArtifact_\(entry.id)")
-
-                        HStack(spacing: 8) {
-                            Button("Reveal") {
-                                appState.revealHistoryEntry(entry)
-                            }
-                            .accessibilityLabel("Reveal \(entry.title) in Finder")
-                            .accessibilityIdentifier("revealArtifact_\(entry.id)")
-
-                            Menu("More") {
-                                Button("Move to Trash", role: .destructive) {
-                                    historyStore.remove(entry: entry)
-                                }
-                            }
-                        }
+                HStack(spacing: DesignTokens.Spacing.sm) {
+                    Text(entry.kind.title)
+                    Text("·")
+                        .foregroundStyle(DesignTokens.ColorSystem.inkMuted.opacity(0.5))
+                    Text(entry.createdAt.formatted(date: .omitted, time: .shortened))
+                    if let size = entry.fileSizeBytes {
+                        Text("·")
+                            .foregroundStyle(DesignTokens.ColorSystem.inkMuted.opacity(0.5))
+                        Text(Self.fileSizeFormatter.string(fromByteCount: size))
                     }
                 }
+                .font(DesignTokens.Typography.label)
+                .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
             }
+
+            Spacer(minLength: DesignTokens.Spacing.sm)
+
+            Text(entry.relativePath)
+                .font(DesignTokens.Typography.mono)
+                .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 260, alignment: .trailing)
+
+            Button("Open") {
+                appState.openHistoryEntry(entry)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel("Open \(entry.title)")
+            .accessibilityIdentifier("openArtifact_\(entry.id)")
+
+            Menu {
+                Button("Reveal in Finder") {
+                    appState.revealHistoryEntry(entry)
+                }
+                .accessibilityIdentifier("revealArtifact_\(entry.id)")
+                Divider()
+                Button("Move to Trash", role: .destructive) {
+                    historyStore.remove(entry: entry)
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+                    .frame(width: 22, height: 22)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel("More actions for \(entry.title)")
         }
+        .padding(.vertical, DesignTokens.Spacing.sm)
+        .accessibilityElement(children: .contain)
     }
 
     private var filteredEntries: [RunHistoryEntry] {
@@ -391,13 +413,13 @@ struct RunHistoryView: View {
     private func tint(for kind: RunHistoryEntryKind) -> SwiftUI.Color {
         switch kind {
         case .dryRunReport, .csvArtifact:
-            return DesignTokens.Color.sky
+            return DesignTokens.ColorSystem.accentAction
         case .auditReceipt, .jsonArtifact:
-            return DesignTokens.Color.success
+            return DesignTokens.ColorSystem.statusSuccess
         case .runLog:
-            return DesignTokens.Color.amber
+            return DesignTokens.ColorSystem.accentWaypoint
         case .queueDatabase:
-            return DesignTokens.Color.amberWaypoint
+            return DesignTokens.ColorSystem.statusActive
         }
     }
 }

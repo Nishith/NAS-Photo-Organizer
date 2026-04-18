@@ -15,33 +15,34 @@ struct ProfilesView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.sectionSpacing) {
-                heroCard
-                saveCurrentPathsCard
-                savedProfilesCard
+                headerStrip
+                saveCurrentPaths
+                savedProfilesGrid
             }
             .padding(DesignTokens.Layout.contentPadding)
             .frame(maxWidth: DesignTokens.Layout.archiveMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .darkroom()
         .navigationTitle("Profiles")
     }
 
-    private var heroCard: some View {
-        DetailHeroCard(
-            eyebrow: "Saved Setup",
-            title: "Reuse the Same Library Configuration",
-            message: "Profiles preserve a trusted source and destination pair so repeated runs feel instant and stay compatible with the CLI.",
-            badgeTitle: setupStore.usingProfile ? "Active Profile" : "Manual Paths",
-            badgeSystemImage: setupStore.usingProfile ? "bookmark.fill" : "square.and.pencil",
-            tint: setupStore.usingProfile ? DesignTokens.Color.sky : DesignTokens.Color.inkMuted,
-            systemImage: "person.crop.rectangle.stack"
-        ) {
-            VStack(alignment: .leading, spacing: 12) {
-                SummaryLine(title: "Saved Profiles", value: "\(setupStore.profiles.count)")
-                SummaryLine(title: "Current Mode", value: setupStore.usingProfile ? "Using \(setupStore.selectedProfileName)" : "Manual source and destination")
-                SummaryLine(title: "Next Step", value: setupStore.profiles.isEmpty ? "Save the current paths to create your first profile" : "Activate a profile and return to Setup")
+    // MARK: - Header strip (replaces hero card)
+
+    private var headerStrip: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Profiles")
+                    .font(DesignTokens.Typography.title)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+
+                Text(summaryMessage)
+                    .font(DesignTokens.Typography.subtitle)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
             }
-        } actions: {
+
+            Spacer(minLength: DesignTokens.Spacing.md)
+
             Button("Return to Setup") {
                 appState.selection = .setup
             }
@@ -49,145 +50,209 @@ struct ProfilesView: View {
         }
     }
 
-    private var saveCurrentPathsCard: some View {
-        MeridianSurfaceCard {
+    private var summaryMessage: String {
+        if setupStore.profiles.isEmpty {
+            return "Save the current source and destination to create your first reusable profile."
+        }
+        if setupStore.usingProfile {
+            return "Active profile: \(setupStore.selectedProfileName)."
+        }
+        return "\(setupStore.profiles.count) saved · manual paths in use."
+    }
+
+    // MARK: - Save current paths
+
+    private var saveCurrentPaths: some View {
+        DarkroomPanel(variant: .panel) {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
                 SectionHeading(
-                    eyebrow: "Save Current Paths",
-                    title: "Create a Reusable Setup",
-                    message: "Capture the source and destination that are currently configured so you can recall them in one step later."
+                    title: "Save Current Paths",
+                    message: "Capture the source and destination configured in Setup."
                 )
 
                 ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: DesignTokens.Spacing.md) {
                         TextField("Profile name", text: $setupStore.newProfileName)
                             .textFieldStyle(.roundedBorder)
 
-                        Button("Save Current Paths") {
+                        Button("Save") {
                             appState.saveCurrentPathsAsProfile()
                         }
                         .buttonStyle(.borderedProminent)
                     }
 
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
                         TextField("Profile name", text: $setupStore.newProfileName)
                             .textFieldStyle(.roundedBorder)
 
-                        Button("Save Current Paths") {
+                        Button("Save") {
                             appState.saveCurrentPathsAsProfile()
                         }
                         .buttonStyle(.borderedProminent)
                     }
                 }
 
-                MeridianSurfaceCard(style: .inner, tint: DesignTokens.Color.aqua) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        SummaryLine(title: "Source", value: setupStore.sourcePath.isEmpty ? "Not set" : setupStore.sourcePath)
-                        SummaryLine(title: "Destination", value: setupStore.destinationPath.isEmpty ? "Not set" : setupStore.destinationPath)
-                    }
+                VStack(alignment: .leading, spacing: 0) {
+                    currentPathRow(label: "Source", value: setupStore.sourcePath)
+                    Rectangle()
+                        .fill(DesignTokens.ColorSystem.hairline)
+                        .frame(height: 0.5)
+                    currentPathRow(label: "Destination", value: setupStore.destinationPath)
                 }
             }
         }
     }
 
-    private var savedProfilesCard: some View {
-        MeridianSurfaceCard {
-            VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
-                SectionHeading(
-                    eyebrow: "Saved Profiles",
-                    title: "Choose the Setup You Want to Reuse",
-                    message: "Use makes a profile active, overwrite refreshes it with the current paths, and delete removes it from the shared profiles file."
+    private func currentPathRow(label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.md) {
+            Text(label)
+                .font(DesignTokens.Typography.label)
+                .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+                .tracking(0.6)
+                .frame(width: 96, alignment: .leading)
+
+            Text(value.isEmpty ? "Not set" : value)
+                .font(DesignTokens.Typography.mono)
+                .foregroundStyle(value.isEmpty ? DesignTokens.ColorSystem.inkMuted : DesignTokens.ColorSystem.inkPrimary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, DesignTokens.Spacing.sm)
+    }
+
+    // MARK: - Saved profiles grid
+
+    private var savedProfilesGrid: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
+            SectionHeading(
+                title: "Saved Profiles",
+                message: setupStore.profiles.isEmpty
+                    ? "No profiles yet — save one above to reuse it later."
+                    : "Use activates a profile in Setup. Overwrite refreshes it with the current paths."
+            )
+
+            if setupStore.profiles.isEmpty {
+                EmptyStateView(
+                    title: "No Saved Profiles",
+                    message: "Save the current source and destination to create a reusable setup that works in both the app and the CLI.",
+                    systemImage: "bookmark"
                 )
-
-                if setupStore.profiles.isEmpty {
-                    EmptyStateView(
-                        title: "No Saved Profiles",
-                        message: "Save the current source and destination to create a reusable setup that works in both the app and the CLI.",
-                        systemImage: "bookmark"
-                    )
-                } else {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(setupStore.profiles) { profile in
-                            profileRow(for: profile)
-                        }
+            } else {
+                LazyVGrid(
+                    columns: [
+                        GridItem(.adaptive(minimum: 280, maximum: 380), spacing: DesignTokens.Layout.cardSpacing, alignment: .top)
+                    ],
+                    alignment: .leading,
+                    spacing: DesignTokens.Layout.cardSpacing
+                ) {
+                    ForEach(setupStore.profiles) { profile in
+                        ProfileTile(
+                            profile: profile,
+                            isActive: profile.name == setupStore.selectedProfileName && setupStore.usingProfile,
+                            onUse: {
+                                appState.useProfile(named: profile.name)
+                                appState.selection = .setup
+                            },
+                            onOverwrite: { appState.overwriteProfile(named: profile.name) },
+                            onDelete: { appState.deleteProfile(named: profile.name) }
+                        )
                     }
                 }
             }
         }
     }
+}
 
-    private func profileRow(for profile: Profile) -> some View {
-        let isActive = profile.name == setupStore.selectedProfileName
+// MARK: - Profile tile
 
-        return MeridianSurfaceCard(style: .inner, tint: isActive ? DesignTokens.Color.sky : DesignTokens.Color.cloud) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(profile.name)
-                            .font(DesignTokens.Typography.cardTitle)
-                            .foregroundStyle(DesignTokens.Color.inkPrimary)
-                            .accessibilityIdentifier("profileName-\(profile.name)")
+private struct ProfileTile: View {
+    let profile: Profile
+    let isActive: Bool
+    let onUse: () -> Void
+    let onOverwrite: () -> Void
+    let onDelete: () -> Void
 
-                        Text(isActive ? "Active in Setup right now" : "Ready to activate")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+    @State private var isHovering = false
 
-                    Spacer(minLength: 12)
+    var body: some View {
+        DarkroomPanel(variant: .panel) {
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+                HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.sm) {
+                    Text(profile.name)
+                        .font(DesignTokens.Typography.cardTitle)
+                        .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .accessibilityIdentifier("profileName-\(profile.name)")
+
+                    Spacer(minLength: DesignTokens.Spacing.sm)
 
                     if isActive {
-                        MeridianStatusBadge(
-                            title: "Active",
-                            systemImage: "checkmark.circle.fill",
-                            tint: DesignTokens.Color.success
-                        )
-                        .accessibilityIdentifier("activeProfileBadge")
+                        Circle()
+                            .fill(DesignTokens.ColorSystem.statusActive)
+                            .frame(width: 7, height: 7)
+                            .accessibilityIdentifier("activeProfileBadge")
+                            .accessibilityLabel("Active")
                     }
+
+                    Menu {
+                        Button("Overwrite with Current Paths", action: onOverwrite)
+                        Divider()
+                        Button("Delete", role: .destructive, action: onDelete)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+                            .frame(width: 22, height: 22)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .opacity(isHovering || isActive ? 1 : 0.5)
+                    .accessibilityLabel("More actions for \(profile.name)")
                 }
 
-                SummaryLine(title: "Source", value: profile.sourcePath)
-                SummaryLine(title: "Destination", value: profile.destinationPath)
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        Button("Use") {
-                            appState.useProfile(named: profile.name)
-                            appState.selection = .setup
-                        }
-                        .buttonStyle(.borderedProminent)
-
-                        Button("Overwrite") {
-                            appState.overwriteProfile(named: profile.name)
-                        }
-
-                        Menu("More") {
-                            Button("Delete", role: .destructive) {
-                                appState.deleteProfile(named: profile.name)
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Button("Use") {
-                            appState.useProfile(named: profile.name)
-                            appState.selection = .setup
-                        }
-                        .buttonStyle(.borderedProminent)
-
-                        HStack(spacing: 8) {
-                            Button("Overwrite") {
-                                appState.overwriteProfile(named: profile.name)
-                            }
-
-                            Menu("More") {
-                                Button("Delete", role: .destructive) {
-                                    appState.deleteProfile(named: profile.name)
-                                }
-                            }
-                        }
-                    }
+                VStack(alignment: .leading, spacing: 0) {
+                    pathRow(icon: "arrow.up.forward", label: "From", value: profile.sourcePath)
+                    Rectangle()
+                        .fill(DesignTokens.ColorSystem.hairline)
+                        .frame(height: 0.5)
+                    pathRow(icon: "arrow.down.forward", label: "To", value: profile.destinationPath)
                 }
+
+                Button(action: onUse) {
+                    Text(isActive ? "Open in Setup" : "Use")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
             }
         }
+        .onHover { isHovering = $0 }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func pathRow(icon: String, label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.sm) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+                .frame(width: 14)
+
+            Text(label)
+                .font(DesignTokens.Typography.label)
+                .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+                .tracking(0.6)
+                .frame(width: 36, alignment: .leading)
+
+            Text(value)
+                .font(DesignTokens.Typography.mono)
+                .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 6)
     }
 }

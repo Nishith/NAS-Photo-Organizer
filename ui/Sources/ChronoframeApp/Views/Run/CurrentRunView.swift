@@ -1,6 +1,7 @@
 #if canImport(ChronoframeAppCore)
 import ChronoframeAppCore
 #endif
+import AppKit
 import SwiftUI
 
 struct CurrentRunView: View {
@@ -38,7 +39,13 @@ struct CurrentRunView: View {
                     )
                 }
 
-                RunMetricsGridSection(model: model)
+                RunTimelineView(model: model)
+
+                if showsNowCopying {
+                    NowCopyingCard(model: model)
+                }
+
+                RunTickerSection(model: model)
 
                 RunWorkspaceShell(
                     model: model,
@@ -50,6 +57,21 @@ struct CurrentRunView: View {
             .frame(maxWidth: DesignTokens.Layout.contentMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .darkroom()
         .navigationTitle("Run")
+        .onChange(of: runSessionStore.status) { newValue in
+            if newValue == .finished {
+                NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+            }
+        }
+    }
+
+    private var showsNowCopying: Bool {
+        switch runSessionStore.status {
+        case .running, .preflighting, .finished:
+            return true
+        default:
+            return false
+        }
     }
 }

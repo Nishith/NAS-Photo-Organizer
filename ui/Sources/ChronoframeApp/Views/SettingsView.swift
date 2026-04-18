@@ -13,12 +13,47 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        TabView {
+            GeneralSettingsTab()
+                .tabItem {
+                    Label("General", systemImage: "gear")
+                }
+
+            PerformanceSettingsTab(preferencesStore: preferencesStore)
+                .tabItem {
+                    Label("Performance", systemImage: "speedometer")
+                }
+
+            DiagnosticsSettingsTab(appState: appState, preferencesStore: preferencesStore)
+                .tabItem {
+                    Label("Diagnostics", systemImage: "stethoscope")
+                }
+        }
+        .frame(minWidth: 460, idealWidth: 520, minHeight: 320)
+        .onAppear {
+            UITestScenario.configureCurrentWindow(for: UITestScenario.current(), isSettings: true)
+        }
+        .navigationTitle("Settings")
+    }
+}
+
+private struct GeneralSettingsTab: View {
+    var body: some View {
         Form {
             Section {
-                Text("Tune how Chronoframe balances speed, safety, and diagnostics. These settings affect future previews and transfers without changing the organizer’s core guarantees.")
+                Text("Tune how Chronoframe balances speed, safety, and diagnostics. These settings affect future previews and transfers without changing the organizer's core guarantees.")
                     .foregroundStyle(.secondary)
             }
+        }
+        .formStyle(.grouped)
+    }
+}
 
+private struct PerformanceSettingsTab: View {
+    @ObservedObject var preferencesStore: PreferencesStore
+
+    var body: some View {
+        Form {
             Section {
                 Stepper(value: $preferencesStore.workerCount, in: 1...32) {
                     LabeledContent("Worker Threads") {
@@ -29,7 +64,7 @@ struct SettingsView: View {
 
                 Toggle("Use Cached Destination Scan", isOn: $preferencesStore.useFastDestinationScan)
             } header: {
-                Text("Performance")
+                Text("Throughput")
             } footer: {
                 Text("More worker threads can improve throughput on faster storage. Cached destination scanning speeds up repeated runs by reading the existing index instead of rebuilding it every time.")
             }
@@ -41,7 +76,17 @@ struct SettingsView: View {
             } footer: {
                 Text("Verification re-hashes copied files after transfer. It adds work, but it provides stronger confidence that destination files match the originals.")
             }
+        }
+        .formStyle(.grouped)
+    }
+}
 
+private struct DiagnosticsSettingsTab: View {
+    let appState: AppState
+    @ObservedObject var preferencesStore: PreferencesStore
+
+    var body: some View {
+        Form {
             Section {
                 Stepper(
                     value: $preferencesStore.logBufferCapacity,
@@ -55,7 +100,7 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("diagnosticsLogBufferStepper")
             } header: {
-                Text("Diagnostics")
+                Text("Log Buffer")
             } footer: {
                 Text("A larger buffer keeps more recent console history in memory for the Run workspace. Lower values use less memory but trim older log lines sooner.")
             }
@@ -64,9 +109,5 @@ struct SettingsView: View {
         .onChange(of: preferencesStore.logBufferCapacity) { newValue in
             appState.runLogStore.capacity = newValue
         }
-        .onAppear {
-            UITestScenario.configureCurrentWindow(for: UITestScenario.current(), isSettings: true)
-        }
-        .navigationTitle("Settings")
     }
 }
