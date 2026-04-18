@@ -205,7 +205,7 @@ final class AppStateTests: XCTestCase {
         let finished = await waitForCondition { appState.runSessionStore.summary != nil }
 
         XCTAssertTrue(finished)
-        XCTAssertEqual(appState.selection, .currentRun)
+        XCTAssertEqual(appState.selection, .run)
         XCTAssertEqual(harness.engine.startConfigurations.count, 1)
 
         appState.openDestination()
@@ -279,10 +279,10 @@ final class AppStateTests: XCTestCase {
 
         await appState.startTransfer()
 
-        XCTAssertEqual(appState.selection, .currentRun)
+        XCTAssertEqual(appState.selection, .run)
         XCTAssertEqual(appState.runSessionStore.prompt?.kind, .resumePendingJobs)
 
-        await appState.confirmRunPrompt()
+        appState.confirmRunPrompt()
         let finished = await waitForCondition { appState.runSessionStore.summary?.status == .finished }
 
         XCTAssertTrue(finished)

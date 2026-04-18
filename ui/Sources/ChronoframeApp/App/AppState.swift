@@ -243,13 +243,13 @@ final class AppState: ObservableObject {
 
     func startPreview() async {
         guard canStartRun else { return }
-        selection = .currentRun
+        selection = .run
         await runSessionStore.requestRun(mode: .preview, configuration: setupStore.makeConfiguration(preferences: preferencesStore, mode: .preview))
     }
 
     func startTransfer() async {
         guard canStartRun else { return }
-        selection = .currentRun
+        selection = .run
         await runSessionStore.requestRun(mode: .transfer, configuration: setupStore.makeConfiguration(preferences: preferencesStore, mode: .transfer))
     }
 

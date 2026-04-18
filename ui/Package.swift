@@ -30,7 +30,8 @@ let package = Package(
         .testTarget(
             name: "ChronoframeAppCoreTests",
             dependencies: ["ChronoframeAppCore", "ChronoframeCore"],
-            path: "Tests/ChronoframeAppCoreTests"
+            path: "Tests/ChronoframeAppCoreTests",
+            exclude: ["Fixtures"]
         ),
         .testTarget(
             name: "ChronoframeAppTests",

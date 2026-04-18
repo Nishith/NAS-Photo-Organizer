@@ -4,12 +4,16 @@
 
 Chronoframe takes a folder full of unsorted photos and videos (from your phone, camera, NAS, or backup drive) and sorts them into clean, date-based folders. It never moves or deletes your originals — it copies them to a new location, organized the way you choose.
 
-| Overview | Setup Detail |
-| :--- | :--- |
-| ![Chronoframe overview](docs/screenshots/ui-overview.png) | ![Chronoframe setup detail](docs/screenshots/ui-setup-detail.png) |
-
 > [!NOTE]
-> **Meridian Design System:** Chronoframe features a custom "Meridian" visual language — combining photographic precision with a clean timeline-based organizational logic. The hallmark is the amber waypoint dot, representing the exact moment a memory finds its place.
+> **Meridian Design System:** Chronoframe uses a restrained Meridian visual language on top of native macOS materials and split-view structure. The hallmark remains the amber waypoint dot, representing the moment a memory finds its place.
+
+## Screenshots
+
+The live macOS app is organized around a calm setup workflow and a dedicated run workspace for preview, transfer, and artifact review.
+
+![Chronoframe setup workspace](docs/screenshots/ui-setup-overview.png)
+
+![Chronoframe run workspace after preview](docs/screenshots/ui-run-preview.png)
 
 ## Getting Started
 
@@ -73,7 +77,7 @@ python3 chronoframe.py --revert /path/to/Organized/.organize_logs/audit_receipt_
 
 This deletes only files that still match the original hash — if you've edited a file after it was copied, it won't be touched.
 
-In the macOS app, click **Revert Last Run** from the completion screen.
+In the macOS app, review the generated report, logs, and destination artifacts after each run from the **Run** and **Run History** workspaces.
 
 ---
 
@@ -83,10 +87,10 @@ In the macOS app, click **Revert Last Run** from the completion screen.
 | :--- | :--- |
 | `Cmd+O` | Choose source folder |
 | `Shift+Cmd+O` | Choose destination folder |
-| `Shift+Cmd+P` | Toggle saved-profile field |
+| `Shift+Cmd+P` | Refresh profiles |
 | `Cmd+R` | Start a preview |
 | `Cmd+Return` | Start a transfer |
-| `Cmd+L` | Toggle activity pane |
+| `Cmd+,` | Open settings |
 
 ## Configuration Profiles
 
@@ -134,7 +138,7 @@ The sections below cover the internal architecture, safety guarantees, and desig
 Chronoframe has two front ends over a shared Python backend:
 
 - **CLI** — a [Rich](https://github.com/Textualize/rich)-powered terminal interface with live progress bars and colored output
-- **macOS app** — a native SwiftUI shell (Meridian design) that launches the backend in `--json` mode and renders live progress, metrics, and post-run actions
+- **macOS app** — a native SwiftUI workspace with a restrained Meridian brand layer that launches the backend in `--json` mode and renders live progress, metrics, artifacts, and post-run review surfaces
 
 The backend is implemented as a Python package (`chronoframe/`) with the following modules:
 
@@ -288,9 +292,28 @@ Chronoframe/
     metadata.py                # Date extraction (EXIF, filename, mdls)
   ui/                          # macOS SwiftUI frontend
     Sources/
-      BackendRunner.swift      # JSON stream consumer
-      ContentView.swift        # Main UI
-      ChronoframeApp.swift     # App entry point
+      ChronoframeApp/
+        App/
+          ChronoframeApp.swift # App entry point and scene wiring
+          AppState.swift       # App state, actions, navigation
+          AppCommands.swift    # Menu commands and shortcuts
+          DesignTokens.swift   # Semantic colors, surfaces, spacing
+        Views/
+          SidebarView.swift
+          SetupView.swift
+          CurrentRunView.swift
+          RunHistoryView.swift
+          ProfilesView.swift
+          SettingsView.swift
+          RootSplitView.swift
+          SharedViews.swift
+      ChronoframeAppCore/
+        Exports.swift
+        Services/              # Engine bridges, folder access, history indexing
+        Stores/                # Preferences, setup, logs, run sessions
+        Support/               # Runtime path resolution
+      ChronoframeCore/
+        *.swift                # Shared planning, hashing, media, transfer models
     Tools/
       IconGenerator.swift
     Packaging/

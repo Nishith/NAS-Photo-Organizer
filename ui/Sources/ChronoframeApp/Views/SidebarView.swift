@@ -19,9 +19,18 @@ struct SidebarView: View {
     var body: some View {
         List(SidebarDestination.allCases, selection: $appState.selection) { destination in
             HStack(spacing: 10) {
-                Image(systemName: destination.systemImage)
-                    .foregroundStyle(destination == .currentRun && runSessionStore.isRunning ? .blue : .secondary)
-                    .frame(width: 16)
+                ZStack {
+                    Image(systemName: destination.systemImage)
+                        .foregroundStyle(iconTint(for: destination))
+                        .frame(width: 16)
+
+                    if showsStatusDot(for: destination) {
+                        Circle()
+                            .fill(statusDotTint(for: destination))
+                            .frame(width: 7, height: 7)
+                            .offset(x: 9, y: 8)
+                    }
+                }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(destination.title)
@@ -34,7 +43,7 @@ struct SidebarView: View {
 
                 Spacer()
 
-                if destination == .currentRun && runSessionStore.isRunning {
+                if destination == .run && runSessionStore.isRunning {
                     ProgressView()
                         .controlSize(.small)
                 }
@@ -48,17 +57,86 @@ struct SidebarView: View {
     private func destinationSubtitle(for destination: SidebarDestination) -> String {
         switch destination {
         case .setup:
-            return canStartRun ? "Ready to preview" : destination.subtitle
-        case .currentRun:
-            return runSessionStore.currentTaskTitle
+            if setupStore.usingProfile {
+                return "Saved setup selected"
+            }
+            if appState.canStartRun {
+                return "Ready to preview"
+            }
+            if setupStore.sourcePath.isEmpty || setupStore.destinationPath.isEmpty {
+                return "Source and destination needed"
+            }
+            return destination.subtitle
+
+        case .run:
+            if runSessionStore.isRunning {
+                return runSessionStore.currentTaskTitle
+            }
+            switch runSessionStore.status {
+            case .dryRunFinished:
+                return "Preview ready to review"
+            case .finished:
+                return "Artifacts ready to inspect"
+            case .failed:
+                return "Review issues and logs"
+            case .cancelled:
+                return "Run stopped before completion"
+            case .nothingToCopy:
+                return "Destination already up to date"
+            case .idle, .preflighting, .running:
+                return destination.subtitle
+            }
+
         case .history:
-            return historyStore.entries.isEmpty ? destination.subtitle : "\(historyStore.entries.count) artifacts"
+            if historyStore.entries.isEmpty {
+                return destination.subtitle
+            }
+            return "\(historyStore.entries.count) artifact\(historyStore.entries.count == 1 ? "" : "s")"
+
         case .profiles:
-            return setupStore.profiles.isEmpty ? destination.subtitle : "\(setupStore.profiles.count) saved"
+            if setupStore.profiles.isEmpty {
+                return destination.subtitle
+            }
+            return "\(setupStore.profiles.count) saved setup\(setupStore.profiles.count == 1 ? "" : "s")"
         }
     }
 
-    private var canStartRun: Bool {
-        setupStore.usingProfile || (!setupStore.sourcePath.isEmpty && !setupStore.destinationPath.isEmpty)
+    private func iconTint(for destination: SidebarDestination) -> SwiftUI.Color {
+        if destination == .run && runSessionStore.isRunning {
+            return DesignTokens.Color.sky
+        }
+        if destination == .setup && appState.canStartRun {
+            return DesignTokens.Color.success
+        }
+        if destination == .run && runSessionStore.status == .failed {
+            return DesignTokens.Color.danger
+        }
+        return DesignTokens.Color.inkMuted
+    }
+
+    private func showsStatusDot(for destination: SidebarDestination) -> Bool {
+        switch destination {
+        case .setup:
+            return appState.canStartRun
+        case .run:
+            return runSessionStore.status == .failed || runSessionStore.status == .dryRunFinished
+        case .history:
+            return !historyStore.entries.isEmpty
+        case .profiles:
+            return setupStore.usingProfile
+        }
+    }
+
+    private func statusDotTint(for destination: SidebarDestination) -> SwiftUI.Color {
+        switch destination {
+        case .setup:
+            return DesignTokens.Color.success
+        case .run:
+            return runSessionStore.status == .failed ? DesignTokens.Color.danger : DesignTokens.Color.sky
+        case .history:
+            return DesignTokens.Color.aqua
+        case .profiles:
+            return DesignTokens.Color.amberWaypoint
+        }
     }
 }

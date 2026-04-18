@@ -32,12 +32,12 @@ final class AccessibilityTests: XCTestCase {
             "previewButton",
             "transferButton",
             "profilePicker",
-            "statusBadge",
+            "dropZone",
             "consoleScrollView",
             "openDestinationButton",
             "openReportButton",
             "openLogsButton",
-            "clearAllArtifactsButton",
+            "startTransferFromPreviewButton",
         ]
 
         for id in identifiers {

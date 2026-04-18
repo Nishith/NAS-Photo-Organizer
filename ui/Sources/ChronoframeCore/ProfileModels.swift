@@ -103,7 +103,7 @@ public struct RunHistoryEntry: Identifiable, Equatable, Sendable {
 
 public enum SidebarDestination: String, CaseIterable, Identifiable, Hashable, Sendable {
     case setup
-    case currentRun
+    case run
     case history
     case profiles
 
@@ -113,8 +113,8 @@ public enum SidebarDestination: String, CaseIterable, Identifiable, Hashable, Se
         switch self {
         case .setup:
             return "Setup"
-        case .currentRun:
-            return "Current Run"
+        case .run:
+            return "Run"
         case .history:
             return "Run History"
         case .profiles:
@@ -125,13 +125,13 @@ public enum SidebarDestination: String, CaseIterable, Identifiable, Hashable, Se
     public var subtitle: String {
         switch self {
         case .setup:
-            return "Choose folders and options"
-        case .currentRun:
-            return "Watch progress and logs"
+            return "Source, destination, readiness"
+        case .run:
+            return "Preview, transfer, inspect"
         case .history:
-            return "Inspect reports and receipts"
+            return "Reports, receipts, logs"
         case .profiles:
-            return "Reuse source and destination pairs"
+            return "Reusable saved setups"
         }
     }
 
@@ -139,7 +139,7 @@ public enum SidebarDestination: String, CaseIterable, Identifiable, Hashable, Se
         switch self {
         case .setup:
             return "slider.horizontal.3"
-        case .currentRun:
+        case .run:
             return "bolt.horizontal.circle"
         case .history:
             return "clock.arrow.circlepath"

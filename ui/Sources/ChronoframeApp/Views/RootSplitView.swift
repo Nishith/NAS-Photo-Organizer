@@ -112,7 +112,7 @@ struct RootSplitView: View {
         switch appState.selection {
         case .setup:
             SetupView(appState: appState)
-        case .currentRun:
+        case .run:
             CurrentRunView(appState: appState)
         case .history:
             RunHistoryView(appState: appState)
@@ -123,7 +123,7 @@ struct RootSplitView: View {
 
     private var showsRunToolbarActions: Bool {
         switch appState.selection {
-        case .currentRun:
+        case .run:
             return true
         case .setup, .history, .profiles:
             return false
