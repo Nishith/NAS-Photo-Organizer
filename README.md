@@ -63,7 +63,10 @@ Choose how your files are organized in the destination:
 | `YYYY/MM/DD` (default) | `2024/06/15/2024-06-15_001.jpg` |
 | `YYYY/MM` | `2024/06/2024-06-15_001.jpg` |
 | `YYYY` | `2024/2024-06-15_001.jpg` |
+| `YYYY/Mon/Event` | `2014/Apr/Tahoe trip/2014-04-10_001.jpg` |
 | `Flat` | `2024-06-15_001.jpg` |
+
+`YYYY/Mon/Event` uses the file's immediate parent folder as the leaf. A file under `Source/Tahoe trip/` lands in `Dest/YYYY/Mon/Tahoe trip/`, with `YYYY` and `Mon` taken from the photo's date. Nested source trees collapse to the innermost folder (`Source/Trips/Tahoe trip/p.jpg` → `Dest/YYYY/Mon/Tahoe trip/p.jpg`). Files sitting directly at the source root have no event name and go into `Dest/YYYY/Mon/` instead.
 
 Files without a recognizable date go into `Unknown_Date/`. Source duplicates (same content, different filename) are routed into `Duplicate/`.
 
@@ -118,7 +121,7 @@ Then run with `--profile mobile_backup` or select the profile name in the app. I
 | `--dest PATH` | Destination root for organized output |
 | `--profile NAME` | Load source and destination from `profiles.yaml` |
 | `--dry-run` | Build the copy plan and write a CSV without copying |
-| `--folder-structure` | Output layout: `YYYY/MM/DD`, `YYYY/MM`, `YYYY`, or `Flat` |
+| `--folder-structure` | Output layout: `YYYY/MM/DD`, `YYYY/MM`, `YYYY`, `YYYY/Mon/Event`, or `Flat` |
 | `--verify` | Re-hash each file after copy to verify integrity |
 | `--revert PATH` | Undo a previous run using its audit receipt JSON |
 | `--rebuild-cache` | Force a full rebuild of the destination index |
