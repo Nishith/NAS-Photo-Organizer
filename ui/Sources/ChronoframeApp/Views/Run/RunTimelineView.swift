@@ -16,6 +16,7 @@ struct RunTimelineView: View {
     let model: RunWorkspaceModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hasAnimatedCompletion = false
+    @State private var measuredWidth: CGFloat = 0
 
     private let columnCount = 24
     private let rowCount = 6
@@ -54,24 +55,35 @@ struct RunTimelineView: View {
     private var grid: some View {
         let active = activeIndex
         let completed = completedIndex
+        let totalSpacing = CGFloat(columnCount - 1) * 4
+        let dotSize: CGFloat = measuredWidth > 0
+            ? max(6, (measuredWidth - totalSpacing) / CGFloat(columnCount))
+            : 16
+        let totalHeight = CGFloat(rowCount) * dotSize + CGFloat(rowCount - 1) * 4
 
-        return GeometryReader { geo in
-            let totalSpacing = CGFloat(columnCount - 1) * 4
-            let dotSize = max(6, (geo.size.width - totalSpacing) / CGFloat(columnCount))
-
-            VStack(spacing: 4) {
-                ForEach(0..<rowCount, id: \.self) { row in
-                    HStack(spacing: 4) {
-                        ForEach(0..<columnCount, id: \.self) { column in
-                            let index = row * columnCount + column
-                            dot(at: index, active: active, completed: completed)
-                                .frame(width: dotSize, height: dotSize)
-                        }
+        return VStack(spacing: 4) {
+            ForEach(0..<rowCount, id: \.self) { row in
+                HStack(spacing: 4) {
+                    ForEach(0..<columnCount, id: \.self) { column in
+                        let index = row * columnCount + column
+                        dot(at: index, active: active, completed: completed)
+                            .frame(width: dotSize, height: dotSize)
                     }
                 }
             }
         }
-        .frame(height: CGFloat(rowCount) * 16 + CGFloat(rowCount - 1) * 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: totalHeight)
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(key: TimelineWidthKey.self, value: geo.size.width)
+            }
+        )
+        .onPreferenceChange(TimelineWidthKey.self) { width in
+            if abs(width - measuredWidth) > 0.5 {
+                measuredWidth = width
+            }
+        }
     }
 
     private func dot(at index: Int, active: Int, completed: Int) -> some View {
@@ -98,6 +110,32 @@ struct RunTimelineView: View {
                 }
             }
             .motion(Motion.filmic, value: state)
+            .help(tooltip(for: index, state: state))
+    }
+
+    private func tooltip(for index: Int, state: DotState) -> String {
+        let planned = model.context.metrics.plannedCount
+        let stateLabel: String = {
+            switch state {
+            case .pending: return "awaiting transfer"
+            case .active: return "transferring now"
+            case .complete: return "placed at destination"
+            }
+        }()
+
+        guard planned > 0 else {
+            switch state {
+            case .pending: return "Awaiting plan"
+            case .active: return "In progress"
+            case .complete: return "Placed"
+            }
+        }
+
+        let framesPerDot = max(1, Int((Double(planned) / Double(dotCount)).rounded(.up)))
+        let startFrame = min(planned, index * framesPerDot + 1)
+        let endFrame = min(planned, (index + 1) * framesPerDot)
+        let range = startFrame == endFrame ? "Frame \(startFrame)" : "Frames \(startFrame)–\(endFrame)"
+        return "\(range) · \(stateLabel)"
     }
 
     private func fill(for state: DotState) -> Color {
@@ -172,6 +210,13 @@ struct RunTimelineView: View {
         case pending
         case active
         case complete
+    }
+}
+
+private struct TimelineWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
