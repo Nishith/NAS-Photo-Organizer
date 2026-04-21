@@ -86,7 +86,7 @@ def parse_args():
                         help=f"Thread pool size for hashing (default {DEFAULT_WORKERS})")
     parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts (unattended)")
     parser.add_argument("--json", action="store_true", help="Output progress as JSON instead of Rich text (for GUI backend usage)")
-    parser.add_argument("--folder-structure", type=str, choices=["YYYY/MM/DD", "YYYY/MM", "YYYY", "Flat"], default="YYYY/MM/DD", help="Output directory layout")
+    parser.add_argument("--folder-structure", type=str, choices=["YYYY/MM/DD", "YYYY/MM", "YYYY", "YYYY/Mon/Event", "Flat"], default="YYYY/MM/DD", help="Output directory layout")
     parser.add_argument("--fast-dest", action="store_true", help="Bypass destination OS scan and load directly from cache (fast repeated dry runs)")
     parser.add_argument("--revert", type=str, metavar="RECEIPT_JSON", help="Revert a previous run using its audit receipt")
     return parser.parse_args()
@@ -325,6 +325,21 @@ def _format_seq(seq):
     """Zero-pad sequence number; widens beyond SEQ_WIDTH if needed with a warning marker."""
     width = max(SEQ_WIDTH, len(str(seq)))
     return str(seq).zfill(width)
+
+
+_MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+
+def _event_subpath(src_path, src_root):
+    """Immediate parent folder name of the file, relative to source root; '' when the file sits at the root."""
+    try:
+        rel = os.path.relpath(os.path.dirname(src_path), src_root)
+    except ValueError:
+        return ""
+    if rel in ("", "."):
+        return ""
+    return os.path.basename(rel)
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
@@ -568,7 +583,12 @@ def main():
                 seq_str = _format_seq(seq)
                 if date_str == 'Unknown_Date':
                     filename = f"Unknown_{seq_str}{ext}"
-                    dst_path = os.path.join(dst, "Unknown_Date", filename)
+                    if args.folder_structure == "YYYY/Mon/Event":
+                        evt = _event_subpath(src_path, src)
+                        parts = [dst, "Unknown_Date"] + ([evt] if evt else []) + [filename]
+                        dst_path = os.path.join(*parts)
+                    else:
+                        dst_path = os.path.join(dst, "Unknown_Date", filename)
                 else:
                     yyyy, mm, dd = date_str.split('-')
                     filename = f"{date_str}_{seq_str}{ext}"
@@ -578,6 +598,11 @@ def main():
                         dst_path = os.path.join(dst, yyyy, mm, filename)
                     elif args.folder_structure == "YYYY":
                         dst_path = os.path.join(dst, yyyy, filename)
+                    elif args.folder_structure == "YYYY/Mon/Event":
+                        mon = _MONTH_ABBR[int(mm) - 1]
+                        evt = _event_subpath(src_path, src)
+                        parts = [dst, yyyy, mon] + ([evt] if evt else []) + [filename]
+                        dst_path = os.path.join(*parts)
                     else:  # Flat
                         dst_path = os.path.join(dst, filename)
                 jobs_to_insert.append((src_path, dst_path, h, 'PENDING'))
@@ -597,7 +622,12 @@ def main():
             seq_str = _format_seq(start_seq)
             if date_str == 'Unknown_Date':
                 filename = f"Unknown_{seq_str}{ext}"
-                dst_path = os.path.join(dup, "Unknown_Date", filename)
+                if args.folder_structure == "YYYY/Mon/Event":
+                    evt = _event_subpath(src_path, src)
+                    parts = [dup, "Unknown_Date"] + ([evt] if evt else []) + [filename]
+                    dst_path = os.path.join(*parts)
+                else:
+                    dst_path = os.path.join(dup, "Unknown_Date", filename)
             else:
                 yyyy, mm, dd = date_str.split('-')
                 filename = f"{date_str}_{seq_str}{ext}"
@@ -607,6 +637,11 @@ def main():
                     dst_path = os.path.join(dup, yyyy, mm, filename)
                 elif args.folder_structure == "YYYY":
                     dst_path = os.path.join(dup, yyyy, filename)
+                elif args.folder_structure == "YYYY/Mon/Event":
+                    mon = _MONTH_ABBR[int(mm) - 1]
+                    evt = _event_subpath(src_path, src)
+                    parts = [dup, yyyy, mon] + ([evt] if evt else []) + [filename]
+                    dst_path = os.path.join(*parts)
                 else:  # Flat
                     dst_path = os.path.join(dup, filename)
             jobs_to_insert.append((src_path, dst_path, h, 'PENDING'))
