@@ -1,0 +1,66 @@
+Chronoframe — Proprietary Software License
+Copyright © 2026 Nishith Nand. All rights reserved.
+
+This license governs use of the Chronoframe application and its source code
+(together, the "Software"). By installing, copying, or using the Software you
+agree to the terms below. If you do not agree, do not install or use it.
+
+1. Grant of Use
+   You are granted a personal, non-exclusive, non-transferable, revocable
+   license to install and use the Software on devices that you own or
+   control, in object-code (compiled binary) form, for your own use. If you
+   obtained the Software through the Mac App Store, your use is also
+   governed by Apple's Licensed Application End User License Agreement,
+   which prevails over this license to the extent of any conflict.
+
+2. Reservation of Rights
+   All rights not expressly granted are reserved by the copyright holder.
+   Without prior written permission, you may not:
+     (a) copy, redistribute, sublicense, sell, rent, lease, or lend the
+         Software or any portion of it;
+     (b) modify, adapt, translate, or create derivative works of the
+         Software or its source code;
+     (c) reverse-engineer, decompile, or disassemble the Software, except
+         to the extent that applicable law expressly permits despite this
+         limitation;
+     (d) remove, alter, or obscure any copyright, trademark, or other
+         proprietary notices in the Software;
+     (e) use the name "Chronoframe" or any related trademarks except for
+         truthful, descriptive reference to this Software.
+
+3. Source Code Visibility
+   Where source code for this Software is made publicly visible (for
+   example on a code-hosting service), that visibility is provided for
+   transparency, security review, and personal study only. It does not
+   grant any of the rights restricted in Section 2. Forking, mirroring, or
+   redistributing the source — in original or modified form — requires
+   prior written permission from the copyright holder.
+
+4. Third-Party Components
+   The Software incorporates third-party components, each licensed under
+   its own terms (see the in-app Acknowledgments view). Nothing in this
+   license restricts your rights under those terms with respect to the
+   covered third-party components.
+
+5. No Warranty
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+6. Limitation of Liability
+   TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL
+   THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+   LIABILITY — WHETHER IN CONTRACT, TORT, OR OTHERWISE — ARISING FROM,
+   OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+7. Termination
+   This license terminates automatically if you breach any of its terms.
+   On termination you must cease all use of the Software and destroy any
+   copies in your possession. Sections 2, 5, 6, and 8 survive termination.
+
+8. Governing Law
+   This license is governed by the laws of the jurisdiction in which the
+   copyright holder resides, without regard to conflict-of-laws rules.
+
+For permissions, licensing inquiries, or written authorization to act
+beyond the rights granted above, contact the copyright holder.

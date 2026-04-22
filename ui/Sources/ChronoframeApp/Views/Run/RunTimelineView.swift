@@ -3,47 +3,43 @@ import ChronoframeAppCore
 #endif
 import SwiftUI
 
-/// The emotional centerpiece of the Run view: a grid of dots, each one
-/// representing a frame (or a small batch of frames) finding its place.
+/// Compact strip of dots, each one representing a slice of the planned work.
 ///
-/// Data model caveat: the full year×month version envisioned in the plan
-/// needs per-(year,month) aggregation streamed from the engine, which does
-/// not ship today. Until that data is available, we render a fixed grid
-/// proportional to `plannedCount`, lit from `copiedCount`. Visually this
-/// already delivers the "frames finding their place" moment; the data
-/// binding can be upgraded without rewriting the view.
+/// Per-(year, month) aggregation isn't streamed from the engine yet, so each
+/// dot maps to a contiguous range of frames in the planned set. Hover any dot
+/// to see exactly which frames it stands for and whether they've been copied.
+/// The data binding can be upgraded to true year×month buckets later without
+/// touching the layout.
 struct RunTimelineView: View {
     let model: RunWorkspaceModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hasAnimatedCompletion = false
+    @State private var hoveredIndex: Int?
 
-    private let columnCount = 24
-    private let rowCount = 6
+    private let columnCount = 36
+    private let rowCount = 2
+    private let dotSpacing: CGFloat = 3
+    private let dotMaxSize: CGFloat = 9
     private var dotCount: Int { columnCount * rowCount }
 
     var body: some View {
         DarkroomPanel(variant: .panel) {
-            VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
                 HStack(alignment: .firstTextBaseline) {
                     Text("Timeline")
-                        .font(DesignTokens.Typography.cardTitle)
-                        .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+                        .font(DesignTokens.Typography.label)
+                        .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
 
                     Spacer()
 
-                    Text(progressCaption)
+                    Text(detailCaption)
                         .font(DesignTokens.Typography.label)
-                        .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+                        .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
                         .monospacedDigit()
                         .contentTransition(.numericText())
+                        .lineLimit(1)
                 }
 
                 grid
-
-                Text(subtitle)
-                    .font(DesignTokens.Typography.body)
-                    .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .accessibilityElement(children: .combine)
@@ -56,12 +52,13 @@ struct RunTimelineView: View {
         let completed = completedIndex
 
         return GeometryReader { geo in
-            let totalSpacing = CGFloat(columnCount - 1) * 4
-            let dotSize = max(6, (geo.size.width - totalSpacing) / CGFloat(columnCount))
+            let totalSpacing = CGFloat(columnCount - 1) * dotSpacing
+            let computed = (geo.size.width - totalSpacing) / CGFloat(columnCount)
+            let dotSize = max(5, min(dotMaxSize, computed))
 
-            VStack(spacing: 4) {
+            VStack(spacing: dotSpacing) {
                 ForEach(0..<rowCount, id: \.self) { row in
-                    HStack(spacing: 4) {
+                    HStack(spacing: dotSpacing) {
                         ForEach(0..<columnCount, id: \.self) { column in
                             let index = row * columnCount + column
                             dot(at: index, active: active, completed: completed)
@@ -71,22 +68,12 @@ struct RunTimelineView: View {
                 }
             }
         }
-        .frame(height: CGFloat(rowCount) * 16 + CGFloat(rowCount - 1) * 4)
+        .frame(height: CGFloat(rowCount) * dotMaxSize + CGFloat(rowCount - 1) * dotSpacing)
     }
 
     private func dot(at index: Int, active: Int, completed: Int) -> some View {
-        let state: DotState
-        if hasAnimatedCompletion || model.context.status == .finished {
-            state = .complete
-        } else if index < completed {
-            state = .complete
-        } else if index == active && model.context.status == .running {
-            state = .active
-        } else if index < active {
-            state = .active
-        } else {
-            state = .pending
-        }
+        let state = dotState(at: index, active: active, completed: completed)
+        let isHovered = hoveredIndex == index
 
         return Circle()
             .fill(fill(for: state))
@@ -94,16 +81,30 @@ struct RunTimelineView: View {
                 if state == .active {
                     Circle()
                         .stroke(DesignTokens.ColorSystem.accentWaypoint.opacity(0.5), lineWidth: 1)
-                        .scaleEffect(pulseScale(for: state))
+                        .scaleEffect(reduceMotion ? 1.0 : 1.35)
                 }
             }
-            .motion(Motion.filmic, value: state)
+            .scaleEffect(isHovered ? 1.6 : 1.0)
+            .motion(Motion.mechanical, value: state)
+            .motion(Motion.mechanical, value: isHovered)
+            .onHover { inside in
+                hoveredIndex = inside ? index : (hoveredIndex == index ? nil : hoveredIndex)
+            }
+            .help(tooltip(for: index, state: state))
+    }
+
+    private func dotState(at index: Int, active: Int, completed: Int) -> DotState {
+        if model.context.status == .finished { return .complete }
+        if index < completed { return .complete }
+        if index == active && model.context.status == .running { return .active }
+        if index < active { return .active }
+        return .pending
     }
 
     private func fill(for state: DotState) -> Color {
         switch state {
         case .pending:
-            return DesignTokens.ColorSystem.inkMuted.opacity(0.18)
+            return DesignTokens.ColorSystem.inkMuted.opacity(0.22)
         case .active:
             return DesignTokens.ColorSystem.accentWaypoint
         case .complete:
@@ -111,8 +112,49 @@ struct RunTimelineView: View {
         }
     }
 
-    private func pulseScale(for state: DotState) -> CGFloat {
-        state == .active && !reduceMotion ? 1.15 : 1.0
+    // MARK: - Per-dot meaning
+
+    private var framesPerDot: Int {
+        let planned = model.context.metrics.plannedCount
+        guard planned > 0 else { return 0 }
+        return max(1, Int((Double(planned) / Double(dotCount)).rounded(.up)))
+    }
+
+    private func frameRange(for index: Int) -> (start: Int, end: Int)? {
+        let planned = model.context.metrics.plannedCount
+        guard planned > 0 else { return nil }
+        let per = framesPerDot
+        let start = index * per + 1
+        guard start <= planned else { return nil }
+        let end = min(planned, (index + 1) * per)
+        return (start, end)
+    }
+
+    private func tooltip(for index: Int, state: DotState) -> String {
+        guard let range = frameRange(for: index) else {
+            return "No frames planned yet"
+        }
+        let label: String
+        if range.start == range.end {
+            label = "Frame \(range.start.formatted())"
+        } else {
+            label = "Frames \(range.start.formatted())–\(range.end.formatted())"
+        }
+        switch state {
+        case .complete:
+            return "\(label) · copied"
+        case .active:
+            return "\(label) · copying now"
+        case .pending:
+            return "\(label) · waiting"
+        }
+    }
+
+    private var detailCaption: String {
+        if let hovered = hoveredIndex {
+            return tooltip(for: hovered, state: dotState(at: hovered, active: activeIndex, completed: completedIndex))
+        }
+        return progressCaption
     }
 
     // MARK: - Data mapping
@@ -141,27 +183,6 @@ struct RunTimelineView: View {
         let planned = model.context.metrics.plannedCount
         guard planned > 0 else { return "—" }
         return "\(copied.formatted()) / \(planned.formatted())"
-    }
-
-    private var subtitle: String {
-        switch model.context.status {
-        case .running:
-            return "Each dot is a frame finding its place."
-        case .dryRunFinished:
-            return "Preview is ready. Start the transfer when the plan looks right."
-        case .finished:
-            return "Every frame is home."
-        case .nothingToCopy:
-            return "The destination already has everything it needs."
-        case .failed:
-            return "The run stopped early. Review issues to continue."
-        case .cancelled:
-            return "Run cancelled. Start again when ready."
-        case .preflighting:
-            return "Preparing the run."
-        case .idle:
-            return "Run something to see frames appear here."
-        }
     }
 
     private var accessibilityValue: String {

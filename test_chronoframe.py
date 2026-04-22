@@ -14,6 +14,7 @@ import os
 import sys
 import json
 import csv
+import re
 import sqlite3
 import time
 import runpy
@@ -2521,23 +2522,35 @@ class TestParallelClassification(TempDirMixin, unittest.TestCase):
 # ════════════════════════════════════════════════════════════════════════════
 
 class TestSeqOverflowWarning(TempDirMixin, unittest.TestCase):
+    """Per-day sequence width is uniform across new files in a single run.
+
+    A greenfield day with >999 files gets uniform-width names (e.g. 4-digit
+    `_0001`..`_1500`) and an info-level log line — not a yellow warning. A
+    re-run that pushes a previously-stable day past a width boundary keeps
+    the warning, because existing files retain their narrower names and the
+    folder will sort in two groups in Finder.
+    """
+
+    @staticmethod
+    def _read_dry_run_dest_paths(dst):
+        log_dir = os.path.join(dst, ".organize_logs")
+        reports = sorted(f for f in os.listdir(log_dir) if f.startswith("dry_run_report_"))
+        with open(os.path.join(log_dir, reports[-1]), newline='') as f:
+            reader = csv.DictReader(f)
+            return [row["Destination"] for row in reader]
 
     @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
-    def test_overflow_warning_logged(self, _):
-        """When a date has >999 new files, a warning is written to the run log.
-
-        Uses 1001 tiny files so the hashing phase stays fast.
-        """
+    def test_greenfield_overflow_uses_uniform_width(self, _):
+        """1001 same-day files on a fresh dest → all 4-digit, no warning."""
         from chronoframe.core import main
         src = os.path.join(self.tmpdir, "source")
         dst = os.path.join(self.tmpdir, "dest")
         os.makedirs(src)
         os.makedirs(dst)
 
-        # 1001 unique single-byte files on the same date → seq 1000 triggers overflow
         for i in range(1001):
-            with open(os.path.join(src, f"IMG_20230101_{i:06d}.jpg"), 'wb') as f:
-                f.write(bytes([i % 256]) + str(i).encode())
+            with open(os.path.join(src, f"IMG_{i:06d}.jpg"), 'wb') as f:
+                f.write(b"src_" + str(i).encode())
 
         with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
             main()
@@ -2545,7 +2558,100 @@ class TestSeqOverflowWarning(TempDirMixin, unittest.TestCase):
         log_path = os.path.join(dst, ".organize_log.txt")
         with open(log_path) as f:
             log_content = f.read()
-        self.assertIn("overflow", log_content.lower())
+
+        # No yellow warning, no "mismatch" / "overflow" language.
+        self.assertNotIn("WARNING", log_content)
+        self.assertNotIn("mismatch", log_content.lower())
+        self.assertNotIn("overflow", log_content.lower())
+        # An info-level line was emitted naming the new width.
+        self.assertIn("4-digit sequence numbers", log_content)
+
+        dest_paths = self._read_dry_run_dest_paths(dst)
+        self.assertEqual(len(dest_paths), 1001)
+        # Every filename uses 4-digit zero padding; sequences span 1..1001.
+        seqs = []
+        for path in dest_paths:
+            fname = os.path.basename(path)
+            m = re.match(r'^\d{4}-\d{2}-\d{2}_(\d+)\.jpg$', fname)
+            self.assertIsNotNone(m, f"Unexpected filename: {fname}")
+            seq_str = m.group(1)
+            self.assertEqual(len(seq_str), 4, f"Width should be 4: {fname}")
+            seqs.append(int(seq_str))
+        self.assertEqual(sorted(seqs), list(range(1, 1002)))
+
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
+    def test_cross_boundary_overflow_warns(self, _):
+        """800 existing 3-digit dest files + 300 new → warning + 4-digit new names."""
+        from chronoframe.core import main
+        src = os.path.join(self.tmpdir, "source")
+        dst = os.path.join(self.tmpdir, "dest")
+        os.makedirs(src)
+        os.makedirs(dst)
+
+        today = datetime.now().strftime('%Y-%m-%d')
+        yyyy, mm, dd = today.split('-')
+        existing_dir = os.path.join(dst, yyyy, mm, dd)
+        os.makedirs(existing_dir)
+        for i in range(1, 801):
+            fname = f"{today}_{i:03d}.jpg"
+            with open(os.path.join(existing_dir, fname), 'wb') as f:
+                f.write(b"dst_" + str(i).encode())
+
+        for i in range(300):
+            with open(os.path.join(src, f"IMG_{i:06d}.jpg"), 'wb') as f:
+                f.write(b"src_" + str(i).encode())
+
+        with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
+            main()
+
+        log_path = os.path.join(dst, ".organize_log.txt")
+        with open(log_path) as f:
+            log_content = f.read()
+        self.assertIn("WARNING", log_content)
+        self.assertIn("mismatch", log_content.lower())
+        self.assertIn("3-digit", log_content)
+        self.assertIn("4-digit", log_content)
+
+        dest_paths = self._read_dry_run_dest_paths(dst)
+        self.assertEqual(len(dest_paths), 300)
+        for path in dest_paths:
+            fname = os.path.basename(path)
+            m = re.match(r'^\d{4}-\d{2}-\d{2}_(\d+)\.jpg$', fname)
+            self.assertIsNotNone(m)
+            self.assertEqual(len(m.group(1)), 4, f"New file should be 4-digit: {fname}")
+            self.assertGreaterEqual(int(m.group(1)), 801)
+
+    @patch('chronoframe.core._find_profiles_yaml', return_value='/nonexistent/profiles.yaml')
+    def test_within_width_run_no_warning(self, _):
+        """500 existing + 200 new (total 700, still 3-digit) → no warning."""
+        from chronoframe.core import main
+        src = os.path.join(self.tmpdir, "source")
+        dst = os.path.join(self.tmpdir, "dest")
+        os.makedirs(src)
+        os.makedirs(dst)
+
+        today = datetime.now().strftime('%Y-%m-%d')
+        yyyy, mm, dd = today.split('-')
+        existing_dir = os.path.join(dst, yyyy, mm, dd)
+        os.makedirs(existing_dir)
+        for i in range(1, 501):
+            fname = f"{today}_{i:03d}.jpg"
+            with open(os.path.join(existing_dir, fname), 'wb') as f:
+                f.write(b"dst_" + str(i).encode())
+
+        for i in range(200):
+            with open(os.path.join(src, f"IMG_{i:06d}.jpg"), 'wb') as f:
+                f.write(b"src_" + str(i).encode())
+
+        with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
+            main()
+
+        log_path = os.path.join(dst, ".organize_log.txt")
+        with open(log_path) as f:
+            log_content = f.read()
+        self.assertNotIn("WARNING", log_content)
+        self.assertNotIn("mismatch", log_content.lower())
+        self.assertNotIn("overflow", log_content.lower())
 
     def test_format_seq_at_limit(self):
         self.assertEqual(_format_seq(999), "999")

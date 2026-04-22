@@ -1,12 +1,16 @@
 #if canImport(ChronoframeAppCore)
 import ChronoframeAppCore
 #endif
+import AppKit
 import SwiftUI
+
+let HelpWindowID = "chronoframe.help"
 
 struct AppCommands: Commands {
     let appState: AppState
     @ObservedObject private var setupStore: SetupStore
     @ObservedObject private var runSessionStore: RunSessionStore
+    @Environment(\.openWindow) private var openWindow
 
     init(appState: AppState) {
         self.appState = appState
@@ -60,6 +64,42 @@ struct AppCommands: Commands {
                 appState.openSettingsWindow()
             }
             .keyboardShortcut(",", modifiers: [.command])
+        }
+
+        CommandGroup(replacing: .appInfo) {
+            Button("About Chronoframe") {
+                openWindow(id: HelpWindowID)
+            }
+        }
+
+        CommandGroup(replacing: .help) {
+            Button("Chronoframe Help") {
+                openWindow(id: HelpWindowID)
+            }
+            .keyboardShortcut("?", modifiers: [.command])
+
+            Button("Keyboard Shortcuts") {
+                openWindow(id: HelpWindowID)
+            }
+
+            Divider()
+
+            Button("Reveal Profiles File…") {
+                let url = RuntimePaths.profilesFileURL()
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+
+            Button("Reveal App Support Folder…") {
+                let url = RuntimePaths.applicationSupportDirectory()
+                try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+
+            Divider()
+
+            Button("Acknowledgments") {
+                openWindow(id: HelpWindowID)
+            }
         }
     }
 

@@ -72,6 +72,7 @@
 		AA000000000000000000023F /* RunTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000145 /* RunTimelineView.swift */; };
 		AA0000000000000000000240 /* NowCopyingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000146 /* NowCopyingCard.swift */; };
 		AA0000000000000000000247 /* OnboardingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000147 /* OnboardingCard.swift */; };
+		AA0000000000000000000248 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000148 /* HelpView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -157,6 +158,7 @@
 		AA0000000000000000000145 /* RunTimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunTimelineView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000146 /* NowCopyingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowCopyingCard.swift; sourceTree = "<group>"; };
 		AA0000000000000000000147 /* OnboardingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingCard.swift; sourceTree = "<group>"; };
+		AA0000000000000000000148 /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000181 /* Chronoframe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Chronoframe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000182 /* ChronoframeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000183 /* ChronoframeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -254,10 +256,19 @@
 				AA000000000000000000010A /* SharedViews.swift */,
 				AA000000000000000000010B /* SidebarView.swift */,
 				AA0000000000000000000023 /* Components */,
+				AA0000000000000000000024 /* Help */,
 				AA0000000000000000000022 /* Setup */,
 				AA0000000000000000000021 /* Run */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000024 /* Help */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000148 /* HelpView.swift */,
+			);
+			path = Help;
 			sourceTree = "<group>";
 		};
 		AA0000000000000000000023 /* Components */ = {
@@ -624,6 +635,7 @@
 				AA000000000000000000023F /* RunTimelineView.swift in Sources */,
 				AA0000000000000000000240 /* NowCopyingCard.swift in Sources */,
 				AA0000000000000000000247 /* OnboardingCard.swift in Sources */,
+				AA0000000000000000000248 /* HelpView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

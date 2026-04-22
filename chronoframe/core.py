@@ -556,16 +556,32 @@ def main():
             console.print(f"[yellow]{hash_errors} files could not be hashed (skipped)[/yellow]")
 
         # ── Build copy plan ─────────────────────────────────────────────────
-        seq_overflow_dates = []
+        # Per-day sequence width is decided up front from the maximum seq the
+        # day will reach after this run. This keeps every new filename inside a
+        # given day at the same width, so Finder's lexical sort matches
+        # chronological order. Days that already exist on disk with a narrower
+        # width (a re-run that crosses a 9/99/999 boundary) get a warning,
+        # because their existing files keep the old width and the day will
+        # sort in two groups. Greenfield days that simply happen to contain
+        # >999 files get an informational log line — not a yellow warning.
+        seq_width_warnings = []  # (date_str, existing_width, new_width)
+        seq_widened_info = []    # (date_str, count, new_width)
         jobs_to_insert = []
         for date_str in sorted(date_groups.keys()):
+            group = date_groups[date_str]
             start_seq = dest_seq.get(date_str, 0) + 1
-            for i, (src_path, h) in enumerate(date_groups[date_str]):
+            end_seq = start_seq + len(group) - 1
+            day_width = max(SEQ_WIDTH, len(str(end_seq)))
+            existing_max = dest_seq.get(date_str, 0)
+            existing_width = max(SEQ_WIDTH, len(str(existing_max))) if existing_max > 0 else None
+            if existing_width is not None and day_width > existing_width:
+                seq_width_warnings.append((date_str, existing_width, day_width))
+            elif existing_max == 0 and day_width > SEQ_WIDTH:
+                seq_widened_info.append((date_str, len(group), day_width))
+            for i, (src_path, h) in enumerate(group):
                 seq = start_seq + i
-                if seq > (10 ** SEQ_WIDTH) - 1 and date_str not in seq_overflow_dates:
-                    seq_overflow_dates.append(date_str)
                 ext = os.path.splitext(src_path)[1]
-                seq_str = _format_seq(seq)
+                seq_str = str(seq).zfill(day_width)
                 if date_str == 'Unknown_Date':
                     filename = f"Unknown_{seq_str}{ext}"
                     dst_path = os.path.join(dst, "Unknown_Date", filename)
@@ -582,34 +598,56 @@ def main():
                         dst_path = os.path.join(dst, filename)
                 jobs_to_insert.append((src_path, dst_path, h, 'PENDING'))
 
-        if seq_overflow_dates:
-            msg = f"Sequence overflow on dates (>{10**SEQ_WIDTH - 1} files/day): {', '.join(seq_overflow_dates)}"
+        for date_str, count, new_width in seq_widened_info:
+            msg = f"Day {date_str}: {count:,} files — using {new_width}-digit sequence numbers."
+            run_log.log(msg)
+            emit_json("info", message=msg)
+
+        if seq_width_warnings:
+            details = ", ".join(
+                f"{d} (existing {ew}-digit, new {nw}-digit)"
+                for d, ew, nw in seq_width_warnings
+            )
+            msg = (
+                f"Sequence width mismatch on dates: {details}. "
+                "Existing files keep their old width; new files use the wider "
+                "format and will sort separately in Finder."
+            )
             run_log.warn(msg)
             emit_json("warning", message=msg)
             console.print(f"[yellow]WARNING: {msg}[/yellow]")
 
+        dup_groups = defaultdict(list)
         for src_path, h in src_dups:
             dt = get_file_date(src_path)
             date_str = dt.strftime('%Y-%m-%d') if (dt and dt.year > 1971) else "Unknown_Date"
+            dup_groups[date_str].append((src_path, h))
+
+        for date_str in sorted(dup_groups.keys()):
+            group = dup_groups[date_str]
             start_seq = dup_seq.get(date_str, 0) + 1
-            dup_seq[date_str] += 1
-            ext = os.path.splitext(src_path)[1]
-            seq_str = _format_seq(start_seq)
-            if date_str == 'Unknown_Date':
-                filename = f"Unknown_{seq_str}{ext}"
-                dst_path = os.path.join(dup, "Unknown_Date", filename)
-            else:
-                yyyy, mm, dd = date_str.split('-')
-                filename = f"{date_str}_{seq_str}{ext}"
-                if args.folder_structure == "YYYY/MM/DD":
-                    dst_path = os.path.join(dup, yyyy, mm, dd, filename)
-                elif args.folder_structure == "YYYY/MM":
-                    dst_path = os.path.join(dup, yyyy, mm, filename)
-                elif args.folder_structure == "YYYY":
-                    dst_path = os.path.join(dup, yyyy, filename)
-                else:  # Flat
-                    dst_path = os.path.join(dup, filename)
-            jobs_to_insert.append((src_path, dst_path, h, 'PENDING'))
+            end_seq = start_seq + len(group) - 1
+            day_width = max(SEQ_WIDTH, len(str(end_seq)))
+            for i, (src_path, h) in enumerate(group):
+                seq = start_seq + i
+                ext = os.path.splitext(src_path)[1]
+                seq_str = str(seq).zfill(day_width)
+                if date_str == 'Unknown_Date':
+                    filename = f"Unknown_{seq_str}{ext}"
+                    dst_path = os.path.join(dup, "Unknown_Date", filename)
+                else:
+                    yyyy, mm, dd = date_str.split('-')
+                    filename = f"{date_str}_{seq_str}{ext}"
+                    if args.folder_structure == "YYYY/MM/DD":
+                        dst_path = os.path.join(dup, yyyy, mm, dd, filename)
+                    elif args.folder_structure == "YYYY/MM":
+                        dst_path = os.path.join(dup, yyyy, mm, filename)
+                    elif args.folder_structure == "YYYY":
+                        dst_path = os.path.join(dup, yyyy, filename)
+                    else:  # Flat
+                        dst_path = os.path.join(dup, filename)
+                jobs_to_insert.append((src_path, dst_path, h, 'PENDING'))
+            dup_seq[date_str] = end_seq
 
         emit_json("copy_plan_ready", count=len(jobs_to_insert))
 

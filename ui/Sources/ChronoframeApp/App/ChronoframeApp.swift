@@ -46,5 +46,10 @@ struct ChronoframeApp: App {
                 )
                 .padding()
         }
+
+        Window("Chronoframe Help", id: HelpWindowID) {
+            HelpView()
+        }
+        .windowResizability(.contentMinSize)
     }
 }
