@@ -17,11 +17,11 @@ final class ChronoframeUITests: XCTestCase {
         await MainActor.run {
             let app = Self.launchApp(.setupReady)
 
-            XCTAssertTrue(app.staticTexts["Set Up Your Library"].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.staticTexts["Preview First, Transfer When Confident"].exists)
+            XCTAssertTrue(app.staticTexts["Profiles for Repeatable Runs"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.buttons["previewButton"].exists)
-            XCTAssertTrue(app.staticTexts["1. Choose Your Source"].exists)
-            XCTAssertTrue(app.staticTexts["2. Choose Your Destination"].exists)
+            XCTAssertTrue(app.staticTexts["1. Source"].exists)
+            XCTAssertTrue(app.staticTexts["2. Destination"].exists)
+            XCTAssertTrue(app.staticTexts["Run"].exists)
         }
     }
 
@@ -41,10 +41,11 @@ final class ChronoframeUITests: XCTestCase {
         await MainActor.run {
             let app = Self.launchApp(.historyPopulated)
 
-            XCTAssertTrue(app.staticTexts["Inspect Reports, Receipts, and Logs"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts["Reusable Sources"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.searchFields.firstMatch.exists)
             XCTAssertTrue(app.descendants(matching: .any)["historyFilterControl"].exists)
             XCTAssertTrue(app.buttons["useHistoricalSourceButton"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts["Artifacts"].exists)
             XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Open")).firstMatch.exists)
         }
     }
@@ -53,11 +54,12 @@ final class ChronoframeUITests: XCTestCase {
         await MainActor.run {
             let app = Self.launchApp(.profilesPopulated)
 
-            XCTAssertTrue(app.staticTexts["Reuse the Same Library Configuration"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts["Save Current Paths"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.descendants(matching: .any)["profileName-Meridian Travel"].exists)
             XCTAssertTrue(app.descendants(matching: .any)["activeProfileBadge"].exists)
-            XCTAssertTrue(app.buttons["Use"].exists)
-            XCTAssertTrue(app.buttons["Save Current Paths"].exists)
+            XCTAssertTrue(app.buttons["Open in Setup"].exists)
+            XCTAssertTrue(app.staticTexts["Saved Profiles"].exists)
+            XCTAssertTrue(app.buttons["Save"].exists)
         }
     }
 
@@ -65,10 +67,11 @@ final class ChronoframeUITests: XCTestCase {
         await MainActor.run {
             let app = Self.launchApp(.settingsSections)
 
-            XCTAssertTrue(app.staticTexts["Performance"].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.staticTexts["Safety"].exists)
-            Self.revealDiagnosticsSection(in: app)
-            XCTAssertTrue(app.staticTexts["In-Memory Log Buffer"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.windows["com_apple_SwiftUI_Settings_window"].waitForExistence(timeout: 5))
+            Self.selectSettingsTab(named: "Performance", in: app)
+            XCTAssertTrue(app.staticTexts["Safety"].waitForExistence(timeout: 5))
+            Self.selectSettingsTab(named: "Diagnostics", in: app)
+            XCTAssertTrue(app.descendants(matching: .any)["diagnosticsLogBufferStepper"].waitForExistence(timeout: 5))
         }
     }
 
@@ -98,24 +101,50 @@ final class ChronoframeUITests: XCTestCase {
 
     @MainActor
     private static func ensureSettingsWindowExists(in app: XCUIApplication) {
-        if app.staticTexts["Performance"].waitForExistence(timeout: 2) {
+        if app.windows["com_apple_SwiftUI_Settings_window"].waitForExistence(timeout: 2) {
             return
         }
 
         app.typeKey(",", modifierFlags: .command)
-        _ = app.staticTexts["Performance"].waitForExistence(timeout: 5)
+        _ = app.windows["com_apple_SwiftUI_Settings_window"].waitForExistence(timeout: 5)
     }
 
     @MainActor
-    private static func revealDiagnosticsSection(in app: XCUIApplication) {
-        guard !app.staticTexts["In-Memory Log Buffer"].exists else { return }
-
-        app.typeKey(.pageDown, modifierFlags: [])
-        if app.staticTexts["In-Memory Log Buffer"].waitForExistence(timeout: 2) {
+    private static func selectSettingsTab(named title: String, in app: XCUIApplication) {
+        let tab = matchingElement(named: title, in: app, type: .tab)
+        if tab.waitForExistence(timeout: 1) {
+            tab.click()
             return
         }
 
-        app.typeKey(.pageDown, modifierFlags: [])
-        _ = app.staticTexts["In-Memory Log Buffer"].waitForExistence(timeout: 2)
+        let radioButton = matchingElement(named: title, in: app, type: .radioButton)
+        if radioButton.waitForExistence(timeout: 1) {
+            radioButton.click()
+            return
+        }
+
+        let button = matchingElement(named: title, in: app, type: .button)
+        if button.waitForExistence(timeout: 1) {
+            button.click()
+            return
+        }
+
+        let staticText = matchingElement(named: title, in: app, type: .staticText)
+        if staticText.waitForExistence(timeout: 1) {
+            staticText.click()
+            return
+        }
+
+        XCTFail("Could not find settings tab named \(title)")
+    }
+
+    @MainActor
+    private static func matchingElement(
+        named title: String,
+        in app: XCUIApplication,
+        type: XCUIElement.ElementType
+    ) -> XCUIElement {
+        let predicate = NSPredicate(format: "label == %@", title)
+        return app.descendants(matching: type).matching(predicate).firstMatch
     }
 }

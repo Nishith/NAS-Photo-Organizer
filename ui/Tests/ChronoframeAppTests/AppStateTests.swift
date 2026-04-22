@@ -7,6 +7,54 @@ import XCTest
 
 final class AppStateTests: XCTestCase {
     @MainActor
+    func testUITestScenarioParsesEnvironmentAndMarksSettingsLaunches() {
+        XCTAssertEqual(
+            UITestScenario.current(environment: ["CHRONOFRAME_UI_TEST_SCENARIO": "historyPopulated"]),
+            .historyPopulated
+        )
+        XCTAssertNil(UITestScenario.current(environment: [:]))
+        XCTAssertNil(UITestScenario.current(environment: ["CHRONOFRAME_UI_TEST_SCENARIO": "unknown"]))
+        XCTAssertTrue(UITestScenario.settingsSections.opensSettingsOnLaunch)
+        XCTAssertFalse(UITestScenario.setupReady.opensSettingsOnLaunch)
+    }
+
+    @MainActor
+    func testUITestAppStateFactorySeedsHistoryAndProfilesScenarios() {
+        let historyState = UITestAppStateFactory.make(scenario: .historyPopulated)
+
+        XCTAssertEqual(historyState.selection, .history)
+        XCTAssertEqual(historyState.historyStore.destinationRoot, "/Volumes/Archive/Chronoframe Library")
+        XCTAssertEqual(historyState.historyStore.entries.map(\.title), ["Dry Run Report", "Transfer Receipt", "Run Log"])
+        XCTAssertEqual(historyState.historyStore.transferredSources.count, 1)
+        XCTAssertEqual(historyState.historyStore.transferredSources.first?.sourcePath, "/Volumes/Card/April Session")
+
+        let profilesState = UITestAppStateFactory.make(scenario: .profilesPopulated)
+
+        XCTAssertEqual(profilesState.selection, .profiles)
+        XCTAssertTrue(profilesState.setupStore.usingProfile)
+        XCTAssertEqual(profilesState.setupStore.selectedProfileName, "Meridian Travel")
+        XCTAssertEqual(profilesState.setupStore.newProfileName, "Weekend Archive")
+        XCTAssertEqual(profilesState.setupStore.profiles.map(\.name), ["Meridian Travel", "Studio Imports"])
+    }
+
+    @MainActor
+    func testUITestAppStateFactoryStartsPreviewForRunScenario() async {
+        let appState = UITestAppStateFactory.make(scenario: .runPreviewReview)
+
+        let finished = await waitForCondition(timeoutNanoseconds: 2_000_000_000) {
+            appState.runSessionStore.summary?.status == .dryRunFinished
+        }
+
+        XCTAssertTrue(finished)
+        XCTAssertEqual(appState.selection, .run)
+        XCTAssertEqual(appState.runSessionStore.summary?.metrics.plannedCount, 42)
+        XCTAssertEqual(
+            appState.runSessionStore.summary?.artifacts.reportPath,
+            "/Volumes/Archive/Chronoframe Library/.organize_logs/dry_run_report.csv"
+        )
+    }
+
+    @MainActor
     func testBootstrapRestoresManualBookmarksAndRefreshesHistory() {
         let harness = AppStateHarness()
         harness.preferencesStore.storeBookmark(

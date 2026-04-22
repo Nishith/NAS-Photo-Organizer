@@ -2608,9 +2608,8 @@ class TestSeqOverflowWarning(TempDirMixin, unittest.TestCase):
         with open(log_path) as f:
             log_content = f.read()
         self.assertIn("WARNING", log_content)
-        self.assertIn("mismatch", log_content.lower())
-        self.assertIn("3-digit", log_content)
-        self.assertIn("4-digit", log_content)
+        self.assertIn("sequence overflow on dates", log_content.lower())
+        self.assertIn(today, log_content)
 
         dest_paths = self._read_dry_run_dest_paths(dst)
         self.assertEqual(len(dest_paths), 300)

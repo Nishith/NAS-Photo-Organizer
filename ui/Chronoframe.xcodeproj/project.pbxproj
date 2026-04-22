@@ -73,6 +73,7 @@
 		AA0000000000000000000240 /* NowCopyingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000146 /* NowCopyingCard.swift */; };
 		AA0000000000000000000247 /* OnboardingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000147 /* OnboardingCard.swift */; };
 		AA0000000000000000000248 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000148 /* HelpView.swift */; };
+		AA0000000000000000000249 /* AboutPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000149 /* AboutPanel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -159,6 +160,7 @@
 		AA0000000000000000000146 /* NowCopyingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowCopyingCard.swift; sourceTree = "<group>"; };
 		AA0000000000000000000147 /* OnboardingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingCard.swift; sourceTree = "<group>"; };
 		AA0000000000000000000148 /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000149 /* AboutPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPanel.swift; sourceTree = "<group>"; };
 		AA0000000000000000000181 /* Chronoframe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Chronoframe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000182 /* ChronoframeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000183 /* ChronoframeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -235,6 +237,7 @@
 		AA0000000000000000000012 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				AA0000000000000000000149 /* AboutPanel.swift */,
 				AA0000000000000000000101 /* AppCommands.swift */,
 				AA0000000000000000000102 /* AppState.swift */,
 				AA0000000000000000000103 /* ChronoframeApp.swift */,
@@ -628,6 +631,7 @@
 				AA000000000000000000021A /* RunModels.swift in Sources */,
 				AA000000000000000000022B /* TransferExecutor.swift in Sources */,
 				AA000000000000000000022C /* DesignTokens.swift in Sources */,
+				AA0000000000000000000249 /* AboutPanel.swift in Sources */,
 				AA000000000000000000023B /* Motion.swift in Sources */,
 				AA000000000000000000023C /* PathControl.swift in Sources */,
 				AA000000000000000000023D /* ContactSheetView.swift in Sources */,

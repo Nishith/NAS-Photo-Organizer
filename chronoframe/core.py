@@ -636,14 +636,10 @@ def main():
             emit_json("info", message=msg)
 
         if seq_width_warnings:
-            details = ", ".join(
-                f"{d} (existing {ew}-digit, new {nw}-digit)"
-                for d, ew, nw in seq_width_warnings
-            )
+            warned_dates = ", ".join(date_str for date_str, _, _ in seq_width_warnings)
             msg = (
-                f"Sequence width mismatch on dates: {details}. "
-                "Existing files keep their old width; new files use the wider "
-                "format and will sort separately in Finder."
+                f"Sequence overflow on dates (>{(10 ** SEQ_WIDTH) - 1} files/day): "
+                f"{warned_dates}"
             )
             run_log.warn(msg)
             emit_json("warning", message=msg)
