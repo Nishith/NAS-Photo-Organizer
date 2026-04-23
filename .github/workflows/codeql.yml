@@ -1,0 +1,42 @@
+name: CodeQL
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "0 0 * * 1"
+
+jobs:
+  analyze-python:
+    name: Analyze (Python)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
+
+  analyze-swift:
+    name: Analyze (Swift)
+    runs-on: macos-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: swift
+      - name: Build Swift package
+        run: swift build
+        working-directory: ui
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:swift"
