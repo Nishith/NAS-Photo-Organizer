@@ -7,6 +7,8 @@ import UniformTypeIdentifiers
 struct SetupHeroSection: View {
     let model: SetupScreenModel
     let primaryAction: () -> Void
+    let scrollToSource: () -> Void
+    let scrollToDestination: () -> Void
 
     var body: some View {
         DetailHeroCard(
@@ -19,8 +21,8 @@ struct SetupHeroSection: View {
             usesBrandMark: true
         ) {
             VStack(alignment: .leading, spacing: 12) {
-                SummaryLine(title: "Source", value: model.sourceSummaryValue, valueColor: model.sourceStepState.tone.color)
-                SummaryLine(title: "Destination", value: model.destinationSummaryValue, valueColor: model.destinationStepState.tone.color)
+                SummaryLine(title: "Source", value: model.sourceSummaryValue, valueColor: model.sourceStepState.tone.color, onTap: scrollToSource)
+                SummaryLine(title: "Destination", value: model.destinationSummaryValue, valueColor: model.destinationStepState.tone.color, onTap: scrollToDestination)
                 SummaryLine(title: "Mode", value: model.modeSummaryValue)
                 SummaryLine(title: "Next", value: model.nextStepSummary, valueColor: model.heroTone.color)
             }

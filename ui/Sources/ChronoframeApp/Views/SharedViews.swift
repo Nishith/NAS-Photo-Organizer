@@ -373,11 +373,13 @@ struct SummaryLine: View {
     let title: String
     let value: String
     let valueColor: SwiftUI.Color?
+    let onTap: (() -> Void)?
 
-    init(title: String, value: String, valueColor: SwiftUI.Color? = nil) {
+    init(title: String, value: String, valueColor: SwiftUI.Color? = nil, onTap: (() -> Void)? = nil) {
         self.title = title
         self.value = value
         self.valueColor = valueColor
+        self.onTap = onTap
     }
 
     var body: some View {
@@ -388,11 +390,22 @@ struct SummaryLine: View {
 
             Spacer(minLength: 12)
 
-            Text(value)
-                .font(DesignTokens.Typography.body)
-                .foregroundStyle(valueColor ?? DesignTokens.ColorSystem.inkPrimary)
-                .multilineTextAlignment(.trailing)
-                .monospacedDigit()
+            if let onTap {
+                Button(action: onTap) {
+                    Text(value)
+                        .font(DesignTokens.Typography.body)
+                        .foregroundStyle(valueColor ?? DesignTokens.ColorSystem.inkPrimary)
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text(value)
+                    .font(DesignTokens.Typography.body)
+                    .foregroundStyle(valueColor ?? DesignTokens.ColorSystem.inkPrimary)
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+            }
         }
     }
 }

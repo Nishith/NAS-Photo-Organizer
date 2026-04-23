@@ -28,15 +28,40 @@ struct SetupView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.sectionSpacing) {
-                SetupHeroSection(model: screenModel, primaryAction: performHeroPrimaryAction)
+                SetupHeroSection(
+                    model: screenModel,
+                    primaryAction: performHeroPrimaryAction,
+                    scrollToSource: {
+                        withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo("sourceSection", anchor: .top) }
+                    },
+                    scrollToDestination: {
+                        withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo("destinationSection", anchor: .top) }
+                    }
+                )
 
                 if !didOnboard && setupStore.sourcePath.isEmpty {
                     OnboardingCard(onDismiss: { didOnboard = true })
                 }
 
-                SetupContactSheetSection(sourcePath: setupStore.sourcePath)
+                SetupSourceStepSection(
+                    model: screenModel,
+                    dropZone: dropZone,
+                    chooseSource: { Task { await appState.chooseSourceFolder() } }
+                )
+                .id("sourceSection")
+
+                SetupDestinationStepSection(
+                    model: screenModel,
+                    chooseDestination: { Task { await appState.chooseDestinationFolder() } }
+                )
+                .id("destinationSection")
+
+                if !setupStore.sourcePath.isEmpty {
+                    SetupContactSheetSection(sourcePath: setupStore.sourcePath)
+                }
 
                 SetupSavedSetupSection(
                     model: screenModel,
@@ -45,17 +70,6 @@ struct SetupView: View {
                     clearSelectedProfile: appState.clearSelectedProfile,
                     openProfiles: { appState.selection = .profiles },
                     onProfileSelection: handleProfileSelection(_:)
-                )
-
-                SetupSourceStepSection(
-                    model: screenModel,
-                    dropZone: dropZone,
-                    chooseSource: { Task { await appState.chooseSourceFolder() } }
-                )
-
-                SetupDestinationStepSection(
-                    model: screenModel,
-                    chooseDestination: { Task { await appState.chooseDestinationFolder() } }
                 )
 
                 SetupReadinessSection(
@@ -69,6 +83,7 @@ struct SetupView: View {
             .padding(DesignTokens.Layout.contentPadding)
             .frame(maxWidth: DesignTokens.Layout.setupMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
         }
         .darkroom()
         .navigationTitle("Setup")

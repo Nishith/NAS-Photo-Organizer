@@ -8,6 +8,7 @@ struct SidebarView: View {
     @ObservedObject private var setupStore: SetupStore
     @ObservedObject private var historyStore: HistoryStore
     @ObservedObject private var runSessionStore: RunSessionStore
+    @AppStorage("lastSeenHistoryCount") private var lastSeenHistoryCount: Int = 0
 
     init(appState: AppState) {
         self.appState = appState
@@ -42,6 +43,11 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .navigationTitle("Chronoframe")
+        .onChange(of: appState.selection) { selection in
+            if selection == .history {
+                lastSeenHistoryCount = historyStore.entries.count
+            }
+        }
     }
 
     private func iconTint(for destination: SidebarDestination) -> SwiftUI.Color {
@@ -64,7 +70,7 @@ struct SidebarView: View {
         case .run:
             return runSessionStore.status == .failed || runSessionStore.status == .dryRunFinished
         case .history:
-            return !historyStore.entries.isEmpty
+            return historyStore.entries.count > lastSeenHistoryCount
         case .profiles:
             return setupStore.usingProfile
         }
