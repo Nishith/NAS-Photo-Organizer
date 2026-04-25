@@ -44,7 +44,7 @@ struct ProfilesView: View {
             Spacer(minLength: DesignTokens.Spacing.md)
 
             Button("Return to Setup") {
-                appState.selection = .setup
+                appState.navigate(to: .organize(.setup))
             }
             .buttonStyle(.borderedProminent)
         }
@@ -152,7 +152,7 @@ struct ProfilesView: View {
                             isActive: profile.name == setupStore.selectedProfileName && setupStore.usingProfile,
                             onUse: {
                                 appState.useProfile(named: profile.name)
-                                appState.selection = .setup
+                                appState.navigate(to: .organize(.setup))
                             },
                             onOverwrite: { appState.overwriteProfile(named: profile.name) },
                             onDelete: { appState.deleteProfile(named: profile.name) }

@@ -30,7 +30,7 @@ struct SidebarView: View {
 
                 Spacer()
 
-                if destination == .run && runSessionStore.isRunning {
+                if destination == .organize && runSessionStore.isRunning {
                     ProgressView()
                         .controlSize(.small)
                 } else if showsStatusDot(for: destination) {
@@ -43,34 +43,45 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .navigationTitle("Chronoframe")
+        .onChange(of: appState.organizeSubSelection) { sub in
+            if appState.selection == .organize && sub == .history {
+                lastSeenHistoryCount = historyStore.entries.count
+            }
+        }
         .onChange(of: appState.selection) { selection in
-            if selection == .history {
+            if selection == .organize && appState.organizeSubSelection == .history {
                 lastSeenHistoryCount = historyStore.entries.count
             }
         }
     }
 
     private func iconTint(for destination: SidebarDestination) -> SwiftUI.Color {
-        if destination == .run && runSessionStore.isRunning {
-            return DesignTokens.ColorSystem.accentAction
+        switch destination {
+        case .organize:
+            if runSessionStore.isRunning {
+                return DesignTokens.ColorSystem.accentAction
+            }
+            if runSessionStore.status == .failed {
+                return DesignTokens.ColorSystem.statusDanger
+            }
+            if appState.canStartRun {
+                return DesignTokens.ColorSystem.statusSuccess
+            }
+            return DesignTokens.ColorSystem.inkSecondary
+        case .deduplicate, .profiles:
+            return DesignTokens.ColorSystem.inkSecondary
         }
-        if destination == .setup && appState.canStartRun {
-            return DesignTokens.ColorSystem.statusSuccess
-        }
-        if destination == .run && runSessionStore.status == .failed {
-            return DesignTokens.ColorSystem.statusDanger
-        }
-        return DesignTokens.ColorSystem.inkSecondary
     }
 
     private func showsStatusDot(for destination: SidebarDestination) -> Bool {
         switch destination {
-        case .setup:
-            return appState.canStartRun
-        case .run:
-            return runSessionStore.status == .failed || runSessionStore.status == .dryRunFinished
-        case .history:
-            return historyStore.entries.count > lastSeenHistoryCount
+        case .organize:
+            return runSessionStore.status == .failed
+                || runSessionStore.status == .dryRunFinished
+                || historyStore.entries.count > lastSeenHistoryCount
+                || appState.canStartRun
+        case .deduplicate:
+            return false
         case .profiles:
             return setupStore.usingProfile
         }
@@ -78,12 +89,19 @@ struct SidebarView: View {
 
     private func statusDotTint(for destination: SidebarDestination) -> SwiftUI.Color {
         switch destination {
-        case .setup:
+        case .organize:
+            if runSessionStore.status == .failed {
+                return DesignTokens.ColorSystem.statusDanger
+            }
+            if runSessionStore.status == .dryRunFinished {
+                return DesignTokens.ColorSystem.accentAction
+            }
+            if historyStore.entries.count > lastSeenHistoryCount {
+                return DesignTokens.ColorSystem.statusActive
+            }
             return DesignTokens.ColorSystem.statusSuccess
-        case .run:
-            return runSessionStore.status == .failed ? DesignTokens.ColorSystem.statusDanger : DesignTokens.ColorSystem.accentAction
-        case .history:
-            return DesignTokens.ColorSystem.statusActive
+        case .deduplicate:
+            return DesignTokens.ColorSystem.inkSecondary
         case .profiles:
             return DesignTokens.ColorSystem.accentWaypoint
         }

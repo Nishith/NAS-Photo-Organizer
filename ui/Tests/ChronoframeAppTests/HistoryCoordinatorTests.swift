@@ -9,14 +9,15 @@ final class HistoryCoordinatorTests: XCTestCase {
     @MainActor
     func testHistoryActionsOpenRevealReuseAndForgetRecords() {
         let harness = AppStateHarness()
-        var selection: SidebarDestination?
+        var route: AppRoute?
         let coordinator = HistoryCoordinator(
             preferencesStore: harness.preferencesStore,
             setupStore: harness.setupStore,
             historyStore: harness.historyStore,
             runSessionStore: harness.runSessionStore,
+            deduplicateSessionStore: harness.deduplicateSessionStore,
             finderService: harness.finderService,
-            setSelection: { selection = $0 }
+            navigate: { route = $0 }
         )
 
         let entry = RunHistoryEntry(
@@ -45,7 +46,7 @@ final class HistoryCoordinatorTests: XCTestCase {
             "/tmp/destination/.organize_log.txt",
             "/Volumes/Card",
         ])
-        XCTAssertEqual(selection, .setup)
+        XCTAssertEqual(route, .organize(.setup))
         XCTAssertEqual(harness.setupStore.sourcePath, "/Volumes/Card")
     }
 }

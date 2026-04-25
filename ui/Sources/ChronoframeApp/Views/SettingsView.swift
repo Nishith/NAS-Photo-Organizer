@@ -29,6 +29,11 @@ struct SettingsView: View {
                     Label("Performance", systemImage: "speedometer")
                 }
 
+            DeduplicateSettingsTab(preferencesStore: preferencesStore)
+                .tabItem {
+                    Label("Deduplicate", systemImage: "rectangle.on.rectangle.angled")
+                }
+
             DiagnosticsSettingsTab(appState: appState, preferencesStore: preferencesStore)
                 .tabItem {
                     Label("Diagnostics", systemImage: "stethoscope")
@@ -132,6 +137,80 @@ private struct PerformanceSettingsTab: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+private struct DeduplicateSettingsTab: View {
+    @ObservedObject var preferencesStore: PreferencesStore
+    @State private var pendingHardDeleteToggle = false
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Similarity", selection: $preferencesStore.dedupeSimilarityPreset) {
+                    ForEach(DedupeSimilarityPreset.allCases) { preset in
+                        Text(preset.title).tag(preset)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(preferencesStore.dedupeSimilarityPreset.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Stepper(value: $preferencesStore.dedupeTimeWindowSeconds, in: 5...600, step: 5) {
+                    LabeledContent("Time Window") {
+                        Text("\(preferencesStore.dedupeTimeWindowSeconds)s")
+                            .monospacedDigit()
+                    }
+                }
+            } header: {
+                Text("Detection")
+            } footer: {
+                Text("Photos taken within the time window are compared for similarity. Stricter presets reduce false positives; looser presets surface more potential duplicates.")
+            }
+
+            Section {
+                Toggle("Treat RAW + JPEG as a unit", isOn: $preferencesStore.dedupeTreatRawJpegPairsAsUnit)
+                Toggle("Treat Live Photo (HEIC + MOV) as a unit", isOn: $preferencesStore.dedupeTreatLivePhotoPairsAsUnit)
+                Toggle("Surface exact duplicates separately", isOn: $preferencesStore.dedupeIncludeExactDuplicates)
+            } header: {
+                Text("Pairing")
+            } footer: {
+                Text("Paired files are always kept or deleted together. Exact duplicates use the existing file-identity hash and are surfaced as their own group.")
+            }
+
+            Section {
+                Toggle("Allow hard delete (skip Trash)", isOn: Binding(
+                    get: { preferencesStore.dedupeAllowHardDelete },
+                    set: { newValue in
+                        if newValue {
+                            pendingHardDeleteToggle = true
+                        } else {
+                            preferencesStore.dedupeAllowHardDelete = false
+                        }
+                    }
+                ))
+            } header: {
+                Text("Deletion")
+            } footer: {
+                Text("By default, Deduplicate moves files to the Trash so you can recover them. Hard delete unlinks files immediately and cannot be undone.")
+            }
+        }
+        .formStyle(.grouped)
+        .confirmationDialog(
+            "Allow hard delete?",
+            isPresented: $pendingHardDeleteToggle
+        ) {
+            Button("Allow", role: .destructive) {
+                preferencesStore.dedupeAllowHardDelete = true
+            }
+            Button("Cancel", role: .cancel) {
+                pendingHardDeleteToggle = false
+            }
+        } message: {
+            Text("Files removed by Deduplicate will bypass the Trash and cannot be recovered. The dedupe receipt in Run History will still record what was deleted but the Revert action will not be able to restore the files.")
+        }
     }
 }
 

@@ -12,7 +12,7 @@ final class SetupCoordinator {
     private let profilesRepository: any ProfilesRepositorying
     private let droppedItemStager: DroppedItemStager
     private let bookmarkPathResolver: BookmarkPathResolver
-    private let setSelection: @MainActor (SidebarDestination) -> Void
+    private let navigate: @MainActor (AppRoute) -> Void
     private let setTransientErrorMessage: @MainActor (String?) -> Void
 
     init(
@@ -23,7 +23,7 @@ final class SetupCoordinator {
         profilesRepository: any ProfilesRepositorying,
         droppedItemStager: DroppedItemStager,
         bookmarkPathResolver: BookmarkPathResolver,
-        setSelection: @escaping @MainActor (SidebarDestination) -> Void,
+        navigate: @escaping @MainActor (AppRoute) -> Void,
         setTransientErrorMessage: @escaping @MainActor (String?) -> Void
     ) {
         self.preferencesStore = preferencesStore
@@ -33,7 +33,7 @@ final class SetupCoordinator {
         self.profilesRepository = profilesRepository
         self.droppedItemStager = droppedItemStager
         self.bookmarkPathResolver = bookmarkPathResolver
-        self.setSelection = setSelection
+        self.navigate = navigate
         self.setTransientErrorMessage = setTransientErrorMessage
     }
 
@@ -89,7 +89,7 @@ final class SetupCoordinator {
                 setupStore.droppedSourceItemCount = staged.itemCount
             }
 
-            setSelection(.setup)
+            navigate(.organize(.setup))
         } catch {
             setTransientErrorMessage(UserFacingErrorMessage.message(for: error, context: .droppedItems))
         }
@@ -191,7 +191,7 @@ final class SetupCoordinator {
             setupStore.newProfileName = ""
             refreshProfiles()
             useProfile(named: name)
-            setSelection(.profiles)
+            navigate(.profiles)
         } catch {
             setTransientErrorMessage(UserFacingErrorMessage.message(for: error, context: .profiles))
         }

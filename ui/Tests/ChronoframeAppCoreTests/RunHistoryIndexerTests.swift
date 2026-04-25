@@ -82,6 +82,23 @@ final class RunHistoryIndexerTests: XCTestCase {
         XCTAssertEqual(try indexer.index(destinationRoot: "   "), [])
     }
 
+    func testIndexClassifiesDedupeAuditReceipt() throws {
+        let logsDirectory = temporaryDirectoryURL.appendingPathComponent(".organize_logs", isDirectory: true)
+        try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
+
+        let receipt = logsDirectory.appendingPathComponent("dedupe_audit_receipt_20260420_140000.json")
+        try "{}".write(to: receipt, atomically: true, encoding: .utf8)
+        try setModificationDate(Date(timeIntervalSince1970: 100), for: receipt)
+
+        let indexer = RunHistoryIndexer()
+        let entries = try indexer.index(destinationRoot: temporaryDirectoryURL.path)
+
+        let dedupeEntries = entries.filter { $0.kind == .dedupeAuditReceipt }
+        XCTAssertEqual(dedupeEntries.count, 1)
+        XCTAssertEqual(dedupeEntries.first?.title, "Dedupe Receipt")
+        XCTAssertEqual(dedupeEntries.first?.relativePath, ".organize_logs/dedupe_audit_receipt_20260420_140000.json")
+    }
+
     private func setModificationDate(_ date: Date, for url: URL) throws {
         try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
     }

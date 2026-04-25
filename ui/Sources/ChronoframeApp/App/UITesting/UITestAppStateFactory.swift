@@ -21,7 +21,7 @@ enum UITestAppStateFactory {
 
         let historyStore: HistoryStore
         let engine: MockOrganizerEngine
-        let selection: SidebarDestination
+        let route: AppRoute
 
         switch scenario {
         case .setupReady:
@@ -29,14 +29,14 @@ enum UITestAppStateFactory {
             setupStore.destinationPath = "/Volumes/Archive/Chronoframe Library"
             historyStore = HistoryStore(destinationRoot: setupStore.destinationPath)
             engine = previewReviewEngine(sourcePath: setupStore.sourcePath, destinationPath: setupStore.destinationPath)
-            selection = .setup
+            route = .organize(.setup)
 
         case .runPreviewReview:
             setupStore.sourcePath = "/Volumes/Card/April Session"
             setupStore.destinationPath = "/Volumes/Archive/Chronoframe Library"
             historyStore = HistoryStore(destinationRoot: setupStore.destinationPath)
             engine = previewReviewEngine(sourcePath: setupStore.sourcePath, destinationPath: setupStore.destinationPath)
-            selection = .run
+            route = .organize(.run)
 
         case .historyPopulated:
             setupStore.destinationPath = "/Volumes/Archive/Chronoframe Library"
@@ -46,7 +46,7 @@ enum UITestAppStateFactory {
                 destinationRoot: setupStore.destinationPath
             )
             engine = previewReviewEngine(sourcePath: "/Volumes/Card/April Session", destinationPath: setupStore.destinationPath)
-            selection = .history
+            route = .organize(.history)
 
         case .profilesPopulated:
             repository.profiles = sampleProfiles()
@@ -55,14 +55,14 @@ enum UITestAppStateFactory {
             setupStore.newProfileName = "Weekend Archive"
             historyStore = HistoryStore(destinationRoot: setupStore.destinationPath)
             engine = previewReviewEngine(sourcePath: setupStore.sourcePath, destinationPath: setupStore.destinationPath)
-            selection = .profiles
+            route = .profiles
 
         case .settingsSections:
             setupStore.sourcePath = "/Volumes/Card/April Session"
             setupStore.destinationPath = "/Volumes/Archive/Chronoframe Library"
             historyStore = HistoryStore(destinationRoot: setupStore.destinationPath)
             engine = previewReviewEngine(sourcePath: setupStore.sourcePath, destinationPath: setupStore.destinationPath)
-            selection = .setup
+            route = .organize(.setup)
         }
 
         let runSessionStore = RunSessionStore(engine: engine, logStore: runLogStore, historyStore: historyStore)
@@ -77,7 +77,7 @@ enum UITestAppStateFactory {
         }
 
         let appState = AppState(
-            selection: selection,
+            route: route,
             preferencesStore: preferencesStore,
             setupStore: setupStore,
             runLogStore: runLogStore,

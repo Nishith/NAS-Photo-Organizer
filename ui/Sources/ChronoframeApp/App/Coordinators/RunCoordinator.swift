@@ -11,7 +11,7 @@ final class RunCoordinator {
     private let runSessionStore: RunSessionStore
     private let finderService: any FinderServicing
     private let showSettingsWindowAction: @MainActor () -> Void
-    private let setSelection: @MainActor (SidebarDestination) -> Void
+    private let navigate: @MainActor (AppRoute) -> Void
     private let canStartRun: @MainActor () -> Bool
 
     init(
@@ -21,7 +21,7 @@ final class RunCoordinator {
         runSessionStore: RunSessionStore,
         finderService: any FinderServicing,
         showSettingsWindowAction: @escaping @MainActor () -> Void,
-        setSelection: @escaping @MainActor (SidebarDestination) -> Void,
+        navigate: @escaping @MainActor (AppRoute) -> Void,
         canStartRun: @escaping @MainActor () -> Bool
     ) {
         self.preferencesStore = preferencesStore
@@ -30,13 +30,13 @@ final class RunCoordinator {
         self.runSessionStore = runSessionStore
         self.finderService = finderService
         self.showSettingsWindowAction = showSettingsWindowAction
-        self.setSelection = setSelection
+        self.navigate = navigate
         self.canStartRun = canStartRun
     }
 
     func startPreview() async {
         guard canStartRun() else { return }
-        setSelection(.run)
+        navigate(.organize(.run))
         await runSessionStore.requestRun(
             mode: .preview,
             configuration: setupStore.makeConfiguration(preferences: preferencesStore, mode: .preview)
@@ -45,7 +45,7 @@ final class RunCoordinator {
 
     func startTransfer() async {
         guard canStartRun() else { return }
-        setSelection(.run)
+        navigate(.organize(.run))
         await runSessionStore.requestRun(
             mode: .transfer,
             configuration: setupStore.makeConfiguration(preferences: preferencesStore, mode: .transfer)

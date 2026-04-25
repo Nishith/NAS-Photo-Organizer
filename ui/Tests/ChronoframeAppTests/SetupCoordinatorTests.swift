@@ -24,7 +24,7 @@ final class SetupCoordinatorTests: XCTestCase {
             profilesRepository: harness.repository,
             droppedItemStager: DroppedItemStager(),
             bookmarkPathResolver: resolver,
-            setSelection: { _ in },
+            navigate: { _ in },
             setTransientErrorMessage: { transientError = $0 }
         )
 
@@ -67,7 +67,7 @@ final class SetupCoordinatorTests: XCTestCase {
             profilesRepository: harness.repository,
             droppedItemStager: DroppedItemStager(),
             bookmarkPathResolver: resolver,
-            setSelection: { _ in },
+            navigate: { _ in },
             setTransientErrorMessage: { transientError = $0 }
         )
 
@@ -88,7 +88,7 @@ final class SetupCoordinatorTests: XCTestCase {
             preferencesStore: harness.preferencesStore,
             folderAccessService: harness.folderAccessService
         )
-        var selection: SidebarDestination?
+        var route: AppRoute?
         let coordinator = SetupCoordinator(
             preferencesStore: harness.preferencesStore,
             setupStore: harness.setupStore,
@@ -97,7 +97,7 @@ final class SetupCoordinatorTests: XCTestCase {
             profilesRepository: harness.repository,
             droppedItemStager: DroppedItemStager(),
             bookmarkPathResolver: resolver,
-            setSelection: { selection = $0 },
+            navigate: { route = $0 },
             setTransientErrorMessage: { _ in }
         )
 
@@ -116,7 +116,7 @@ final class SetupCoordinatorTests: XCTestCase {
         harness.setupStore.newProfileName = "archive"
         coordinator.saveCurrentPathsAsProfile()
 
-        XCTAssertEqual(selection, .profiles)
+        XCTAssertEqual(route, .profiles)
         XCTAssertEqual(harness.repository.savedProfiles.last?.name, "archive")
         XCTAssertEqual(harness.setupStore.selectedProfileName, "archive")
         XCTAssertEqual(harness.preferencesStore.bookmark(for: "profile.archive.source")?.path, "/Volumes/Card")
@@ -141,7 +141,7 @@ final class SetupCoordinatorTests: XCTestCase {
             profilesRepository: harness.repository,
             droppedItemStager: DroppedItemStager(),
             bookmarkPathResolver: resolver,
-            setSelection: { _ in },
+            navigate: { _ in },
             setTransientErrorMessage: { _ in }
         )
 
@@ -194,7 +194,7 @@ final class SetupCoordinatorTests: XCTestCase {
             profilesRepository: harness.repository,
             droppedItemStager: DroppedItemStager(),
             bookmarkPathResolver: resolver,
-            setSelection: { _ in },
+            navigate: { _ in },
             setTransientErrorMessage: { transientError = $0 }
         )
 

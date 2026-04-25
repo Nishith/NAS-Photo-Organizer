@@ -34,7 +34,9 @@ private enum HistoryFilter: String, CaseIterable, Identifiable {
         case .reports:
             return entry.kind == .dryRunReport || entry.kind == .csvArtifact
         case .receipts:
-            return entry.kind == .auditReceipt || entry.kind == .jsonArtifact
+            return entry.kind == .auditReceipt
+                || entry.kind == .dedupeAuditReceipt
+                || entry.kind == .jsonArtifact
         case .logs:
             return entry.kind == .runLog || entry.kind == .queueDatabase
         case .other:
@@ -49,7 +51,9 @@ private enum HistoryFilter: String, CaseIterable, Identifiable {
         case .reports:
             return entry.kind == .dryRunReport || entry.kind == .csvArtifact
         case .receipts:
-            return entry.kind == .auditReceipt || entry.kind == .jsonArtifact
+            return entry.kind == .auditReceipt
+                || entry.kind == .dedupeAuditReceipt
+                || entry.kind == .jsonArtifact
         case .logs:
             return entry.kind == .runLog || entry.kind == .queueDatabase
         }
@@ -381,7 +385,7 @@ struct RunHistoryView: View {
                     appState.revealHistoryEntry(entry)
                 }
                 .accessibilityIdentifier("revealArtifact_\(entry.id)")
-                if entry.kind == .auditReceipt {
+                if entry.kind == .auditReceipt || entry.kind == .dedupeAuditReceipt {
                     Divider()
                     Button("Revert this run…") {
                         pendingRevertEntry = entry
@@ -442,6 +446,8 @@ struct RunHistoryView: View {
             return DesignTokens.ColorSystem.accentAction
         case .auditReceipt, .jsonArtifact:
             return DesignTokens.ColorSystem.statusSuccess
+        case .dedupeAuditReceipt:
+            return DesignTokens.ColorSystem.accentWaypoint
         case .runLog:
             return DesignTokens.ColorSystem.accentWaypoint
         case .queueDatabase:

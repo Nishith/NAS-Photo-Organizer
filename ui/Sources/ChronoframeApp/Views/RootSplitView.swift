@@ -113,24 +113,17 @@ struct RootSplitView: View {
     @ViewBuilder
     private var detailView: some View {
         switch appState.selection {
-        case .setup:
-            SetupView(appState: appState)
-        case .run:
-            CurrentRunView(appState: appState)
-        case .history:
-            RunHistoryView(appState: appState)
+        case .organize:
+            OrganizeContainerView(appState: appState)
+        case .deduplicate:
+            DeduplicateView(appState: appState)
         case .profiles:
             ProfilesView(appState: appState)
         }
     }
 
     private var showsRunToolbarActions: Bool {
-        switch appState.selection {
-        case .run:
-            return true
-        case .setup, .history, .profiles:
-            return false
-        }
+        appState.selection == .organize && appState.organizeSubSelection == .run
     }
 
     private var canStartRun: Bool {
