@@ -19,6 +19,11 @@ struct SettingsView: View {
                     Label("General", systemImage: "gear")
                 }
 
+            LayoutSettingsTab(appState: appState, preferencesStore: preferencesStore)
+                .tabItem {
+                    Label("Layout", systemImage: "rectangle.3.offgrid")
+                }
+
             PerformanceSettingsTab(preferencesStore: preferencesStore)
                 .tabItem {
                     Label("Performance", systemImage: "speedometer")
@@ -29,11 +34,60 @@ struct SettingsView: View {
                     Label("Diagnostics", systemImage: "stethoscope")
                 }
         }
-        .frame(minWidth: 460, idealWidth: 520, minHeight: 320)
+        .frame(minWidth: 460, idealWidth: 520, minHeight: 360)
         .onAppear {
             UITestScenario.configureCurrentWindow(for: UITestScenario.current(), isSettings: true)
         }
         .navigationTitle("Settings")
+    }
+}
+
+private struct LayoutSettingsTab: View {
+    let appState: AppState
+    @ObservedObject var preferencesStore: PreferencesStore
+    @State private var showingReorganizeConfirmation = false
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Folder Structure", selection: $preferencesStore.folderStructure) {
+                    ForEach(FolderStructure.allCases, id: \.self) { structure in
+                        Text(structure.rawValue).tag(structure)
+                    }
+                }
+                .pickerStyle(.menu)
+                .accessibilityIdentifier("folderStructurePicker")
+            } header: {
+                Text("Default Layout")
+            } footer: {
+                Text("Future previews and transfers organize files into this directory layout. Existing files in the destination keep their current location until you reorganize.")
+            }
+
+            Section {
+                Button {
+                    showingReorganizeConfirmation = true
+                } label: {
+                    Label("Reorganize Destination Now", systemImage: "rectangle.3.offgrid.fill")
+                }
+                .accessibilityIdentifier("reorganizeDestinationButton")
+            } header: {
+                Text("Reorganize")
+            } footer: {
+                Text("Move every file already in the destination into the layout selected above. Files are moved on the same volume (instant — no copy), originals are never deleted, and an existing file at the new location is never overwritten.")
+            }
+        }
+        .formStyle(.grouped)
+        .confirmationDialog(
+            "Reorganize destination?",
+            isPresented: $showingReorganizeConfirmation
+        ) {
+            Button("Reorganize", role: .destructive) {
+                appState.reorganizeDestination(targetStructure: preferencesStore.folderStructure)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Chronoframe will move every recognised file in the destination into the \(preferencesStore.folderStructure.rawValue) layout. Originals are not deleted, but files will appear at new paths. Open the Run workspace to track progress.")
+        }
     }
 }
 

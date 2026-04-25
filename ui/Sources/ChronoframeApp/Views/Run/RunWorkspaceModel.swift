@@ -243,6 +243,50 @@ struct RunWorkspaceModel {
                 tone: .danger,
                 primaryAction: .showIssues
             )
+
+        case .reverted:
+            return RunHeroState(
+                title: "Revert Complete",
+                message: "Chronoframe removed the files restored by this audit receipt. Files modified after the original copy were preserved.",
+                badgeTitle: "Reverted",
+                badgeSymbol: "arrow.uturn.backward.circle.fill",
+                heroSymbol: "arrow.uturn.backward.circle.fill",
+                tone: .success,
+                primaryAction: .openDestination
+            )
+
+        case .revertEmpty:
+            return RunHeroState(
+                title: "Nothing to Revert",
+                message: "This audit receipt has no transfers to undo.",
+                badgeTitle: "Empty",
+                badgeSymbol: "tray",
+                heroSymbol: "tray",
+                tone: .ready,
+                primaryAction: .openDestination
+            )
+
+        case .reorganized:
+            return RunHeroState(
+                title: "Reorganize Complete",
+                message: "Chronoframe restructured the destination to match the new folder layout. Open Finder to verify the result.",
+                badgeTitle: "Reorganized",
+                badgeSymbol: "rectangle.3.offgrid.fill",
+                heroSymbol: "rectangle.3.offgrid.fill",
+                tone: .success,
+                primaryAction: .openDestination
+            )
+
+        case .nothingToReorganize:
+            return RunHeroState(
+                title: "Layout Already Correct",
+                message: "Every file in the destination is already in the requested layout — no moves required.",
+                badgeTitle: "Up to Date",
+                badgeSymbol: "checkmark.seal.fill",
+                heroSymbol: "checkmark.seal.fill",
+                tone: .success,
+                primaryAction: .openDestination
+            )
         }
     }
 

@@ -57,6 +57,7 @@ final class AppState: ObservableObject {
         preferencesStore: preferencesStore,
         setupStore: setupStore,
         historyStore: historyStore,
+        runSessionStore: runSessionStore,
         finderService: finderService,
         setSelection: { [weak self] selection in
             self?.selection = selection
@@ -224,6 +225,29 @@ final class AppState: ObservableObject {
 
     func openHistoryEntry(_ entry: RunHistoryEntry) {
         historyCoordinator.openHistoryEntry(entry)
+    }
+
+    /// Revert the transfer described by `entry`'s audit receipt. Switches to the
+    /// Run workspace and streams progress + the final summary there.
+    func revertHistoryEntry(_ entry: RunHistoryEntry) {
+        historyCoordinator.revertHistoryEntry(entry)
+    }
+
+    /// Reorganize the current destination so its folder layout matches the
+    /// preferred `FolderStructure`. Streams progress through the Run workspace.
+    func reorganizeDestination(targetStructure: FolderStructure) {
+        let destination = historyStore.destinationRoot.isEmpty
+            ? setupStore.destinationPath
+            : historyStore.destinationRoot
+        guard !destination.isEmpty else {
+            transientErrorMessage = "Choose a destination folder before reorganizing."
+            return
+        }
+        selection = .run
+        runSessionStore.requestReorganize(
+            destinationRoot: destination,
+            targetStructure: targetStructure
+        )
     }
 
     /// Repopulates the Setup view with a previously-used source path and switches to it.

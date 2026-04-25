@@ -186,7 +186,7 @@ struct RunTimelineView: View {
         switch model.context.status {
         case .running:
             return min(completedIndex + 1, dotCount - 1)
-        case .finished, .nothingToCopy:
+        case .finished, .nothingToCopy, .reverted, .revertEmpty, .reorganized, .nothingToReorganize:
             return dotCount
         case .dryRunFinished:
             return 0
@@ -220,6 +220,14 @@ struct RunTimelineView: View {
             return "Preparing the run."
         case .idle:
             return "Run something to see frames appear here."
+        case .reverted:
+            return "Files restored to their original state."
+        case .revertEmpty:
+            return "This receipt had no transfers to undo."
+        case .reorganized:
+            return "Layout updated in place."
+        case .nothingToReorganize:
+            return "The destination already matches this layout."
         }
     }
 
