@@ -70,8 +70,8 @@ public final class RunSessionStore: ObservableObject {
             if !preflight.missingDependencies.isEmpty {
                 prompt = RunPrompt(
                     kind: .blockingError,
-                    title: "Missing Python Dependencies",
-                    message: "Install these packages for the backend before running Chronoframe: \(preflight.missingDependencies.joined(separator: ", ")).",
+                    title: "Python Helper Needs Packages",
+                    message: "Chronoframe is set to use the Python helper, but this Mac is missing: \(preflight.missingDependencies.joined(separator: ", ")). Install those packages, then try again. Your files have not been changed.",
                     preflight: preflight
                 )
                 return
@@ -97,7 +97,7 @@ public final class RunSessionStore: ObservableObject {
 
             beginStream(using: preflight, resumePendingJobs: false)
         } catch {
-            handleFailure(message: error.localizedDescription)
+            handleFailure(error: error)
         }
     }
 
@@ -124,7 +124,7 @@ public final class RunSessionStore: ObservableObject {
                     self.consume(event)
                 }
             } catch {
-                self.handleFailure(message: error.localizedDescription)
+                self.handleFailure(error: error)
             }
         }
     }
@@ -149,7 +149,7 @@ public final class RunSessionStore: ObservableObject {
                     self.consume(event)
                 }
             } catch {
-                self.handleFailure(message: error.localizedDescription)
+                self.handleFailure(error: error)
             }
         }
     }
@@ -270,7 +270,7 @@ public final class RunSessionStore: ObservableObject {
                     self.consume(event)
                 }
             } catch {
-                self.handleFailure(message: error.localizedDescription)
+                self.handleFailure(error: error)
             }
         }
     }
@@ -386,7 +386,11 @@ public final class RunSessionStore: ObservableObject {
             logStore.append(issue: issue)
 
         case let .prompt(message):
-            prompt = RunPrompt(kind: .blockingError, title: "Backend Prompt", message: message)
+            prompt = RunPrompt(
+                kind: .blockingError,
+                title: "Organizer Needs Attention",
+                message: UserFacingErrorMessage.backendPrompt(message)
+            )
 
         case let .complete(summary):
             status = summary.status
@@ -517,6 +521,10 @@ public final class RunSessionStore: ObservableObject {
         #else
         return nil
         #endif
+    }
+
+    private func handleFailure(error: Error) {
+        handleFailure(message: UserFacingErrorMessage.message(for: error, context: .run))
     }
 
     private func handleFailure(message: String) {

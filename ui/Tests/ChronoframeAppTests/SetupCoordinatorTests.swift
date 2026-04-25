@@ -73,7 +73,10 @@ final class SetupCoordinatorTests: XCTestCase {
 
         await coordinator.chooseSourceFolder()
 
-        XCTAssertEqual(transientError, "Chronoframe cannot read the selected source folder: /Volumes/Locked")
+        XCTAssertEqual(
+            transientError,
+            "Chronoframe cannot read the source folder. Choose it again to grant access, or pick a folder you have permission to open. Path: /Volumes/Locked."
+        )
         XCTAssertEqual(harness.setupStore.sourcePath, "")
         XCTAssertNil(harness.preferencesStore.bookmark(for: "manual.source"))
     }

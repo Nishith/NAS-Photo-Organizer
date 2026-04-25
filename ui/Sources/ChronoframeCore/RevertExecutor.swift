@@ -100,9 +100,9 @@ public enum RevertExecutorError: LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case let .receiptNotFound(path):
-            return "Receipt not found: \(path)"
+            return "The selected revert receipt could not be found. It may have been moved or deleted. Receipt: \(path)."
         case let .invalidReceipt(reason):
-            return "Invalid receipt: \(reason)"
+            return "Chronoframe could not read this revert receipt. Choose a different receipt or run a new transfer. Details: \(reason)"
         }
     }
 }

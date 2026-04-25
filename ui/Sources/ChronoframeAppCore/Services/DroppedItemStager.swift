@@ -27,8 +27,13 @@ public enum DroppedItemStagerError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .noItems: return "No files or folders were dropped."
-        case .stagingFailed(let reason): return "Could not stage dropped items: \(reason)"
+        case .noItems:
+            return "Chronoframe could not use the dropped items. Drag files or folders from Finder, or choose a source folder instead."
+        case .stagingFailed(let reason):
+            return UserFacingErrorMessage.withDetails(
+                "Chronoframe could not prepare those dropped items. Choose the source folder with the picker instead.",
+                details: reason
+            )
         }
     }
 }

@@ -89,7 +89,7 @@ struct RootSplitView: View {
             Text(runSessionStore.prompt?.message ?? "")
         }
         .alert(
-            "Problem",
+            "Chronoframe Needs Attention",
             isPresented: Binding(
                 get: { appState.transientErrorMessage != nil },
                 set: { isPresented in

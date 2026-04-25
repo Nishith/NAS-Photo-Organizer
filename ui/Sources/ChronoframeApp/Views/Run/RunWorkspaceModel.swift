@@ -236,7 +236,7 @@ struct RunWorkspaceModel {
         case .failed:
             return RunHeroState(
                 title: "Run Needs Attention",
-                message: context.lastErrorMessage ?? "Chronoframe reported a failure. Review issues and the console stream to understand what happened.",
+                message: context.lastErrorMessage ?? "Chronoframe could not finish this run. Your source files were left untouched. Check that both folders are available, then try again.",
                 badgeTitle: "Failed",
                 badgeSymbol: "exclamationmark.octagon.fill",
                 heroSymbol: "exclamationmark.triangle.fill",
@@ -467,8 +467,8 @@ struct RunWorkspaceModel {
 
     var issueWorkspaceSummary: String {
         issueEntries.isEmpty
-            ? "No warning or error lines have been emitted yet. If something changes, this view will pull the high-signal items out of the full console."
-            : "Warnings and errors are separated here so you can review the highest-signal problems without scanning the entire console feed."
+            ? "No warnings or errors have been reported yet. If something changes, this view will pull the high-signal items out of the full activity log."
+            : "Warnings and errors are separated here so you can review the highest-signal problems without scanning the entire activity log."
     }
 
     var reportPath: String? {

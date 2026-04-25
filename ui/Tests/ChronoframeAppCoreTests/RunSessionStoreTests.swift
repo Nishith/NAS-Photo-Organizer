@@ -179,9 +179,16 @@ final class RunSessionStoreTests: XCTestCase {
         let failed = await waitForCondition { store.status == .failed }
         XCTAssertTrue(failed)
 
-        XCTAssertEqual(store.lastErrorMessage, "backend launch failed")
+        XCTAssertEqual(
+            store.lastErrorMessage,
+            "Chronoframe could not finish this run. Your source files were left untouched. Check that both folders are available, then try again. Details: backend launch failed"
+        )
         XCTAssertEqual(store.summary?.status, .failed)
-        XCTAssertTrue(store.logLines.contains("ERROR: backend launch failed"))
+        XCTAssertTrue(
+            store.logLines.contains(
+                "ERROR: Chronoframe could not finish this run. Your source files were left untouched. Check that both folders are available, then try again. Details: backend launch failed"
+            )
+        )
     }
 
     // MARK: - Cancellation timing variants
@@ -379,7 +386,10 @@ final class RunSessionStoreTests: XCTestCase {
         XCTAssertTrue(prompted)
 
         XCTAssertEqual(store.prompt?.kind, .blockingError)
-        XCTAssertEqual(store.prompt?.title, "Backend Prompt")
-        XCTAssertEqual(store.prompt?.message, "Need confirmation")
+        XCTAssertEqual(store.prompt?.title, "Organizer Needs Attention")
+        XCTAssertEqual(
+            store.prompt?.message,
+            "Chronoframe needs attention before it can continue. Review the message below, then try again. Details: Need confirmation"
+        )
     }
 }

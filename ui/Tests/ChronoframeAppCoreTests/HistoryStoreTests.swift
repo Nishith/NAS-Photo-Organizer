@@ -102,7 +102,10 @@ final class HistoryStoreTests: XCTestCase {
 
         XCTAssertEqual(store.entries, [])
         XCTAssertEqual(store.destinationRoot, "/tmp/run")
-        XCTAssertEqual(store.lastRefreshError, MockRunHistoryIndexer.Error.sample.localizedDescription)
+        XCTAssertEqual(
+            store.lastRefreshError,
+            "Chronoframe could not refresh Run History. Check that the destination drive is connected, then try again. Details: History index failed"
+        )
     }
 }
 

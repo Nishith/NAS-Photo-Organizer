@@ -17,23 +17,32 @@ public enum OrganizerEngineError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .backendUnavailable:
-            return "Chronoframe could not find the bundled or repository Python backend."
+            return "Chronoframe could not find the helper it needs to run. Rebuild or reinstall Chronoframe, then try again."
         case .pythonUnavailable:
-            return "Chronoframe could not find a working python3 executable."
+            return "Chronoframe is set to use the Python helper, but this Mac could not start Python 3. Install Python 3, then try again."
         case let .profileNotFound(name):
-            return "The profile “\(name)” is not defined in profiles.yaml."
+            return "The saved profile \"\(name)\" no longer exists. Choose another profile or save it again."
         case let .sourceDoesNotExist(path):
-            return "The source folder does not exist at \(path)."
+            return "The source folder is no longer available. Reconnect the drive or choose the source folder again. Path: \(path)."
         case .destinationMissing:
             return "Choose a destination folder before starting this run."
         case let .missingDependencies(packages):
-            return "Missing Python packages: \(packages.joined(separator: ", "))."
+            return "The Python helper is missing required packages: \(packages.joined(separator: ", ")). Install them, then try again."
         case let .failedToLaunch(message):
-            return message
+            return UserFacingErrorMessage.withDetails(
+                "Chronoframe could not start the organizer. Try again; if it keeps happening, restart or reinstall Chronoframe.",
+                details: message
+            )
         case let .invalidPreflight(message):
-            return message
+            return UserFacingErrorMessage.withDetails(
+                "Chronoframe could not validate the run settings. Review the source and destination, then try again.",
+                details: message
+            )
         case let .invalidOutput(line):
-            return "The backend emitted malformed output: \(line)"
+            return UserFacingErrorMessage.withDetails(
+                "Chronoframe received an unexpected response from its helper. Try again.",
+                details: line
+            )
         }
     }
 }

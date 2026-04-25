@@ -57,7 +57,7 @@ final class SetupCoordinator {
         do {
             try folderAccessService.validateFolder(url, role: .source)
         } catch {
-            setTransientErrorMessage(error.localizedDescription)
+            setTransientErrorMessage(UserFacingErrorMessage.message(for: error, context: .setup))
             return
         }
 
@@ -91,7 +91,7 @@ final class SetupCoordinator {
 
             setSelection(.setup)
         } catch {
-            setTransientErrorMessage(error.localizedDescription)
+            setTransientErrorMessage(UserFacingErrorMessage.message(for: error, context: .droppedItems))
         }
     }
 
@@ -106,7 +106,7 @@ final class SetupCoordinator {
         do {
             try folderAccessService.validateFolder(url, role: .destination)
         } catch {
-            setTransientErrorMessage(error.localizedDescription)
+            setTransientErrorMessage(UserFacingErrorMessage.message(for: error, context: .setup))
             return
         }
 
@@ -146,7 +146,7 @@ final class SetupCoordinator {
                 setupStore.selectProfile(named: setupStore.selectedProfileName)
             }
         } catch {
-            setTransientErrorMessage(error.localizedDescription)
+            setTransientErrorMessage(UserFacingErrorMessage.message(for: error, context: .profiles))
         }
     }
 
@@ -193,7 +193,7 @@ final class SetupCoordinator {
             useProfile(named: name)
             setSelection(.profiles)
         } catch {
-            setTransientErrorMessage(error.localizedDescription)
+            setTransientErrorMessage(UserFacingErrorMessage.message(for: error, context: .profiles))
         }
     }
 
@@ -212,7 +212,7 @@ final class SetupCoordinator {
             }
             refreshProfiles()
         } catch {
-            setTransientErrorMessage(error.localizedDescription)
+            setTransientErrorMessage(UserFacingErrorMessage.message(for: error, context: .profiles))
         }
     }
 }

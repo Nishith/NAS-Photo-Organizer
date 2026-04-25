@@ -279,7 +279,7 @@ public final class PythonOrganizerEngine: OrganizerEngine {
         do {
             try process.run()
         } catch {
-            throw OrganizerEngineError.failedToLaunch("Chronoframe failed to launch the Python backend: \(error.localizedDescription)")
+            throw OrganizerEngineError.failedToLaunch(error.localizedDescription)
         }
 
         activeProcess = process
@@ -340,7 +340,7 @@ public final class PythonOrganizerEngine: OrganizerEngine {
 
                     process.waitUntilExit()
                     if process.terminationStatus != 0 && !Task.isCancelled {
-                        continuation.finish(throwing: OrganizerEngineError.failedToLaunch("Chronoframe exited with status \(process.terminationStatus)."))
+                        continuation.finish(throwing: OrganizerEngineError.failedToLaunch("The helper exited with status \(process.terminationStatus)."))
                     } else {
                         continuation.finish()
                     }

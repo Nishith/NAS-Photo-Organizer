@@ -23,13 +23,13 @@ public enum FolderValidationError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case let .pathDoesNotExist(role, path):
-            return "The selected \(role.rawValue) folder does not exist: \(path)"
+            return "The \(role.rawValue) folder is no longer available. Reconnect the drive or choose the \(role.rawValue) folder again. Path: \(path)."
         case let .notDirectory(role, path):
-            return "The selected \(role.rawValue) path is not a folder: \(path)"
+            return "The selected \(role.rawValue) item is not a folder. Choose a folder instead. Path: \(path)."
         case let .unreadable(role, path):
-            return "Chronoframe cannot read the selected \(role.rawValue) folder: \(path)"
+            return "Chronoframe cannot read the \(role.rawValue) folder. Choose it again to grant access, or pick a folder you have permission to open. Path: \(path)."
         case let .unwritable(role, path):
-            return "Chronoframe cannot write to the selected \(role.rawValue) folder: \(path)"
+            return "Chronoframe cannot write to the \(role.rawValue) folder. Choose it again to grant access, pick a writable folder, or check that the drive is not read-only. Path: \(path)."
         }
     }
 }

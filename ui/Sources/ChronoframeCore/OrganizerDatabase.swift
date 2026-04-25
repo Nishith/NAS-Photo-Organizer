@@ -12,17 +12,17 @@ public enum OrganizerDatabaseError: LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case let .openFailed(message):
-            return "Chronoframe could not open the organizer database: \(message)"
+            return "Chronoframe could not open its transfer queue. Check that the destination drive is connected and writable, then try again. Details: \(message)"
         case let .executionFailed(message):
-            return "Chronoframe could not execute a database statement: \(message)"
+            return "Chronoframe could not update its transfer queue. Check that the destination drive is writable, then try again. Details: \(message)"
         case let .prepareFailed(message):
-            return "Chronoframe could not prepare a database statement: \(message)"
+            return "Chronoframe could not prepare its transfer queue. Start a fresh preview or transfer for this destination. Details: \(message)"
         case let .stepFailed(message):
-            return "Chronoframe could not read organizer database rows: \(message)"
+            return "Chronoframe could not read its transfer queue. Start a fresh preview or transfer for this destination. Details: \(message)"
         case let .invalidIdentity(value):
-            return "Chronoframe encountered an invalid file identity string: \(value)"
+            return "Chronoframe found damaged transfer-queue data. Start a fresh preview or transfer for this destination. Details: \(value)"
         case .databaseClosed:
-            return "Chronoframe tried to use a closed organizer database."
+            return "Chronoframe lost access to its transfer queue. Try the run again."
         }
     }
 }

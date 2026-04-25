@@ -88,9 +88,9 @@ public enum ReorganizeExecutorError: LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case let .destinationNotFound(path):
-            return "Destination not found: \(path)"
+            return "The destination folder is no longer available. Reconnect the drive or choose the destination again. Path: \(path)."
         case let .destinationNotADirectory(path):
-            return "Destination is not a directory: \(path)"
+            return "The selected destination is not a folder. Choose a folder as the destination. Path: \(path)."
         }
     }
 }

@@ -54,7 +54,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             // through the generic start() pipeline because they take additional
             // arguments (a receipt path or a target FolderStructure).
             throw OrganizerEngineError.failedToLaunch(
-                "\(resolvedConfiguration.mode.title) runs use the dedicated engine entry point, not start()."
+                "\(resolvedConfiguration.mode.title) runs must be started from their matching app action."
             )
         }
     }
@@ -69,7 +69,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             return makeTransferStream(configuration: resolvedConfiguration, resumePendingJobs: true)
         case .revert, .reorganize:
             throw OrganizerEngineError.failedToLaunch(
-                "\(resolvedConfiguration.mode.title) runs cannot be resumed."
+                "\(resolvedConfiguration.mode.title) runs cannot be resumed. Start the action again."
             )
         }
     }

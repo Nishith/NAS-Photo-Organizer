@@ -86,7 +86,12 @@ public final class RunLogStore: ObservableObject {
     }
 
     public func append(issue: RunIssue) {
-        append(issue.renderedLine, severity: Self.classifySeverity(for: issue.severity))
+        let friendlyIssue = RunIssue(
+            id: issue.id,
+            severity: issue.severity,
+            message: UserFacingErrorMessage.runIssueMessage(issue.message, severity: issue.severity)
+        )
+        append(friendlyIssue.renderedLine, severity: Self.classifySeverity(for: friendlyIssue.severity))
     }
 
     private var visibleCount: Int {
