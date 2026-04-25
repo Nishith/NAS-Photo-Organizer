@@ -349,6 +349,146 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
     }
 }
 
+extension SwiftOrganizerEngineIntegrationTests {
+    @MainActor
+    func testRevertStreamsProgressAndCompletesWithRevertedStatus() async throws {
+        let destinationURL = temporaryDirectoryURL.appendingPathComponent("dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+
+        // Drop a real file in the destination, hash it, and synthesize a receipt
+        // that points at it with the matching hash.
+        let photoURL = destinationURL.appendingPathComponent("2024/04/08/2024-04-08_001.HEIC", isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: photoURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("photo-bytes".utf8).write(to: photoURL)
+        let identity = try FileIdentityHasher().hashIdentity(at: photoURL)
+
+        let receiptURL = destinationURL.appendingPathComponent("audit_receipt_test.json")
+        let receiptJSON = """
+        {
+            "timestamp": "2026-04-24T10:00:00",
+            "total_jobs": 1,
+            "status": "COMPLETED",
+            "transfers": [
+                { "source": "/src/photo.HEIC", "dest": "\(photoURL.path)", "hash": "\(identity.rawValue)" }
+            ]
+        }
+        """
+        try Data(receiptJSON.utf8).write(to: receiptURL)
+
+        let engine = SwiftOrganizerEngine(
+            profilesRepository: TestProfilesRepository(profiles: [], profilesFileURL: temporaryDirectoryURL.appendingPathComponent("profiles.yaml"))
+        )
+
+        let stream = try engine.revert(receiptURL: receiptURL, destinationRoot: destinationURL.path)
+
+        var sawStartup = false
+        var sawPhaseStarted = false
+        var sawPhaseProgress = false
+        var sawPhaseCompleted = false
+        var summary: RunSummary?
+
+        for try await event in stream {
+            switch event {
+            case .startup: sawStartup = true
+            case .phaseStarted(let phase, _) where phase == .revert: sawPhaseStarted = true
+            case .phaseProgress(let phase, _, _, _, _) where phase == .revert: sawPhaseProgress = true
+            case .phaseCompleted(let phase, _) where phase == .revert: sawPhaseCompleted = true
+            case let .complete(s): summary = s
+            default: break
+            }
+        }
+
+        XCTAssertTrue(sawStartup)
+        XCTAssertTrue(sawPhaseStarted)
+        XCTAssertTrue(sawPhaseProgress)
+        XCTAssertTrue(sawPhaseCompleted)
+        XCTAssertEqual(summary?.status, .reverted)
+        XCTAssertEqual(summary?.metrics.revertedCount, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: photoURL.path))
+    }
+
+    @MainActor
+    func testReorganizeStreamsMovesAndCompletesWithReorganizedStatus() async throws {
+        let destinationURL = temporaryDirectoryURL.appendingPathComponent("dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+
+        // Three flat files; reorganize → YYYY/MM/DD.
+        for name in ["2024-04-08_001.HEIC", "2024-04-08_002.HEIC", "2024-04-09_001.HEIC"] {
+            try Data("x".utf8).write(to: destinationURL.appendingPathComponent(name))
+        }
+
+        let engine = SwiftOrganizerEngine(
+            profilesRepository: TestProfilesRepository(profiles: [], profilesFileURL: temporaryDirectoryURL.appendingPathComponent("profiles.yaml"))
+        )
+
+        let stream = try engine.reorganize(
+            destinationRoot: destinationURL.path,
+            targetStructure: .yyyyMMDD
+        )
+
+        var planReadyCount = 0
+        var summary: RunSummary?
+        var phaseProgressCount = 0
+        for try await event in stream {
+            switch event {
+            case let .copyPlanReady(count): planReadyCount = count
+            case .phaseProgress(let phase, _, _, _, _) where phase == .reorganize: phaseProgressCount += 1
+            case let .complete(s): summary = s
+            default: break
+            }
+        }
+
+        XCTAssertEqual(planReadyCount, 3)
+        XCTAssertEqual(phaseProgressCount, 3)
+        XCTAssertEqual(summary?.status, .reorganized)
+        XCTAssertEqual(summary?.metrics.movedCount, 3)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: destinationURL.appendingPathComponent("2024/04/08/2024-04-08_001.HEIC").path
+        ))
+    }
+
+    @MainActor
+    func testReorganizeReportsNothingToReorganizeForAlreadyConformantLayout() async throws {
+        let destinationURL = temporaryDirectoryURL.appendingPathComponent("dest", isDirectory: true)
+        let nestedDir = destinationURL.appendingPathComponent("2024/04/08", isDirectory: true)
+        try FileManager.default.createDirectory(at: nestedDir, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: nestedDir.appendingPathComponent("2024-04-08_001.HEIC"))
+
+        let engine = SwiftOrganizerEngine(
+            profilesRepository: TestProfilesRepository(profiles: [], profilesFileURL: temporaryDirectoryURL.appendingPathComponent("profiles.yaml"))
+        )
+
+        let stream = try engine.reorganize(
+            destinationRoot: destinationURL.path,
+            targetStructure: .yyyyMMDD
+        )
+
+        var summary: RunSummary?
+        for try await event in stream {
+            if case let .complete(s) = event { summary = s }
+        }
+
+        XCTAssertEqual(summary?.status, .nothingToReorganize)
+        XCTAssertEqual(summary?.metrics.movedCount, 0)
+    }
+
+    @MainActor
+    func testRevertThrowsForMissingReceipt() throws {
+        let destinationURL = temporaryDirectoryURL.appendingPathComponent("dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+        let missingReceipt = destinationURL.appendingPathComponent("does-not-exist.json")
+
+        let engine = SwiftOrganizerEngine(
+            profilesRepository: TestProfilesRepository(profiles: [], profilesFileURL: temporaryDirectoryURL.appendingPathComponent("profiles.yaml"))
+        )
+
+        XCTAssertThrowsError(try engine.revert(receiptURL: missingReceipt, destinationRoot: destinationURL.path))
+    }
+}
+
 private final class TestProfilesRepository: ProfilesRepositorying {
     private var profiles: [Profile]
     private let storedProfilesFileURL: URL

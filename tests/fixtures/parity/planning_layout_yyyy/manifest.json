@@ -1,0 +1,27 @@
+{
+  "description": "YYYY folder layout collapses to year-only directories.",
+  "folder_structure": "YYYY",
+  "files": [
+    {
+      "root": "source",
+      "path": "camera/IMG_20240102_101010.jpg",
+      "content_text": "alpha"
+    },
+    {
+      "root": "source",
+      "path": "camera/IMG_20240102_111111.jpg",
+      "content_text": "bravo"
+    },
+    {
+      "root": "source",
+      "path": "camera/VID_20240102_121212.mov",
+      "content_text": "alpha"
+    },
+    {
+      "root": "source",
+      "path": "misc/orphan.mov",
+      "content_text": "unknown-dated",
+      "mtime_epoch": 0
+    }
+  ]
+}

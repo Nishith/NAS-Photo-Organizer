@@ -3,6 +3,8 @@ import Foundation
 public enum RunMode: String, Codable, Sendable {
     case preview
     case transfer
+    case revert
+    case reorganize
 
     public var title: String {
         switch self {
@@ -10,6 +12,10 @@ public enum RunMode: String, Codable, Sendable {
             return "Preview"
         case .transfer:
             return "Transfer"
+        case .revert:
+            return "Revert"
+        case .reorganize:
+            return "Reorganize"
         }
     }
 }
@@ -20,6 +26,8 @@ public enum RunPhase: String, CaseIterable, Codable, Sendable {
     case destinationIndexing = "dest_hash"
     case classification = "classification"
     case copy = "copy"
+    case revert = "revert"
+    case reorganize = "reorganize"
 
     public var title: String {
         switch self {
@@ -33,6 +41,10 @@ public enum RunPhase: String, CaseIterable, Codable, Sendable {
             return "Classify"
         case .copy:
             return "Transfer"
+        case .revert:
+            return "Revert"
+        case .reorganize:
+            return "Reorganize"
         }
     }
 
@@ -48,6 +60,10 @@ public enum RunPhase: String, CaseIterable, Codable, Sendable {
             return "Classifying by date..."
         case .copy:
             return "Copying files..."
+        case .revert:
+            return "Reverting files..."
+        case .reorganize:
+            return "Reorganizing files..."
         }
     }
 }
@@ -61,6 +77,10 @@ public enum RunStatus: String, Codable, Sendable {
     case nothingToCopy
     case cancelled
     case failed
+    case reverted
+    case revertEmpty
+    case reorganized
+    case nothingToReorganize
 
     public init(backendStatus: String?) {
         switch backendStatus {
@@ -76,6 +96,14 @@ public enum RunStatus: String, Codable, Sendable {
             self = .running
         case "preflighting":
             self = .preflighting
+        case "reverted":
+            self = .reverted
+        case "revert_empty":
+            self = .revertEmpty
+        case "reorganized":
+            self = .reorganized
+        case "nothing_to_reorganize":
+            self = .nothingToReorganize
         case "idle", nil:
             self = .idle
         default:
@@ -149,6 +177,10 @@ public struct RunMetrics: Equatable, Codable, Sendable {
     public var errorCount: Int
     public var speedMBps: Double
     public var etaSeconds: Double?
+    public var revertedCount: Int
+    public var skippedCount: Int
+    public var missingCount: Int
+    public var movedCount: Int
     public var dateHistogram: [DateHistogramBucket]
 
     public init(
@@ -162,6 +194,10 @@ public struct RunMetrics: Equatable, Codable, Sendable {
         errorCount: Int = 0,
         speedMBps: Double = 0,
         etaSeconds: Double? = nil,
+        revertedCount: Int = 0,
+        skippedCount: Int = 0,
+        missingCount: Int = 0,
+        movedCount: Int = 0,
         dateHistogram: [DateHistogramBucket] = []
     ) {
         self.discoveredCount = discoveredCount
@@ -174,7 +210,37 @@ public struct RunMetrics: Equatable, Codable, Sendable {
         self.errorCount = errorCount
         self.speedMBps = speedMBps
         self.etaSeconds = etaSeconds
+        self.revertedCount = revertedCount
+        self.skippedCount = skippedCount
+        self.missingCount = missingCount
+        self.movedCount = movedCount
         self.dateHistogram = dateHistogram
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case discoveredCount, plannedCount, alreadyInDestinationCount, duplicateCount,
+             hashErrorCount, copiedCount, failedCount, errorCount, speedMBps, etaSeconds,
+             revertedCount, skippedCount, missingCount, movedCount,
+             dateHistogram
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.discoveredCount = try c.decodeIfPresent(Int.self, forKey: .discoveredCount) ?? 0
+        self.plannedCount = try c.decodeIfPresent(Int.self, forKey: .plannedCount) ?? 0
+        self.alreadyInDestinationCount = try c.decodeIfPresent(Int.self, forKey: .alreadyInDestinationCount) ?? 0
+        self.duplicateCount = try c.decodeIfPresent(Int.self, forKey: .duplicateCount) ?? 0
+        self.hashErrorCount = try c.decodeIfPresent(Int.self, forKey: .hashErrorCount) ?? 0
+        self.copiedCount = try c.decodeIfPresent(Int.self, forKey: .copiedCount) ?? 0
+        self.failedCount = try c.decodeIfPresent(Int.self, forKey: .failedCount) ?? 0
+        self.errorCount = try c.decodeIfPresent(Int.self, forKey: .errorCount) ?? 0
+        self.speedMBps = try c.decodeIfPresent(Double.self, forKey: .speedMBps) ?? 0
+        self.etaSeconds = try c.decodeIfPresent(Double.self, forKey: .etaSeconds)
+        self.revertedCount = try c.decodeIfPresent(Int.self, forKey: .revertedCount) ?? 0
+        self.skippedCount = try c.decodeIfPresent(Int.self, forKey: .skippedCount) ?? 0
+        self.missingCount = try c.decodeIfPresent(Int.self, forKey: .missingCount) ?? 0
+        self.movedCount = try c.decodeIfPresent(Int.self, forKey: .movedCount) ?? 0
+        self.dateHistogram = try c.decodeIfPresent([DateHistogramBucket].self, forKey: .dateHistogram) ?? []
     }
 }
 
@@ -205,6 +271,7 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
     public var useFastDestinationScan: Bool
     public var verifyCopies: Bool
     public var workerCount: Int
+    public var folderStructure: FolderStructure
 
     public init(
         mode: RunMode,
@@ -213,7 +280,8 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
         profileName: String? = nil,
         useFastDestinationScan: Bool = false,
         verifyCopies: Bool = false,
-        workerCount: Int = 8
+        workerCount: Int = 8,
+        folderStructure: FolderStructure = .yyyyMMDD
     ) {
         self.mode = mode
         self.sourcePath = sourcePath
@@ -222,6 +290,23 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
         self.useFastDestinationScan = useFastDestinationScan
         self.verifyCopies = verifyCopies
         self.workerCount = workerCount
+        self.folderStructure = folderStructure
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case mode, sourcePath, destinationPath, profileName, useFastDestinationScan, verifyCopies, workerCount, folderStructure
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mode = try container.decode(RunMode.self, forKey: .mode)
+        self.sourcePath = try container.decodeIfPresent(String.self, forKey: .sourcePath) ?? ""
+        self.destinationPath = try container.decodeIfPresent(String.self, forKey: .destinationPath) ?? ""
+        self.profileName = try container.decodeIfPresent(String.self, forKey: .profileName)
+        self.useFastDestinationScan = try container.decodeIfPresent(Bool.self, forKey: .useFastDestinationScan) ?? false
+        self.verifyCopies = try container.decodeIfPresent(Bool.self, forKey: .verifyCopies) ?? false
+        self.workerCount = try container.decodeIfPresent(Int.self, forKey: .workerCount) ?? 8
+        self.folderStructure = try container.decodeIfPresent(FolderStructure.self, forKey: .folderStructure) ?? .yyyyMMDD
     }
 }
 
@@ -258,6 +343,10 @@ public struct RunPhaseResult: Equatable, Codable, Sendable {
     public var hashErrorCount: Int?
     public var copiedCount: Int?
     public var failedCount: Int?
+    public var revertedCount: Int?
+    public var skippedCount: Int?
+    public var missingCount: Int?
+    public var movedCount: Int?
 
     public init(
         found: Int? = nil,
@@ -266,7 +355,11 @@ public struct RunPhaseResult: Equatable, Codable, Sendable {
         duplicateCount: Int? = nil,
         hashErrorCount: Int? = nil,
         copiedCount: Int? = nil,
-        failedCount: Int? = nil
+        failedCount: Int? = nil,
+        revertedCount: Int? = nil,
+        skippedCount: Int? = nil,
+        missingCount: Int? = nil,
+        movedCount: Int? = nil
     ) {
         self.found = found
         self.newCount = newCount
@@ -275,6 +368,10 @@ public struct RunPhaseResult: Equatable, Codable, Sendable {
         self.hashErrorCount = hashErrorCount
         self.copiedCount = copiedCount
         self.failedCount = failedCount
+        self.revertedCount = revertedCount
+        self.skippedCount = skippedCount
+        self.missingCount = missingCount
+        self.movedCount = movedCount
     }
 }
 

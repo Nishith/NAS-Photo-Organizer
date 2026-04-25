@@ -67,6 +67,7 @@ struct RunHistoryView: View {
     @ObservedObject private var historyStore: HistoryStore
     @State private var searchText = ""
     @State private var historyFilter: HistoryFilter = .all
+    @State private var pendingRevertEntry: RunHistoryEntry?
 
     private static let fileSizeFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
@@ -99,6 +100,24 @@ struct RunHistoryView: View {
         .darkroom()
         .navigationTitle("Run History")
         .searchable(text: $searchText, prompt: "Search artifacts")
+        .confirmationDialog(
+            "Revert this transfer?",
+            isPresented: Binding(
+                get: { pendingRevertEntry != nil },
+                set: { if !$0 { pendingRevertEntry = nil } }
+            ),
+            presenting: pendingRevertEntry
+        ) { entry in
+            Button("Revert", role: .destructive) {
+                appState.revertHistoryEntry(entry)
+                pendingRevertEntry = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingRevertEntry = nil
+            }
+        } message: { entry in
+            Text("Chronoframe will remove the files this receipt copied, but only if their contents still match the original transfer. Files modified after the original copy will be preserved.\n\nReceipt: \(entry.relativePath)")
+        }
     }
 
     // MARK: - Header strip
@@ -362,6 +381,13 @@ struct RunHistoryView: View {
                     appState.revealHistoryEntry(entry)
                 }
                 .accessibilityIdentifier("revealArtifact_\(entry.id)")
+                if entry.kind == .auditReceipt {
+                    Divider()
+                    Button("Revert this run…") {
+                        pendingRevertEntry = entry
+                    }
+                    .accessibilityIdentifier("revertArtifact_\(entry.id)")
+                }
                 Divider()
                 Button("Move to Trash", role: .destructive) {
                     historyStore.remove(entry: entry)

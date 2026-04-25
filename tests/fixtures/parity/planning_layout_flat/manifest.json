@@ -1,0 +1,27 @@
+{
+  "description": "Flat folder layout writes all files at the destination root with date prefix in the filename.",
+  "folder_structure": "Flat",
+  "files": [
+    {
+      "root": "source",
+      "path": "camera/IMG_20240102_101010.jpg",
+      "content_text": "alpha"
+    },
+    {
+      "root": "source",
+      "path": "camera/IMG_20240102_111111.jpg",
+      "content_text": "bravo"
+    },
+    {
+      "root": "source",
+      "path": "camera/VID_20240103_121212.mov",
+      "content_text": "charlie"
+    },
+    {
+      "root": "source",
+      "path": "misc/orphan.mov",
+      "content_text": "unknown-dated",
+      "mtime_epoch": 0
+    }
+  ]
+}

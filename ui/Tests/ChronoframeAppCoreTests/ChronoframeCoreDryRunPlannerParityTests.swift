@@ -26,6 +26,10 @@ final class ChronoframeCoreDryRunPlannerParityTests: XCTestCase {
             "planning_mixed_inputs",
             "planning_sequence_overflow",
             "planning_sequence_reuse",
+            "planning_layout_yyyy_mm",
+            "planning_layout_yyyy",
+            "planning_layout_yyyy_mon_event",
+            "planning_layout_flat",
         ] {
             try assertScenario(named: scenario)
         }
@@ -82,10 +86,12 @@ final class ChronoframeCoreDryRunPlannerParityTests: XCTestCase {
             try database.saveCacheRecords(records)
         }
 
+        let folderStructure = manifest.folderStructure.flatMap(FolderStructure.init(rawValue:)) ?? .yyyyMMDD
         let result = try DryRunPlanner().plan(
             sourceRoot: sourceRoot,
             destinationRoot: destinationRoot,
-            fastDestination: manifest.fastDest ?? false
+            fastDestination: manifest.fastDest ?? false,
+            folderStructure: folderStructure
         )
 
         XCTAssertEqual(result.phaseSequence, expected.phaseSequence, scenario)
@@ -184,11 +190,13 @@ private struct Manifest: Decodable {
     var fastDest: Bool?
     var files: [ManifestFile]
     var seedDestinationCache: [SeedDestinationCacheRow]?
+    var folderStructure: String?
 
     private enum CodingKeys: String, CodingKey {
         case fastDest = "fast_dest"
         case files
         case seedDestinationCache = "seed_destination_cache"
+        case folderStructure = "folder_structure"
     }
 }
 

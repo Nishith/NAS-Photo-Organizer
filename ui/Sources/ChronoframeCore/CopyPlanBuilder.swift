@@ -74,7 +74,9 @@ public enum CopyPlanBuilder {
         sourceFiles: [PlanningFileCandidate],
         destinationSnapshot: DestinationIndexSnapshot,
         destinationRoot: String,
-        namingRules: PlannerNamingRules = .pythonReference
+        namingRules: PlannerNamingRules = .pythonReference,
+        folderStructure: FolderStructure = .yyyyMMDD,
+        sourceRoot: String? = nil
     ) -> CopyPlanResult {
         var counts = CopyPlanCounts()
         var sourceSeen: [FileIdentity: PlanningFileCandidate] = [:]
@@ -126,7 +128,9 @@ public enum CopyPlanBuilder {
                     dateBucket: dateBucket,
                     sequence: sequence,
                     duplicateDirectoryName: nil,
-                    namingRules: namingRules
+                    namingRules: namingRules,
+                    folderStructure: folderStructure,
+                    sourceRoot: sourceRoot
                 )
                 plannedTransfers.append(
                     PlannedTransfer(
@@ -153,7 +157,9 @@ public enum CopyPlanBuilder {
                 dateBucket: dateBucket,
                 sequence: sequence,
                 duplicateDirectoryName: namingRules.duplicateDirectoryName,
-                namingRules: namingRules
+                namingRules: namingRules,
+                folderStructure: folderStructure,
+                sourceRoot: sourceRoot
             )
             plannedTransfers.append(
                 PlannedTransfer(
@@ -189,7 +195,9 @@ public enum CopyPlanBuilder {
         dateBucket: String,
         sequence: Int,
         duplicateDirectoryName: String?,
-        namingRules: PlannerNamingRules
+        namingRules: PlannerNamingRules,
+        folderStructure: FolderStructure,
+        sourceRoot: String?
     ) -> String {
         PlanningPathBuilder.buildDestinationPath(
             for: sourcePath,
@@ -197,7 +205,9 @@ public enum CopyPlanBuilder {
             dateBucket: dateBucket,
             sequence: sequence,
             duplicateDirectoryName: duplicateDirectoryName,
-            namingRules: namingRules
+            namingRules: namingRules,
+            folderStructure: folderStructure,
+            sourceRoot: sourceRoot
         )
     }
 

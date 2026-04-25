@@ -70,7 +70,10 @@ struct NowCopyingCard: View {
         case .preflighting: return "clock.arrow.circlepath"
         case .cancelled: return "pause.circle"
         case .failed: return "exclamationmark.triangle"
-        case .nothingToCopy: return "checkmark.seal"
+        case .nothingToCopy, .nothingToReorganize: return "checkmark.seal"
+        case .reverted: return "arrow.uturn.backward.circle.fill"
+        case .revertEmpty: return "tray"
+        case .reorganized: return "rectangle.3.offgrid.fill"
         case .idle: return "circle.dashed"
         }
     }

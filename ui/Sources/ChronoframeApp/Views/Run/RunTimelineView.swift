@@ -211,6 +211,14 @@ struct RunTimelineView: View {
             return "Preparing the run."
         case .idle:
             return "Run a preview to see the timeline of your source."
+        case .reverted:
+            return "Files restored to their original state."
+        case .revertEmpty:
+            return "This receipt had no transfers to undo."
+        case .reorganized:
+            return "Layout updated in place."
+        case .nothingToReorganize:
+            return "The destination already matches this layout."
         }
     }
 

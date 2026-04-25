@@ -14,6 +14,7 @@ final class HistoryCoordinatorTests: XCTestCase {
             preferencesStore: harness.preferencesStore,
             setupStore: harness.setupStore,
             historyStore: harness.historyStore,
+            runSessionStore: harness.runSessionStore,
             finderService: harness.finderService,
             setSelection: { selection = $0 }
         )

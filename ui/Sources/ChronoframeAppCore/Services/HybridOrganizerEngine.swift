@@ -37,7 +37,7 @@ public final class HybridOrganizerEngine: OrganizerEngine {
         switch mode {
         case .preview:
             return previewEngine
-        case .transfer:
+        case .transfer, .revert, .reorganize:
             return transferEngine
         }
     }

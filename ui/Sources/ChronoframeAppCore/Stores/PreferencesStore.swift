@@ -45,6 +45,10 @@ public final class PreferencesStore: ObservableObject {
         didSet { persist(lastSelectedProfileName, key: "lastSelectedProfileName") }
     }
 
+    @Published public var folderStructure: FolderStructure {
+        didSet { persist(folderStructure.rawValue, key: "folderStructure") }
+    }
+
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.workerCount = defaults.object(forKey: "workerCount") as? Int ?? 8
@@ -54,6 +58,8 @@ public final class PreferencesStore: ObservableObject {
         self.lastManualSourcePath = defaults.string(forKey: "lastManualSourcePath") ?? ""
         self.lastManualDestinationPath = defaults.string(forKey: "lastManualDestinationPath") ?? ""
         self.lastSelectedProfileName = defaults.string(forKey: "lastSelectedProfileName") ?? ""
+        let storedStructure = defaults.string(forKey: "folderStructure").flatMap(FolderStructure.init(rawValue:))
+        self.folderStructure = storedStructure ?? .yyyyMMDD
     }
 
     public func bookmark(for key: String) -> FolderBookmark? {

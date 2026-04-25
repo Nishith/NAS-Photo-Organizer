@@ -44,4 +44,31 @@ public protocol OrganizerEngine: AnyObject {
     func start(_ configuration: RunConfiguration) throws -> AsyncThrowingStream<RunEvent, Error>
     func resume(_ configuration: RunConfiguration) throws -> AsyncThrowingStream<RunEvent, Error>
     func cancelCurrentRun()
+
+    /// Revert a previous transfer using its on-disk audit receipt. Emits
+    /// `RunEvent`s identical in shape to a normal run so the same UI surface
+    /// can render progress and the final summary.
+    func revert(receiptURL: URL, destinationRoot: String) throws -> AsyncThrowingStream<RunEvent, Error>
+
+    /// In-place layout migration: move every recognised file under
+    /// `destinationRoot` so it sits in the directory layout described by
+    /// `targetStructure`. No source folder is required — this only touches
+    /// files already present in the destination.
+    func reorganize(
+        destinationRoot: String,
+        targetStructure: FolderStructure
+    ) throws -> AsyncThrowingStream<RunEvent, Error>
+}
+
+extension OrganizerEngine {
+    public func revert(receiptURL: URL, destinationRoot: String) throws -> AsyncThrowingStream<RunEvent, Error> {
+        throw OrganizerEngineError.failedToLaunch("Revert is not supported by this engine.")
+    }
+
+    public func reorganize(
+        destinationRoot: String,
+        targetStructure: FolderStructure
+    ) throws -> AsyncThrowingStream<RunEvent, Error> {
+        throw OrganizerEngineError.failedToLaunch("Reorganize is not supported by this engine.")
+    }
 }

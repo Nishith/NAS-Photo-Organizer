@@ -101,6 +101,59 @@ public final class RunSessionStore: ObservableObject {
         }
     }
 
+    /// Run a revert against the audit receipt at `receiptURL`. Streams the
+    /// engine's `RunEvent`s into this store so the standard Run workspace
+    /// renders progress, issues, and the final summary.
+    public func requestRevert(receiptURL: URL, destinationRoot: String) {
+        resetSessionState(mode: .revert)
+        status = .running
+        currentTaskTitle = "Reverting…"
+        artifacts = RunArtifactPaths(
+            destinationRoot: destinationRoot,
+            reportPath: receiptURL.path,
+            logFilePath: nil,
+            logsDirectoryPath: URL(fileURLWithPath: destinationRoot)
+                .appendingPathComponent(".organize_logs", isDirectory: true).path
+        )
+
+        streamTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let stream = try engine.revert(receiptURL: receiptURL, destinationRoot: destinationRoot)
+                for try await event in stream {
+                    self.consume(event)
+                }
+            } catch {
+                self.handleFailure(message: error.localizedDescription)
+            }
+        }
+    }
+
+    /// Reorganize the destination layout to match `targetStructure`. Streams
+    /// engine events into this store identically to `requestRun` so the same
+    /// UI surface renders progress.
+    public func requestReorganize(destinationRoot: String, targetStructure: FolderStructure) {
+        resetSessionState(mode: .reorganize)
+        status = .running
+        currentTaskTitle = "Reorganizing…"
+        artifacts = RunArtifactPaths(destinationRoot: destinationRoot)
+
+        streamTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let stream = try engine.reorganize(
+                    destinationRoot: destinationRoot,
+                    targetStructure: targetStructure
+                )
+                for try await event in stream {
+                    self.consume(event)
+                }
+            } catch {
+                self.handleFailure(message: error.localizedDescription)
+            }
+        }
+    }
+
     public func confirmPrompt() {
         guard let prompt else { return }
 
@@ -299,6 +352,24 @@ public final class RunSessionStore: ObservableObject {
                 }
             case .destinationIndexing:
                 break
+            case .revert:
+                metrics.revertedCount = result.revertedCount ?? metrics.revertedCount
+                metrics.skippedCount = result.skippedCount ?? metrics.skippedCount
+                metrics.missingCount = result.missingCount ?? metrics.missingCount
+                logStore.append(
+                    "Revert complete: \(result.revertedCount ?? 0) reverted, "
+                    + "\(result.skippedCount ?? 0) preserved, "
+                    + "\(result.missingCount ?? 0) already missing."
+                )
+            case .reorganize:
+                metrics.movedCount = result.movedCount ?? metrics.movedCount
+                metrics.skippedCount = result.skippedCount ?? metrics.skippedCount
+                metrics.failedCount = result.failedCount ?? metrics.failedCount
+                logStore.append(
+                    "Reorganize complete: \(result.movedCount ?? 0) moved, "
+                    + "\(result.skippedCount ?? 0) skipped, "
+                    + "\(result.failedCount ?? 0) failed."
+                )
             }
 
         case let .copyPlanReady(count):

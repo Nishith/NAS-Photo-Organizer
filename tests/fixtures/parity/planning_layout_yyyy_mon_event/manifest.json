@@ -1,0 +1,32 @@
+{
+  "description": "YYYY/Mon/Event preserves the immediate parent folder name from the source as an event subdirectory.",
+  "folder_structure": "YYYY/Mon/Event",
+  "files": [
+    {
+      "root": "source",
+      "path": "Birthday/IMG_20240102_101010.jpg",
+      "content_text": "alpha"
+    },
+    {
+      "root": "source",
+      "path": "Birthday/IMG_20240102_111111.jpg",
+      "content_text": "bravo"
+    },
+    {
+      "root": "source",
+      "path": "Vacation/IMG_20240315_141414.jpg",
+      "content_text": "charlie"
+    },
+    {
+      "root": "source",
+      "path": "IMG_20240602_120000.jpg",
+      "content_text": "delta"
+    },
+    {
+      "root": "source",
+      "path": "Birthday/orphan.mov",
+      "content_text": "unknown-dated",
+      "mtime_epoch": 0
+    }
+  ]
+}

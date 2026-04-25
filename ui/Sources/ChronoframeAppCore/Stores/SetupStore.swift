@@ -84,7 +84,8 @@ public final class SetupStore: ObservableObject {
             profileName: usingProfile ? selectedProfileName : nil,
             useFastDestinationScan: preferences.useFastDestinationScan,
             verifyCopies: preferences.verifyCopies,
-            workerCount: max(1, preferences.workerCount)
+            workerCount: max(1, preferences.workerCount),
+            folderStructure: preferences.folderStructure
         )
     }
 }

@@ -266,6 +266,16 @@ public struct EngineArtifactLayout: Equatable, Codable, Sendable {
     )
 }
 
+public enum FolderStructure: String, Codable, Sendable, CaseIterable {
+    case yyyyMMDD = "YYYY/MM/DD"
+    case yyyyMM = "YYYY/MM"
+    case yyyy = "YYYY"
+    case yyyyMonEvent = "YYYY/Mon/Event"
+    case flat = "Flat"
+
+    public static let `default`: FolderStructure = .yyyyMMDD
+}
+
 public struct PlannerNamingRules: Equatable, Codable, Sendable {
     public var sequenceWidth: Int
     public var duplicateDirectoryName: String
@@ -324,6 +334,8 @@ public struct RetryPolicy: Equatable, Codable, Sendable {
             Int32(ENOTDIR),
             Int32(EISDIR),
             Int32(EINVAL),
+            Int32(EACCES),
+            Int32(EPERM),
         ]
     )
 }

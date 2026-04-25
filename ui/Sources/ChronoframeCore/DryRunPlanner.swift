@@ -83,6 +83,7 @@ public struct DryRunPlanner: Sendable {
         databaseURL: URL? = nil,
         fastDestination: Bool = false,
         namingRules: PlannerNamingRules = .pythonReference,
+        folderStructure: FolderStructure = .yyyyMMDD,
         /// Called with incremental `RunEvent`s while the walks are in progress.
         /// Allows callers to stream progress to the UI without waiting for `plan()` to return.
         onEvent: (@Sendable (RunEvent) -> Void)? = nil
@@ -196,7 +197,9 @@ public struct DryRunPlanner: Sendable {
                             dateBucket: dateBucket,
                             sequence: sequence,
                             duplicateDirectoryName: nil,
-                            namingRules: namingRules
+                            namingRules: namingRules,
+                            folderStructure: folderStructure,
+                            sourceRoot: sourceRoot.path
                         ),
                         identity: record.identity,
                         dateBucket: dateBucket,
@@ -223,7 +226,9 @@ public struct DryRunPlanner: Sendable {
                         dateBucket: duplicate.dateBucket,
                         sequence: sequence,
                         duplicateDirectoryName: namingRules.duplicateDirectoryName,
-                        namingRules: namingRules
+                        namingRules: namingRules,
+                        folderStructure: folderStructure,
+                        sourceRoot: sourceRoot.path
                     ),
                     identity: duplicate.identity,
                     dateBucket: duplicate.dateBucket,

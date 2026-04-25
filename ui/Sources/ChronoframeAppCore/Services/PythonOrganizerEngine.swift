@@ -122,6 +122,14 @@ public struct PythonEventDecoder: Sendable {
                 title = "Already up to date"
             case .cancelled:
                 title = "Cancelled"
+            case .reverted:
+                title = "Revert complete"
+            case .revertEmpty:
+                title = "Nothing to revert"
+            case .reorganized:
+                title = "Reorganize complete"
+            case .nothingToReorganize:
+                title = "Nothing to reorganize"
             case .idle, .preflighting, .running, .failed:
                 title = rawEvent.status ?? "Done"
             }
@@ -311,6 +319,14 @@ public final class PythonOrganizerEngine: OrganizerEngine {
                                 metrics.failedCount = result.failedCount ?? metrics.failedCount
                             case .sourceHashing, .destinationIndexing:
                                 break
+                            case .revert:
+                                metrics.revertedCount = result.revertedCount ?? metrics.revertedCount
+                                metrics.skippedCount = result.skippedCount ?? metrics.skippedCount
+                                metrics.missingCount = result.missingCount ?? metrics.missingCount
+                            case .reorganize:
+                                metrics.movedCount = result.movedCount ?? metrics.movedCount
+                                metrics.skippedCount = result.skippedCount ?? metrics.skippedCount
+                                metrics.failedCount = result.failedCount ?? metrics.failedCount
                             }
                         case let .copyPlanReady(count):
                             metrics.plannedCount = count
@@ -376,6 +392,8 @@ public final class PythonOrganizerEngine: OrganizerEngine {
         if configuration.verifyCopies {
             arguments.append("--verify")
         }
+
+        arguments.append(contentsOf: ["--folder-structure", configuration.folderStructure.rawValue])
 
         if let profileName = configuration.profileName, !profileName.isEmpty {
             arguments.append(contentsOf: ["--profile", profileName])

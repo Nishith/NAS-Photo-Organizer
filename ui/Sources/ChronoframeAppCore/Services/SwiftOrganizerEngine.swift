@@ -8,16 +8,22 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
     private let profilesRepository: any ProfilesRepositorying
     private let planner: DryRunPlanner
     private let transferExecutor: TransferExecutor
+    private let revertExecutor: RevertExecutor
+    private let reorganizeExecutor: ReorganizeExecutor
     private var activeTask: Task<Void, Never>?
 
     public init(
         profilesRepository: any ProfilesRepositorying = ProfilesRepository(),
         planner: DryRunPlanner = DryRunPlanner(),
-        transferExecutor: TransferExecutor = TransferExecutor()
+        transferExecutor: TransferExecutor = TransferExecutor(),
+        revertExecutor: RevertExecutor = RevertExecutor(),
+        reorganizeExecutor: ReorganizeExecutor = ReorganizeExecutor()
     ) {
         self.profilesRepository = profilesRepository
         self.planner = planner
         self.transferExecutor = transferExecutor
+        self.revertExecutor = revertExecutor
+        self.reorganizeExecutor = reorganizeExecutor
     }
 
     public func preflight(_ configuration: RunConfiguration) async throws -> RunPreflight {
@@ -42,6 +48,14 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             return makePreviewStream(configuration: resolvedConfiguration)
         case .transfer:
             return makeTransferStream(configuration: resolvedConfiguration, resumePendingJobs: false)
+        case .revert, .reorganize:
+            // Revert + reorganize are surfaced via dedicated entry points
+            // (SwiftOrganizerEngine.revert / .reorganize). They cannot be invoked
+            // through the generic start() pipeline because they take additional
+            // arguments (a receipt path or a target FolderStructure).
+            throw OrganizerEngineError.failedToLaunch(
+                "\(resolvedConfiguration.mode.title) runs use the dedicated engine entry point, not start()."
+            )
         }
     }
 
@@ -53,12 +67,239 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             return makePreviewStream(configuration: resolvedConfiguration)
         case .transfer:
             return makeTransferStream(configuration: resolvedConfiguration, resumePendingJobs: true)
+        case .revert, .reorganize:
+            throw OrganizerEngineError.failedToLaunch(
+                "\(resolvedConfiguration.mode.title) runs cannot be resumed."
+            )
         }
     }
 
     public func cancelCurrentRun() {
         activeTask?.cancel()
         activeTask = nil
+    }
+
+    // MARK: - Revert
+
+    public func revert(receiptURL: URL, destinationRoot: String) throws -> AsyncThrowingStream<RunEvent, Error> {
+        // Validate the receipt up front so we can throw synchronously and let
+        // the caller surface a clean error before kicking off any async work.
+        let receipt = try revertExecutor.loadReceipt(at: receiptURL)
+        return makeRevertStream(
+            receipt: receipt,
+            destinationRoot: destinationRoot,
+            receiptURL: receiptURL
+        )
+    }
+
+    private func makeRevertStream(
+        receipt: RevertReceipt,
+        destinationRoot: String,
+        receiptURL: URL
+    ) -> AsyncThrowingStream<RunEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let revertExecutor = self.revertExecutor
+            let isCancelledRef = TaskCancellationCheck()
+
+            let task = Task.detached(priority: .userInitiated) {
+                continuation.yield(.startup)
+                continuation.yield(.phaseStarted(phase: .revert, total: receipt.transfers.count))
+
+                let observer = RevertExecutionObserver(
+                    onTaskProgress: { completed, total in
+                        continuation.yield(
+                            .phaseProgress(
+                                phase: .revert,
+                                completed: completed,
+                                total: total,
+                                bytesCopied: nil,
+                                bytesTotal: nil
+                            )
+                        )
+                    },
+                    onIssue: { issue in
+                        continuation.yield(.issue(issue))
+                    }
+                )
+
+                let result = revertExecutor.revert(
+                    receipt: receipt,
+                    observer: observer,
+                    isCancelled: { isCancelledRef.isCancelled }
+                )
+
+                if isCancelledRef.isCancelled {
+                    continuation.finish()
+                    return
+                }
+
+                continuation.yield(
+                    .phaseCompleted(
+                        phase: .revert,
+                        result: RunPhaseResult(
+                            revertedCount: result.revertedCount,
+                            skippedCount: result.skippedCount,
+                            missingCount: result.missingCount
+                        )
+                    )
+                )
+
+                let metrics = RunMetrics(
+                    revertedCount: result.revertedCount,
+                    skippedCount: result.skippedCount,
+                    missingCount: result.missingCount
+                )
+
+                let artifacts = RunArtifactPaths(
+                    destinationRoot: destinationRoot,
+                    reportPath: receiptURL.path,
+                    logFilePath: nil,
+                    logsDirectoryPath: URL(fileURLWithPath: destinationRoot)
+                        .appendingPathComponent(EngineArtifactLayout.pythonReference.logsDirectoryName, isDirectory: true)
+                        .path
+                )
+
+                let status: RunStatus = result.totalTransfers == 0 ? .revertEmpty : .reverted
+                let title = status == .revertEmpty ? "Nothing to revert" : "Revert complete"
+
+                continuation.yield(
+                    .complete(
+                        RunSummary(
+                            status: status,
+                            title: title,
+                            metrics: metrics,
+                            artifacts: artifacts
+                        )
+                    )
+                )
+                continuation.finish()
+
+                Task { @MainActor in
+                    self.activeTask = nil
+                }
+            }
+
+            self.activeTask = task
+            continuation.onTermination = { @Sendable _ in
+                isCancelledRef.cancel()
+                task.cancel()
+            }
+        }
+    }
+
+    // MARK: - Reorganize
+
+    public func reorganize(
+        destinationRoot: String,
+        targetStructure: FolderStructure
+    ) throws -> AsyncThrowingStream<RunEvent, Error> {
+        let destinationURL = URL(fileURLWithPath: destinationRoot, isDirectory: true)
+        // Build the plan synchronously so any walk error throws cleanly.
+        let plan = try reorganizeExecutor.plan(
+            destinationRoot: destinationURL,
+            targetStructure: targetStructure
+        )
+        return makeReorganizeStream(plan: plan)
+    }
+
+    private func makeReorganizeStream(plan: ReorganizePlan) -> AsyncThrowingStream<RunEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let reorganizeExecutor = self.reorganizeExecutor
+            let isCancelledRef = TaskCancellationCheck()
+
+            let task = Task.detached(priority: .userInitiated) {
+                continuation.yield(.startup)
+
+                if plan.isEmpty {
+                    let metrics = RunMetrics(skippedCount: plan.unchangedCount)
+                    let artifacts = RunArtifactPaths(destinationRoot: plan.destinationRoot)
+                    continuation.yield(
+                        .complete(
+                            RunSummary(
+                                status: .nothingToReorganize,
+                                title: "Layout already correct",
+                                metrics: metrics,
+                                artifacts: artifacts
+                            )
+                        )
+                    )
+                    continuation.finish()
+                    return
+                }
+
+                continuation.yield(.copyPlanReady(count: plan.moves.count))
+                continuation.yield(.phaseStarted(phase: .reorganize, total: plan.moves.count))
+
+                let observer = ReorganizeExecutionObserver(
+                    onTaskProgress: { completed, total in
+                        continuation.yield(
+                            .phaseProgress(
+                                phase: .reorganize,
+                                completed: completed,
+                                total: total,
+                                bytesCopied: nil,
+                                bytesTotal: nil
+                            )
+                        )
+                    },
+                    onIssue: { issue in
+                        continuation.yield(.issue(issue))
+                    }
+                )
+
+                let result = reorganizeExecutor.execute(
+                    plan: plan,
+                    observer: observer,
+                    isCancelled: { isCancelledRef.isCancelled }
+                )
+
+                if isCancelledRef.isCancelled {
+                    continuation.finish()
+                    return
+                }
+
+                continuation.yield(
+                    .phaseCompleted(
+                        phase: .reorganize,
+                        result: RunPhaseResult(
+                            failedCount: result.failedCount,
+                            skippedCount: result.skippedCount,
+                            movedCount: result.movedCount
+                        )
+                    )
+                )
+
+                let metrics = RunMetrics(
+                    plannedCount: plan.moves.count,
+                    failedCount: result.failedCount,
+                    skippedCount: result.skippedCount,
+                    movedCount: result.movedCount
+                )
+                let artifacts = RunArtifactPaths(destinationRoot: plan.destinationRoot)
+
+                continuation.yield(
+                    .complete(
+                        RunSummary(
+                            status: .reorganized,
+                            title: "Reorganize complete",
+                            metrics: metrics,
+                            artifacts: artifacts
+                        )
+                    )
+                )
+                continuation.finish()
+
+                Task { @MainActor in
+                    self.activeTask = nil
+                }
+            }
+
+            self.activeTask = task
+            continuation.onTermination = { @Sendable _ in
+                isCancelledRef.cancel()
+                task.cancel()
+            }
+        }
     }
 
     private func resolvedConfiguration(for configuration: RunConfiguration) throws -> RunConfiguration {
@@ -107,6 +348,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                         sourceRoot: URL(fileURLWithPath: configuration.sourcePath, isDirectory: true),
                         destinationRoot: URL(fileURLWithPath: configuration.destinationPath, isDirectory: true),
                         fastDestination: configuration.useFastDestinationScan,
+                        folderStructure: configuration.folderStructure,
                         onEvent: { continuation.yield($0) }
                     )
 
@@ -262,6 +504,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             sourceRoot: URL(fileURLWithPath: configuration.sourcePath, isDirectory: true),
             destinationRoot: destinationURL,
             fastDestination: configuration.useFastDestinationScan,
+            folderStructure: configuration.folderStructure,
             onEvent: { continuation.yield($0) }
         )
 
@@ -570,5 +813,21 @@ private final class IssueCounter: @unchecked Sendable {
 
     func increment() {
         value += 1
+    }
+}
+
+/// Sendable cancel-flag shared between the main-actor engine and the detached
+/// task driving a revert/reorganize stream. The continuation's `onTermination`
+/// callback flips it; the executor body polls `isCancelled` between items.
+private final class TaskCancellationCheck: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _cancelled = false
+    var isCancelled: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return _cancelled
+    }
+    func cancel() {
+        lock.lock(); defer { lock.unlock() }
+        _cancelled = true
     }
 }

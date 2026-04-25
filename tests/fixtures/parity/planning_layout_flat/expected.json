@@ -1,0 +1,55 @@
+{
+  "scenario": "planning_layout_flat",
+  "description": "Flat folder layout writes all files at the destination root with date prefix in the filename.",
+  "phase_sequence": [
+    "startup",
+    "discovery:start",
+    "discovery:complete",
+    "dest_hash:start",
+    "dest_hash:complete",
+    "src_hash:start",
+    "src_hash:complete",
+    "classification:start",
+    "classification:complete",
+    "copy_plan_ready",
+    "complete"
+  ],
+  "counts": {
+    "discovery_found": 4,
+    "dest_hash_total": 0,
+    "src_hash_total": 4,
+    "classification_already_in_dst": 0,
+    "classification_new": 4,
+    "classification_dups": 0,
+    "classification_errors": 0,
+    "copy_plan_ready": 4,
+    "complete_status": "dry_run_finished"
+  },
+  "warning_messages": [],
+  "report_rows": [
+    {
+      "source": "source/camera/IMG_20240102_101010.jpg",
+      "destination": "dest/2024-01-02_001.jpg",
+      "hash": "5_1a486e31c373793e04ad3981405201d7b52e8e85c07bcc79c51704918e6a1a311dc9ceebba0eb132e2d638b3ae09fd4ad9913a75674f59fabf5287fa0c436fd6",
+      "status": "PENDING"
+    },
+    {
+      "source": "source/camera/IMG_20240102_111111.jpg",
+      "destination": "dest/2024-01-02_002.jpg",
+      "hash": "5_cc8ac8636029583c5854554bb809d4fb18e9fab7b3ec3dd946c227e77a237f034095879f95d8301d29ba569245d35dd0d402e6be41b099eb40ca80657a4316b6",
+      "status": "PENDING"
+    },
+    {
+      "source": "source/camera/VID_20240103_121212.mov",
+      "destination": "dest/2024-01-03_001.mov",
+      "hash": "7_44411e8aff7df8db29fc79c0095a9cd80307954ec4dfbe397bea0c0e304d5b62299da2fdf0c9fb1790894a52da6ec069aa2f5e7820aa8ba419c7018c2e4b9e52",
+      "status": "PENDING"
+    },
+    {
+      "source": "source/misc/orphan.mov",
+      "destination": "dest/Unknown_Date/Unknown_001.mov",
+      "hash": "13_84242d43e479415d93cd6581a0f92804f336259ea1bf0d21f369d031df79eed4655563e1e5f104d5372ca93c146504234da02eb5acb209da7c08d59b01834526",
+      "status": "PENDING"
+    }
+  ]
+}

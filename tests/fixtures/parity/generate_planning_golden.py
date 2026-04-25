@@ -188,6 +188,8 @@ def run_scenario(manifest_path: Path) -> dict[str, Any]:
         ]
         if manifest.get("fast_dest", False):
             command.append("--fast-dest")
+        if manifest.get("folder_structure"):
+            command.extend(["--folder-structure", manifest["folder_structure"]])
 
         result = subprocess.run(
             command,

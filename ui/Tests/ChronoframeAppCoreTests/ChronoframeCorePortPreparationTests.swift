@@ -73,6 +73,8 @@ final class ChronoframeCorePortPreparationTests: XCTestCase {
                 Int32(ENOTDIR),
                 Int32(EISDIR),
                 Int32(EINVAL),
+                Int32(EACCES),
+                Int32(EPERM),
             ]
         )
 
