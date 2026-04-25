@@ -301,6 +301,10 @@ public struct ReorganizeExecutor: Sendable {
 
         // Unknown_ prefix
         if stem.hasPrefix(namingRules.unknownFilenamePrefix) {
+            let sequencePart = String(stem.dropFirst(namingRules.unknownFilenamePrefix.count))
+            guard !sequencePart.isEmpty, sequencePart.allSatisfy(\.isNumber) else {
+                return nil
+            }
             return (namingRules.unknownDateDirectoryName, true)
         }
 
@@ -308,6 +312,10 @@ public struct ReorganizeExecutor: Sendable {
         let parts = stem.split(separator: "_", maxSplits: 1, omittingEmptySubsequences: false)
         guard parts.count == 2 else { return nil }
         let datePart = String(parts[0])
+        let sequencePart = String(parts[1])
+        guard !sequencePart.isEmpty, sequencePart.allSatisfy(\.isNumber) else {
+            return nil
+        }
 
         // Validate YYYY-MM-DD shape
         let dateComponents = datePart.split(separator: "-")

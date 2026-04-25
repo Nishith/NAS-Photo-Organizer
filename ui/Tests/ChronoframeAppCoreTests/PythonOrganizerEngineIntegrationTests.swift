@@ -65,13 +65,15 @@ final class PythonOrganizerEngineIntegrationTests: XCTestCase {
                 profileName: "travel",
                 useFastDestinationScan: true,
                 verifyCopies: true,
-                workerCount: 4
+                workerCount: 4,
+                folderStructure: .flat
             )
         )
 
         XCTAssertEqual(preflight.configuration.sourcePath, sourceURL.path)
         XCTAssertEqual(preflight.configuration.destinationPath, destinationURL.path)
         XCTAssertEqual(preflight.configuration.profileName, "travel")
+        XCTAssertEqual(preflight.configuration.folderStructure, .flat)
         XCTAssertEqual(preflight.pendingJobCount, 3)
         XCTAssertEqual(preflight.profilesFilePath, profilesURL.path)
         XCTAssertEqual(preflight.missingDependencies.sorted(), try dependencyProbe().missing.sorted())

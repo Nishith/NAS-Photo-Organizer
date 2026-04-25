@@ -188,6 +188,20 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
         XCTAssertEqual(plan.unrecognizedCount, 2)
     }
 
+    func testPlanRejectsManagedLookingFilenamesWithoutNumericSequenceSuffix() throws {
+        try writeFile(at: ["2024-12-25_notes.jpg"])
+        try writeFile(at: ["Unknown_backup.mov"])
+
+        let plan = try ReorganizeExecutor().plan(
+            destinationRoot: temporaryDirectoryURL,
+            targetStructure: .yyyyMMDD
+        )
+
+        XCTAssertEqual(plan.moves.count, 0)
+        XCTAssertEqual(plan.unchangedCount, 0)
+        XCTAssertEqual(plan.unrecognizedCount, 2)
+    }
+
     func testPlanRoutesUnknownDateFilesUnderUnknownDateBucket() throws {
         try writeFile(at: ["Unknown_Date", "Unknown_001.jpg"])
 

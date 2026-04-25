@@ -311,15 +311,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                 throw OrganizerEngineError.profileNotFound(profileName)
             }
 
-            resolvedConfiguration = RunConfiguration(
-                mode: configuration.mode,
-                sourcePath: profile.sourcePath,
-                destinationPath: profile.destinationPath,
-                profileName: profileName,
-                useFastDestinationScan: configuration.useFastDestinationScan,
-                verifyCopies: configuration.verifyCopies,
-                workerCount: configuration.workerCount
-            )
+            resolvedConfiguration = configuration.resolving(profile: profile)
         } else {
             resolvedConfiguration = configuration
         }

@@ -236,15 +236,7 @@ public final class PythonOrganizerEngine: OrganizerEngine {
                 throw OrganizerEngineError.profileNotFound(profileName)
             }
 
-            return RunConfiguration(
-                mode: configuration.mode,
-                sourcePath: profile.sourcePath,
-                destinationPath: profile.destinationPath,
-                profileName: profileName,
-                useFastDestinationScan: configuration.useFastDestinationScan,
-                verifyCopies: configuration.verifyCopies,
-                workerCount: configuration.workerCount
-            )
+            return configuration.resolving(profile: profile)
         }
 
         return configuration

@@ -71,9 +71,12 @@
 		AA000000000000000000023E /* TickerRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000144 /* TickerRow.swift */; };
 		AA000000000000000000023F /* RunTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000145 /* RunTimelineView.swift */; };
 		AA0000000000000000000240 /* NowCopyingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000146 /* NowCopyingCard.swift */; };
-		AA0000000000000000000247 /* OnboardingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000147 /* OnboardingCard.swift */; };
-		AA0000000000000000000248 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000148 /* HelpView.swift */; };
-		AA0000000000000000000249 /* AboutPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000149 /* AboutPanel.swift */; };
+			AA0000000000000000000247 /* OnboardingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000147 /* OnboardingCard.swift */; };
+			AA0000000000000000000248 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000148 /* HelpView.swift */; };
+			AA0000000000000000000249 /* AboutPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000149 /* AboutPanel.swift */; };
+			AA000000000000000000024A /* RunConfiguration+Profiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000014A /* RunConfiguration+Profiles.swift */; };
+			AA000000000000000000024B /* RevertExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000014B /* RevertExecutor.swift */; };
+			AA000000000000000000024C /* ReorganizeExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000014C /* ReorganizeExecutor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -158,12 +161,15 @@
 		AA0000000000000000000144 /* TickerRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TickerRow.swift; sourceTree = "<group>"; };
 		AA0000000000000000000145 /* RunTimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunTimelineView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000146 /* NowCopyingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowCopyingCard.swift; sourceTree = "<group>"; };
-		AA0000000000000000000147 /* OnboardingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingCard.swift; sourceTree = "<group>"; };
-		AA0000000000000000000148 /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
-		AA0000000000000000000149 /* AboutPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPanel.swift; sourceTree = "<group>"; };
-		AA0000000000000000000181 /* Chronoframe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Chronoframe.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		AA0000000000000000000182 /* ChronoframeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		AA0000000000000000000183 /* ChronoframeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+			AA0000000000000000000147 /* OnboardingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingCard.swift; sourceTree = "<group>"; };
+			AA0000000000000000000148 /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
+			AA0000000000000000000149 /* AboutPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPanel.swift; sourceTree = "<group>"; };
+			AA000000000000000000014A /* RunConfiguration+Profiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunConfiguration+Profiles.swift"; sourceTree = "<group>"; };
+			AA000000000000000000014B /* RevertExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevertExecutor.swift; sourceTree = "<group>"; };
+			AA000000000000000000014C /* ReorganizeExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorganizeExecutor.swift; sourceTree = "<group>"; };
+			AA0000000000000000000181 /* Chronoframe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Chronoframe.app; sourceTree = BUILT_PRODUCTS_DIR; };
+			AA0000000000000000000182 /* ChronoframeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+			AA0000000000000000000183 /* ChronoframeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -367,14 +373,15 @@
 			path = Stores;
 			sourceTree = "<group>";
 		};
-		AA0000000000000000000017 /* Support */ = {
-			isa = PBXGroup;
-			children = (
-				AA0000000000000000000118 /* RuntimePaths.swift */,
-			);
-			path = Support;
-			sourceTree = "<group>";
-		};
+			AA0000000000000000000017 /* Support */ = {
+				isa = PBXGroup;
+				children = (
+					AA000000000000000000014A /* RunConfiguration+Profiles.swift */,
+					AA0000000000000000000118 /* RuntimePaths.swift */,
+				);
+				path = Support;
+				sourceTree = "<group>";
+			};
 		AA0000000000000000000018 /* ChronoframeCore */ = {
 			isa = PBXGroup;
 			children = (
@@ -385,13 +392,15 @@
 				AA000000000000000000012C /* FileIdentityHasher.swift */,
 				AA000000000000000000012D /* MediaDateResolver.swift */,
 				AA000000000000000000012E /* MediaDiscovery.swift */,
-				AA000000000000000000012F /* OrganizerDatabase.swift */,
-				AA0000000000000000000130 /* PlanningPathBuilder.swift */,
-				AA0000000000000000000119 /* ProfileModels.swift */,
-				AA000000000000000000011A /* RunModels.swift */,
-				AA0000000000000000000131 /* TransferExecutor.swift */,
-			);
-			path = ChronoframeCore;
+					AA000000000000000000012F /* OrganizerDatabase.swift */,
+					AA0000000000000000000130 /* PlanningPathBuilder.swift */,
+					AA0000000000000000000119 /* ProfileModels.swift */,
+					AA000000000000000000014C /* ReorganizeExecutor.swift */,
+					AA000000000000000000014B /* RevertExecutor.swift */,
+					AA000000000000000000011A /* RunModels.swift */,
+					AA0000000000000000000131 /* TransferExecutor.swift */,
+				);
+				path = ChronoframeCore;
 			sourceTree = "<group>";
 		};
 		AA0000000000000000000019 /* Tests */ = {
@@ -611,12 +620,13 @@
 				AA0000000000000000000213 /* HistoryStore.swift in Sources */,
 				AA0000000000000000000214 /* PreferencesStore.swift in Sources */,
 				AA0000000000000000000215 /* RunLogStore.swift in Sources */,
-				AA0000000000000000000216 /* RunSessionStore.swift in Sources */,
-				AA0000000000000000000217 /* SetupStore.swift in Sources */,
-				AA0000000000000000000218 /* RuntimePaths.swift in Sources */,
-				AA0000000000000000000237 /* RunSectionViews.swift in Sources */,
-				AA0000000000000000000238 /* RunWorkspaceModel.swift in Sources */,
-				AA0000000000000000000239 /* SetupSectionViews.swift in Sources */,
+					AA0000000000000000000216 /* RunSessionStore.swift in Sources */,
+					AA0000000000000000000217 /* SetupStore.swift in Sources */,
+					AA000000000000000000024A /* RunConfiguration+Profiles.swift in Sources */,
+					AA0000000000000000000218 /* RuntimePaths.swift in Sources */,
+					AA0000000000000000000237 /* RunSectionViews.swift in Sources */,
+					AA0000000000000000000238 /* RunWorkspaceModel.swift in Sources */,
+					AA0000000000000000000239 /* SetupSectionViews.swift in Sources */,
 				AA000000000000000000023A /* SetupScreenModel.swift in Sources */,
 				AA0000000000000000000222 /* BLAKE2bHasher.swift in Sources */,
 				AA0000000000000000000223 /* CopyPlanBuilder.swift in Sources */,
@@ -626,11 +636,13 @@
 				AA0000000000000000000227 /* MediaDateResolver.swift in Sources */,
 				AA0000000000000000000228 /* MediaDiscovery.swift in Sources */,
 				AA0000000000000000000229 /* OrganizerDatabase.swift in Sources */,
-				AA000000000000000000022A /* PlanningPathBuilder.swift in Sources */,
-				AA0000000000000000000219 /* ProfileModels.swift in Sources */,
-				AA000000000000000000021A /* RunModels.swift in Sources */,
-				AA000000000000000000022B /* TransferExecutor.swift in Sources */,
-				AA000000000000000000022C /* DesignTokens.swift in Sources */,
+					AA000000000000000000022A /* PlanningPathBuilder.swift in Sources */,
+					AA0000000000000000000219 /* ProfileModels.swift in Sources */,
+					AA000000000000000000024C /* ReorganizeExecutor.swift in Sources */,
+					AA000000000000000000024B /* RevertExecutor.swift in Sources */,
+					AA000000000000000000021A /* RunModels.swift in Sources */,
+					AA000000000000000000022B /* TransferExecutor.swift in Sources */,
+					AA000000000000000000022C /* DesignTokens.swift in Sources */,
 				AA0000000000000000000249 /* AboutPanel.swift in Sources */,
 				AA000000000000000000023B /* Motion.swift in Sources */,
 				AA000000000000000000023C /* PathControl.swift in Sources */,

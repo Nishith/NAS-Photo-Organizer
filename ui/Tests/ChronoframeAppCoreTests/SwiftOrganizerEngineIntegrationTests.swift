@@ -47,11 +47,17 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
         let engine = SwiftOrganizerEngine(profilesRepository: repository)
 
         let preflight = try await engine.preflight(
-            RunConfiguration(mode: .preview, profileName: "camera", useFastDestinationScan: true)
+            RunConfiguration(
+                mode: .preview,
+                profileName: "camera",
+                useFastDestinationScan: true,
+                folderStructure: .yyyyMonEvent
+            )
         )
 
         XCTAssertEqual(preflight.resolvedSourcePath, sourceURL.path)
         XCTAssertEqual(preflight.resolvedDestinationPath, destinationURL.path)
+        XCTAssertEqual(preflight.configuration.folderStructure, .yyyyMonEvent)
         XCTAssertEqual(preflight.pendingJobCount, 1)
         XCTAssertEqual(preflight.missingDependencies, [])
         XCTAssertEqual(preflight.profilesFilePath, repository.profilesFileURL().path)
