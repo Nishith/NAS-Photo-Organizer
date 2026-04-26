@@ -39,7 +39,8 @@ from chronoframe.metadata import (
 from chronoframe.core import (
     build_dest_index, generate_dry_run_report, generate_audit_receipt,
     load_profile, RunLogger, SEQ_WIDTH, MAX_CONSECUTIVE_FAILURES,
-    MAX_TOTAL_FAILURES, DEFAULT_WORKERS, parse_args, _format_seq,
+    MAX_TOTAL_FAILURES, DEFAULT_WORKERS, parse_args, revert_receipt,
+    _event_subpath, _format_seq,
 )
 
 
@@ -2825,6 +2826,100 @@ class TestParseArgsExtended(unittest.TestCase):
         with patch('sys.argv', ['prog']):
             args = parse_args()
         self.assertFalse(args.fast_dest)
+
+
+class TestRevertReceiptErrorHandling(TempDirMixin, unittest.TestCase):
+    def _write_receipt(self, relpath, payload):
+        path = os.path.join(self.tmpdir, relpath)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(payload, f)
+        return path
+
+    def test_missing_receipt_emits_user_visible_error_and_exits(self):
+        missing = os.path.join(self.tmpdir, "missing_receipt.json")
+
+        with patch("chronoframe.core.emit_json") as emit_json_mock:
+            with self.assertRaises(SystemExit) as raised:
+                revert_receipt(missing)
+
+        self.assertEqual(raised.exception.code, 1)
+        emit_json_mock.assert_called_once_with("error", message=f"Receipt not found: {missing}")
+
+    def test_invalid_receipt_emits_user_visible_error_and_exits(self):
+        receipt = os.path.join(self.tmpdir, "bad_receipt.json")
+        with open(receipt, "w") as f:
+            f.write("{not json")
+
+        with patch("chronoframe.core.emit_json") as emit_json_mock:
+            with self.assertRaises(SystemExit) as raised:
+                revert_receipt(receipt)
+
+        self.assertEqual(raised.exception.code, 1)
+        self.assertEqual(emit_json_mock.call_args.args[0], "error")
+        self.assertIn("Invalid receipt:", emit_json_mock.call_args.kwargs["message"])
+
+    def test_empty_receipt_exits_successfully(self):
+        receipt = self._write_receipt("empty_receipt.json", {"transfers": []})
+
+        with patch("chronoframe.core.emit_json") as emit_json_mock:
+            with self.assertRaises(SystemExit) as raised:
+                revert_receipt(receipt)
+
+        self.assertEqual(raised.exception.code, 0)
+        emit_json_mock.assert_called_once_with("complete", status="revert_empty")
+
+    def test_revert_removesMatchingFileAndEmptyDirectory(self):
+        dest_dir = os.path.join(self.tmpdir, "dest", "2026")
+        os.makedirs(dest_dir)
+        copied = os.path.join(dest_dir, "IMG_0001.JPG")
+        with open(copied, "wb") as f:
+            f.write(b"original copy")
+        receipt = self._write_receipt(
+            "receipt.json",
+            {"transfers": [{"source": "/camera/IMG_0001.JPG", "dest": copied, "hash": fast_hash(copied)}]},
+        )
+
+        revert_receipt(receipt)
+
+        self.assertFalse(os.path.exists(copied))
+        self.assertFalse(os.path.exists(dest_dir))
+
+    def test_revertPreservesModifiedFileWhenHashDiffers(self):
+        copied = self._mkfile("dest/IMG_0001.JPG", b"changed")
+        receipt = self._write_receipt(
+            "receipt.json",
+            {"transfers": [{"source": "/camera/IMG_0001.JPG", "dest": copied, "hash": "different_hash"}]},
+        )
+
+        revert_receipt(receipt)
+
+        self.assertTrue(os.path.exists(copied))
+
+    def test_revertReportsSkippedWhenRemoveFails(self):
+        copied = self._mkfile("dest/IMG_0001.JPG", b"original copy")
+        receipt = self._write_receipt(
+            "receipt.json",
+            {"transfers": [{"source": "/camera/IMG_0001.JPG", "dest": copied, "hash": fast_hash(copied)}]},
+        )
+
+        with patch("chronoframe.core.os.remove", side_effect=OSError("locked")):
+            revert_receipt(receipt)
+
+        self.assertTrue(os.path.exists(copied))
+
+
+class TestEventSubpath(unittest.TestCase):
+    def test_event_subpath_returnsImmediateParentBelowSourceRoot(self):
+        self.assertEqual(
+            _event_subpath("/photos/Vacation/IMG_0001.JPG", "/photos"),
+            "Vacation",
+        )
+        self.assertEqual(_event_subpath("/photos/IMG_0001.JPG", "/photos"), "")
+
+    def test_event_subpathTreatsRelpathErrorsAsNoEvent(self):
+        with patch("chronoframe.core.os.path.relpath", side_effect=ValueError("different drives")):
+            self.assertEqual(_event_subpath("/photos/IMG_0001.JPG", "/photos"), "")
 
 
 # ════════════════════════════════════════════════════════════════════════════

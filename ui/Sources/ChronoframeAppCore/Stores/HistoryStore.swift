@@ -11,13 +11,17 @@ public final class HistoryStore: ObservableObject {
     @Published public private(set) var lastRefreshError: String?
     private let indexer: any RunHistoryIndexing
     private let transferredSourcesLog: TransferredSourcesLog
+    private let trashItem: (URL) throws -> Void
 
     public init(
         entries: [RunHistoryEntry] = [],
         transferredSources: [TransferredSourceRecord] = [],
         destinationRoot: String = "",
         indexer: any RunHistoryIndexing = RunHistoryIndexer(),
-        transferredSourcesLog: TransferredSourcesLog = TransferredSourcesLog()
+        transferredSourcesLog: TransferredSourcesLog = TransferredSourcesLog(),
+        trashItem: @escaping (URL) throws -> Void = { url in
+            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        }
     ) {
         self.entries = entries
         self.transferredSources = transferredSources
@@ -25,6 +29,7 @@ public final class HistoryStore: ObservableObject {
         self.lastRefreshError = nil
         self.indexer = indexer
         self.transferredSourcesLog = transferredSourcesLog
+        self.trashItem = trashItem
     }
 
     public func refresh(destinationRoot: String) {
@@ -79,7 +84,7 @@ public final class HistoryStore: ObservableObject {
         }
 
         do {
-            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+            try trashItem(url)
             entries.removeAll { $0.id == entry.id }
         } catch {
             lastRefreshError = UserFacingErrorMessage.withDetails(
@@ -101,7 +106,7 @@ public final class HistoryStore: ObservableObject {
             }
 
             do {
-                try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                try trashItem(url)
                 removedIDs.insert(entry.id)
             } catch {
                 failedCount += 1

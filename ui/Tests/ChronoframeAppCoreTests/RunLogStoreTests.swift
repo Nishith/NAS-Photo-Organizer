@@ -26,6 +26,25 @@ final class RunLogStoreTests: XCTestCase {
         XCTAssertEqual(store.errorCount, 1)
     }
 
+    func testIssueMessagesAreRenderedWithUserFacingGuidance() {
+        let store = RunLogStore(capacity: PreferencesStore.minimumLogCapacity)
+
+        store.append(
+            issue: RunIssue(
+                severity: .error,
+                message: "Copy failed: /Volumes/Card/IMG_0001.JPG -> /Volumes/Archive/IMG_0001.JPG: Permission denied"
+            )
+        )
+
+        XCTAssertEqual(store.errorCount, 1)
+        XCTAssertEqual(store.warningCount, 0)
+        XCTAssertEqual(store.infoCount, 0)
+        XCTAssertEqual(store.lines.count, 1)
+        XCTAssertTrue(store.lines[0].hasPrefix("ERROR: Chronoframe could not copy this file"), store.lines[0])
+        XCTAssertTrue(store.lines[0].contains("source was left untouched"), store.lines[0])
+        XCTAssertTrue(store.lines[0].contains("Permission denied"), store.lines[0])
+    }
+
     func testSeverityCountersStayAccurateAfterOldLinesTrim() {
         let store = RunLogStore(capacity: PreferencesStore.minimumLogCapacity)
 

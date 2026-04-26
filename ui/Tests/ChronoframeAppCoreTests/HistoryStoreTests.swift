@@ -67,6 +67,37 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertTrue(store.entries.isEmpty)
     }
 
+    func testRemoveEntryKeepsItemAndReportsFriendlyErrorWhenTrashFails() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HistoryStoreTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let fileURL = tempDir.appendingPathComponent("audit_receipt.json")
+        try Data("{}".utf8).write(to: fileURL)
+        let entry = RunHistoryEntry(
+            kind: .auditReceipt,
+            title: "Audit Receipt",
+            path: fileURL.path,
+            relativePath: "audit_receipt.json",
+            fileSizeBytes: 2,
+            createdAt: .now
+        )
+        let store = HistoryStore(
+            entries: [entry],
+            trashItem: { _ in throw TestFailure.expectedFailure("Trash is unavailable") }
+        )
+
+        store.remove(entry: entry)
+
+        XCTAssertEqual(store.entries, [entry])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
+        XCTAssertEqual(
+            store.lastRefreshError,
+            "Chronoframe could not move this history item to Trash. Open it in Finder and remove it manually. Details: Trash is unavailable"
+        )
+    }
+
     func testRemoveAllTrashesAllFilesAndClearsList() throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("HistoryStoreTests-\(UUID().uuidString)", isDirectory: true)
@@ -87,6 +118,40 @@ final class HistoryStoreTests: XCTestCase {
             XCTAssertFalse(FileManager.default.fileExists(atPath: entry.path),
                            "File should no longer exist: \(entry.path)")
         }
+    }
+
+    func testRemoveAllKeepsFailedItemsAndReportsCount() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HistoryStoreTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let failedURL = tempDir.appendingPathComponent("failed.json")
+        let removedURL = tempDir.appendingPathComponent("removed.json")
+        try Data("{}".utf8).write(to: failedURL)
+        try Data("{}".utf8).write(to: removedURL)
+
+        let failedEntry = RunHistoryEntry(kind: .auditReceipt, title: "Failed", path: failedURL.path, createdAt: .now)
+        let removedEntry = RunHistoryEntry(kind: .auditReceipt, title: "Removed", path: removedURL.path, createdAt: .now)
+        let store = HistoryStore(
+            entries: [failedEntry, removedEntry],
+            trashItem: { url in
+                if url.lastPathComponent == failedURL.lastPathComponent {
+                    throw TestFailure.expectedFailure("Trash is unavailable")
+                }
+                try FileManager.default.removeItem(at: url)
+            }
+        )
+
+        store.removeAll()
+
+        XCTAssertEqual(store.entries, [failedEntry])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: failedURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: removedURL.path))
+        XCTAssertEqual(
+            store.lastRefreshError,
+            "Chronoframe could not move 1 history item to Trash. Open the destination in Finder and remove them manually."
+        )
     }
 
     func testRefreshRecordsIndexerFailures() {
