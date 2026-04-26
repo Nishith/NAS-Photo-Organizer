@@ -78,6 +78,23 @@
 			AA000000000000000000024B /* RevertExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000014B /* RevertExecutor.swift */; };
 			AA000000000000000000024C /* ReorganizeExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000014C /* ReorganizeExecutor.swift */; };
 			AA000000000000000000024D /* UserFacingErrorMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000014D /* UserFacingErrorMessage.swift */; };
+		AA000000000000000000024E /* DeduplicateModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000184 /* DeduplicateModels.swift */; };
+		AA000000000000000000024F /* DeduplicateScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000185 /* DeduplicateScanner.swift */; };
+		AA0000000000000000000250 /* DeduplicateExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000186 /* DeduplicateExecutor.swift */; };
+		AA0000000000000000000251 /* DeduplicatePairDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000187 /* DeduplicatePairDetector.swift */; };
+		AA0000000000000000000252 /* DuplicateClusterer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000188 /* DuplicateClusterer.swift */; };
+		AA0000000000000000000253 /* DedupeFeatureCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000189 /* DedupeFeatureCache.swift */; };
+		AA0000000000000000000254 /* PerceptualHash.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000018A /* PerceptualHash.swift */; };
+		AA0000000000000000000255 /* VisionFeaturePrinter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000018B /* VisionFeaturePrinter.swift */; };
+		AA0000000000000000000256 /* PhotoQualityScorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000018C /* PhotoQualityScorer.swift */; };
+		AA0000000000000000000257 /* DeduplicateEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000018D /* DeduplicateEngine.swift */; };
+		AA0000000000000000000258 /* DeduplicateSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000018E /* DeduplicateSessionStore.swift */; };
+		AA0000000000000000000259 /* OrganizeContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000018F /* OrganizeContainerView.swift */; };
+		AA000000000000000000025A /* DeduplicateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000190 /* DeduplicateView.swift */; };
+		AA000000000000000000025B /* DedupeThumbnailLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000191 /* DedupeThumbnailLoader.swift */; };
+		AA000000000000000000025C /* ClusterListPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000192 /* ClusterListPane.swift */; };
+		AA000000000000000000025D /* ClusterDetailPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000193 /* ClusterDetailPane.swift */; };
+		AA000000000000000000025E /* DeduplicationPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000194 /* DeduplicationPlanner.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -172,6 +189,23 @@
 			AA0000000000000000000181 /* Chronoframe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Chronoframe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 			AA0000000000000000000182 /* ChronoframeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			AA0000000000000000000183 /* ChronoframeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000184 /* DeduplicateModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicateModels.swift; sourceTree = "<group>"; };
+		AA0000000000000000000185 /* DeduplicateScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicateScanner.swift; sourceTree = "<group>"; };
+		AA0000000000000000000186 /* DeduplicateExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicateExecutor.swift; sourceTree = "<group>"; };
+		AA0000000000000000000187 /* DeduplicatePairDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicatePairDetector.swift; sourceTree = "<group>"; };
+		AA0000000000000000000188 /* DuplicateClusterer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuplicateClusterer.swift; sourceTree = "<group>"; };
+		AA0000000000000000000189 /* DedupeFeatureCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DedupeFeatureCache.swift; sourceTree = "<group>"; };
+		AA000000000000000000018A /* PerceptualHash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerceptualHash.swift; sourceTree = "<group>"; };
+		AA000000000000000000018B /* VisionFeaturePrinter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionFeaturePrinter.swift; sourceTree = "<group>"; };
+		AA000000000000000000018C /* PhotoQualityScorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoQualityScorer.swift; sourceTree = "<group>"; };
+		AA000000000000000000018D /* DeduplicateEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicateEngine.swift; sourceTree = "<group>"; };
+		AA000000000000000000018E /* DeduplicateSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicateSessionStore.swift; sourceTree = "<group>"; };
+		AA000000000000000000018F /* OrganizeContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizeContainerView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000190 /* DeduplicateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicateView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000191 /* DedupeThumbnailLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DedupeThumbnailLoader.swift; sourceTree = "<group>"; };
+		AA0000000000000000000192 /* ClusterListPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterListPane.swift; sourceTree = "<group>"; };
+		AA0000000000000000000193 /* ClusterDetailPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterDetailPane.swift; sourceTree = "<group>"; };
+		AA0000000000000000000194 /* DeduplicationPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicationPlanner.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -270,6 +304,8 @@
 				AA0000000000000000000024 /* Help */,
 				AA0000000000000000000022 /* Setup */,
 				AA0000000000000000000021 /* Run */,
+				AA0000000000000000000025 /* Organize */,
+				AA0000000000000000000026 /* Deduplicate */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -359,6 +395,8 @@
 				AA0000000000000000000112 /* RunHistoryIndexer.swift */,
 				AA0000000000000000000134 /* TransferredSourcesLog.swift */,
 				AA0000000000000000000135 /* DroppedItemStager.swift */,
+				AA000000000000000000018D /* DeduplicateEngine.swift */,
+
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -371,6 +409,8 @@
 				AA0000000000000000000115 /* RunLogStore.swift */,
 				AA0000000000000000000116 /* RunSessionStore.swift */,
 				AA0000000000000000000117 /* SetupStore.swift */,
+				AA000000000000000000018E /* DeduplicateSessionStore.swift */,
+
 			);
 			path = Stores;
 			sourceTree = "<group>";
@@ -402,6 +442,17 @@
 					AA000000000000000000014B /* RevertExecutor.swift */,
 					AA000000000000000000011A /* RunModels.swift */,
 					AA0000000000000000000131 /* TransferExecutor.swift */,
+				AA0000000000000000000184 /* DeduplicateModels.swift */,
+				AA0000000000000000000185 /* DeduplicateScanner.swift */,
+				AA0000000000000000000186 /* DeduplicateExecutor.swift */,
+				AA0000000000000000000187 /* DeduplicatePairDetector.swift */,
+				AA0000000000000000000188 /* DuplicateClusterer.swift */,
+				AA0000000000000000000189 /* DedupeFeatureCache.swift */,
+				AA000000000000000000018A /* PerceptualHash.swift */,
+				AA000000000000000000018B /* VisionFeaturePrinter.swift */,
+				AA000000000000000000018C /* PhotoQualityScorer.swift */,
+				AA0000000000000000000194 /* DeduplicationPlanner.swift */,
+
 				);
 				path = ChronoframeCore;
 			sourceTree = "<group>";
@@ -454,6 +505,27 @@
 				AA0000000000000000000125 /* Chronoframe.entitlements */,
 			);
 			path = Packaging;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000025 /* Organize */ = {
+			isa = PBXGroup;
+			children = (
+
+				AA000000000000000000018F /* OrganizeContainerView.swift */,
+			);
+			path = Organize;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000026 /* Deduplicate */ = {
+			isa = PBXGroup;
+			children = (
+
+				AA0000000000000000000190 /* DeduplicateView.swift */,
+				AA0000000000000000000191 /* DedupeThumbnailLoader.swift */,
+				AA0000000000000000000192 /* ClusterListPane.swift */,
+				AA0000000000000000000193 /* ClusterDetailPane.swift */,
+			);
+			path = Deduplicate;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -656,6 +728,24 @@
 				AA0000000000000000000240 /* NowCopyingCard.swift in Sources */,
 				AA0000000000000000000247 /* OnboardingCard.swift in Sources */,
 				AA0000000000000000000248 /* HelpView.swift in Sources */,
+				AA000000000000000000024E /* DeduplicateModels.swift in Sources */,
+				AA000000000000000000024F /* DeduplicateScanner.swift in Sources */,
+				AA0000000000000000000250 /* DeduplicateExecutor.swift in Sources */,
+				AA0000000000000000000251 /* DeduplicatePairDetector.swift in Sources */,
+				AA0000000000000000000252 /* DuplicateClusterer.swift in Sources */,
+				AA0000000000000000000253 /* DedupeFeatureCache.swift in Sources */,
+				AA0000000000000000000254 /* PerceptualHash.swift in Sources */,
+				AA0000000000000000000255 /* VisionFeaturePrinter.swift in Sources */,
+				AA0000000000000000000256 /* PhotoQualityScorer.swift in Sources */,
+				AA000000000000000000025E /* DeduplicationPlanner.swift in Sources */,
+				AA0000000000000000000257 /* DeduplicateEngine.swift in Sources */,
+				AA0000000000000000000258 /* DeduplicateSessionStore.swift in Sources */,
+				AA0000000000000000000259 /* OrganizeContainerView.swift in Sources */,
+				AA000000000000000000025A /* DeduplicateView.swift in Sources */,
+				AA000000000000000000025B /* DedupeThumbnailLoader.swift in Sources */,
+				AA000000000000000000025C /* ClusterListPane.swift in Sources */,
+				AA000000000000000000025D /* ClusterDetailPane.swift in Sources */,
+
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -7,6 +7,7 @@ import Foundation
 @MainActor
 final class AppState: ObservableObject {
     @Published var selection: SidebarDestination
+    @Published var organizeSubSelection: OrganizeSubSection
     @Published var transientErrorMessage: String?
 
     var preferencesStore: PreferencesStore
@@ -14,6 +15,7 @@ final class AppState: ObservableObject {
     var runLogStore: RunLogStore
     var historyStore: HistoryStore
     var runSessionStore: RunSessionStore
+    var deduplicateSessionStore: DeduplicateSessionStore
 
     private let folderAccessService: any FolderAccessServicing
     private let finderService: any FinderServicing
@@ -32,8 +34,8 @@ final class AppState: ObservableObject {
         profilesRepository: profilesRepository,
         droppedItemStager: droppedItemStager,
         bookmarkPathResolver: bookmarkPathResolver,
-        setSelection: { [weak self] selection in
-            self?.selection = selection
+        navigate: { [weak self] route in
+            self?.navigate(to: route)
         },
         setTransientErrorMessage: { [weak self] message in
             self?.transientErrorMessage = message
@@ -46,8 +48,8 @@ final class AppState: ObservableObject {
         runSessionStore: runSessionStore,
         finderService: finderService,
         showSettingsWindowAction: showSettingsWindowAction,
-        setSelection: { [weak self] selection in
-            self?.selection = selection
+        navigate: { [weak self] route in
+            self?.navigate(to: route)
         },
         canStartRun: { [weak self] in
             self?.canStartRun ?? false
@@ -58,9 +60,10 @@ final class AppState: ObservableObject {
         setupStore: setupStore,
         historyStore: historyStore,
         runSessionStore: runSessionStore,
+        deduplicateSessionStore: deduplicateSessionStore,
         finderService: finderService,
-        setSelection: { [weak self] selection in
-            self?.selection = selection
+        navigate: { [weak self] route in
+            self?.navigate(to: route)
         }
     )
 
@@ -84,6 +87,8 @@ final class AppState: ObservableObject {
             engine = PythonOrganizerEngine(profilesRepository: profilesRepository)
         }
         let runSessionStore = RunSessionStore(engine: engine, logStore: runLogStore, historyStore: historyStore)
+        let deduplicateEngine = NativeDeduplicateEngine()
+        let deduplicateSessionStore = DeduplicateSessionStore(engine: deduplicateEngine)
 
         self.init(
             preferencesStore: preferencesStore,
@@ -91,6 +96,7 @@ final class AppState: ObservableObject {
             runLogStore: runLogStore,
             historyStore: historyStore,
             runSessionStore: runSessionStore,
+            deduplicateSessionStore: deduplicateSessionStore,
             folderAccessService: folderAccessService,
             finderService: finderService,
             profilesRepository: profilesRepository,
@@ -99,12 +105,13 @@ final class AppState: ObservableObject {
     }
 
     init(
-        selection: SidebarDestination = .setup,
+        route: AppRoute = .organize(.setup),
         preferencesStore: PreferencesStore,
         setupStore: SetupStore,
         runLogStore: RunLogStore,
         historyStore: HistoryStore,
         runSessionStore: RunSessionStore,
+        deduplicateSessionStore: DeduplicateSessionStore? = nil,
         folderAccessService: any FolderAccessServicing,
         finderService: any FinderServicing,
         profilesRepository: any ProfilesRepositorying,
@@ -115,13 +122,15 @@ final class AppState: ObservableObject {
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
         }
     ) {
-        self.selection = selection
+        self.selection = route.sidebar
+        self.organizeSubSelection = route.organizeSubSection ?? .setup
         self.transientErrorMessage = nil
         self.preferencesStore = preferencesStore
         self.setupStore = setupStore
         self.runLogStore = runLogStore
         self.historyStore = historyStore
         self.runSessionStore = runSessionStore
+        self.deduplicateSessionStore = deduplicateSessionStore ?? DeduplicateSessionStore(engine: NativeDeduplicateEngine())
         self.folderAccessService = folderAccessService
         self.finderService = finderService
         self.profilesRepository = profilesRepository
@@ -135,6 +144,16 @@ final class AppState: ObservableObject {
 
     var canStartRun: Bool {
         setupStore.usingProfile || (!setupStore.sourcePath.isEmpty && !setupStore.destinationPath.isEmpty)
+    }
+
+    /// Single navigation entry point. Setting both sidebar selection and the
+    /// nested Organize sub-section in one place keeps the two-axis routing
+    /// consistent across coordinators and views.
+    func navigate(to route: AppRoute) {
+        selection = route.sidebar
+        if let sub = route.organizeSubSection {
+            organizeSubSelection = sub
+        }
     }
 
     func dismissTransientError() {
@@ -202,7 +221,51 @@ final class AppState: ObservableObject {
     }
 
     func cancelRun() {
-        runCoordinator.cancelRun()
+        switch selection {
+        case .organize:
+            runCoordinator.cancelRun()
+        case .deduplicate:
+            deduplicateSessionStore.cancel()
+        case .profiles:
+            runCoordinator.cancelRun()
+        }
+    }
+
+    /// Where dedupe scans run. Reuses the active organized destination
+    /// (either the live setup path or the most recently used history root).
+    var deduplicateDestinationPath: String {
+        if !setupStore.destinationPath.isEmpty {
+            return setupStore.destinationPath
+        }
+        return historyStore.destinationRoot
+    }
+
+    func startDeduplicateScan() {
+        let destination = deduplicateDestinationPath
+        guard !destination.isEmpty else {
+            transientErrorMessage = "Choose a destination folder before running a deduplicate scan."
+            return
+        }
+        let configuration = preferencesStore.makeDeduplicateConfiguration(destinationPath: destination)
+        deduplicateSessionStore.startScan(configuration: configuration)
+    }
+
+    func commitDeduplicateDecisions() {
+        let destination = deduplicateDestinationPath
+        guard !destination.isEmpty else { return }
+        let configuration = preferencesStore.makeDeduplicateConfiguration(destinationPath: destination)
+        // Honor the per-run hard-delete decision the user toggled in the
+        // commit footer (which itself is gated on the global Settings
+        // toggle being true).
+        deduplicateSessionStore.decisions = DedupeDecisions(
+            byPath: deduplicateSessionStore.decisions.byPath,
+            hardDelete: deduplicateSessionStore.decisions.hardDelete && preferencesStore.dedupeAllowHardDelete
+        )
+        deduplicateSessionStore.commit(configuration: configuration)
+    }
+
+    func resetDeduplicate() {
+        deduplicateSessionStore.reset()
     }
 
     func openDestination() {
@@ -245,7 +308,7 @@ final class AppState: ObservableObject {
             transientErrorMessage = "Choose a destination folder before reorganizing."
             return
         }
-        selection = .run
+        navigate(to: .organize(.run))
         runSessionStore.requestReorganize(
             destinationRoot: destination,
             targetStructure: targetStructure

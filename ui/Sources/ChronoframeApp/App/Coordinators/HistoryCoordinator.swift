@@ -9,35 +9,46 @@ final class HistoryCoordinator {
     private let setupStore: SetupStore
     private let historyStore: HistoryStore
     private let runSessionStore: RunSessionStore
+    private let deduplicateSessionStore: DeduplicateSessionStore
     private let finderService: any FinderServicing
-    private let setSelection: @MainActor (SidebarDestination) -> Void
+    private let navigate: @MainActor (AppRoute) -> Void
 
     init(
         preferencesStore: PreferencesStore,
         setupStore: SetupStore,
         historyStore: HistoryStore,
         runSessionStore: RunSessionStore,
+        deduplicateSessionStore: DeduplicateSessionStore,
         finderService: any FinderServicing,
-        setSelection: @escaping @MainActor (SidebarDestination) -> Void
+        navigate: @escaping @MainActor (AppRoute) -> Void
     ) {
         self.preferencesStore = preferencesStore
         self.setupStore = setupStore
         self.historyStore = historyStore
         self.runSessionStore = runSessionStore
+        self.deduplicateSessionStore = deduplicateSessionStore
         self.finderService = finderService
-        self.setSelection = setSelection
+        self.navigate = navigate
     }
 
-    /// Triggers a revert of the audit receipt. The call is fire-and-forget;
-    /// the streaming progress + final summary appear in the Run workspace,
-    /// so we also flip the sidebar there to show the user what's happening.
+    /// Triggers a revert of the receipt. Audit receipts go through the
+    /// organize Run workspace so progress/summary show up there; dedupe
+    /// receipts go through the Deduplicate workspace which already owns
+    /// its own commit-progress surface.
     func revertHistoryEntry(_ entry: RunHistoryEntry) {
-        guard entry.kind == .auditReceipt else { return }
-        setSelection(.run)
-        runSessionStore.requestRevert(
-            receiptURL: URL(fileURLWithPath: entry.path),
-            destinationRoot: historyStore.destinationRoot
-        )
+        switch entry.kind {
+        case .auditReceipt:
+            navigate(.organize(.run))
+            runSessionStore.requestRevert(
+                receiptURL: URL(fileURLWithPath: entry.path),
+                destinationRoot: historyStore.destinationRoot
+            )
+        case .dedupeAuditReceipt:
+            navigate(.deduplicate)
+            deduplicateSessionStore.revert(receiptURL: URL(fileURLWithPath: entry.path))
+        default:
+            return
+        }
     }
 
     func revealHistoryEntry(_ entry: RunHistoryEntry) {
@@ -56,7 +67,7 @@ final class HistoryCoordinator {
 
         setupStore.sourcePath = record.sourcePath
         preferencesStore.lastManualSourcePath = record.sourcePath
-        setSelection(.setup)
+        navigate(.organize(.setup))
     }
 
     func revealTransferredSource(_ record: TransferredSourceRecord) {

@@ -47,6 +47,7 @@ final class AppStateHarness {
     let finderService: MockFinderService
     let engine: MockOrganizerEngine
     let runSessionStore: RunSessionStore
+    let deduplicateSessionStore: DeduplicateSessionStore
 
     init() {
         suiteName = "AppStateTests-\(UUID().uuidString)"
@@ -80,6 +81,7 @@ final class AppStateHarness {
             ])
         )
         runSessionStore = RunSessionStore(engine: engine, logStore: runLogStore, historyStore: historyStore)
+        deduplicateSessionStore = DeduplicateSessionStore(engine: NativeDeduplicateEngine())
     }
 
     func makeAppState(
@@ -92,6 +94,7 @@ final class AppStateHarness {
             runLogStore: self.runLogStore,
             historyStore: self.historyStore,
             runSessionStore: self.runSessionStore,
+            deduplicateSessionStore: self.deduplicateSessionStore,
             folderAccessService: self.folderAccessService,
             finderService: self.finderService,
             profilesRepository: self.repository,

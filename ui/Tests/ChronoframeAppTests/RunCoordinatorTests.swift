@@ -26,7 +26,7 @@ final class RunCoordinatorTests: XCTestCase {
                 )
             )
         ])
-        var selection: SidebarDestination?
+        var route: AppRoute?
         let coordinator = RunCoordinator(
             preferencesStore: harness.preferencesStore,
             setupStore: harness.setupStore,
@@ -34,7 +34,7 @@ final class RunCoordinatorTests: XCTestCase {
             runSessionStore: harness.runSessionStore,
             finderService: harness.finderService,
             showSettingsWindowAction: {},
-            setSelection: { selection = $0 },
+            navigate: { route = $0 },
             canStartRun: { true }
         )
 
@@ -42,7 +42,7 @@ final class RunCoordinatorTests: XCTestCase {
         let finished = await waitForCondition { harness.runSessionStore.summary != nil }
 
         XCTAssertTrue(finished)
-        XCTAssertEqual(selection, .run)
+        XCTAssertEqual(route, .organize(.run))
         XCTAssertEqual(harness.engine.startConfigurations.count, 1)
 
         coordinator.openDestination()
@@ -79,7 +79,7 @@ final class RunCoordinatorTests: XCTestCase {
                 )
             )
         ])
-        var selection: SidebarDestination?
+        var route: AppRoute?
         var settingsOpened = 0
         let coordinator = RunCoordinator(
             preferencesStore: harness.preferencesStore,
@@ -88,12 +88,12 @@ final class RunCoordinatorTests: XCTestCase {
             runSessionStore: harness.runSessionStore,
             finderService: harness.finderService,
             showSettingsWindowAction: { settingsOpened += 1 },
-            setSelection: { selection = $0 },
+            navigate: { route = $0 },
             canStartRun: { true }
         )
 
         await coordinator.startTransfer()
-        XCTAssertEqual(selection, .run)
+        XCTAssertEqual(route, .organize(.run))
         XCTAssertEqual(harness.runSessionStore.prompt?.kind, .resumePendingJobs)
 
         coordinator.confirmRunPrompt()

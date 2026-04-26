@@ -49,6 +49,30 @@ public final class PreferencesStore: ObservableObject {
         didSet { persist(folderStructure.rawValue, key: "folderStructure") }
     }
 
+    @Published public var dedupeTimeWindowSeconds: Int {
+        didSet { persist(dedupeTimeWindowSeconds, key: "dedupeTimeWindowSeconds") }
+    }
+
+    @Published public var dedupeSimilarityPreset: DedupeSimilarityPreset {
+        didSet { persist(dedupeSimilarityPreset.rawValue, key: "dedupeSimilarityPreset") }
+    }
+
+    @Published public var dedupeTreatRawJpegPairsAsUnit: Bool {
+        didSet { persist(dedupeTreatRawJpegPairsAsUnit, key: "dedupeTreatRawJpegPairsAsUnit") }
+    }
+
+    @Published public var dedupeTreatLivePhotoPairsAsUnit: Bool {
+        didSet { persist(dedupeTreatLivePhotoPairsAsUnit, key: "dedupeTreatLivePhotoPairsAsUnit") }
+    }
+
+    @Published public var dedupeIncludeExactDuplicates: Bool {
+        didSet { persist(dedupeIncludeExactDuplicates, key: "dedupeIncludeExactDuplicates") }
+    }
+
+    @Published public var dedupeAllowHardDelete: Bool {
+        didSet { persist(dedupeAllowHardDelete, key: "dedupeAllowHardDelete") }
+    }
+
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.workerCount = defaults.object(forKey: "workerCount") as? Int ?? 8
@@ -60,6 +84,26 @@ public final class PreferencesStore: ObservableObject {
         self.lastSelectedProfileName = defaults.string(forKey: "lastSelectedProfileName") ?? ""
         let storedStructure = defaults.string(forKey: "folderStructure").flatMap(FolderStructure.init(rawValue:))
         self.folderStructure = storedStructure ?? .yyyyMMDD
+        self.dedupeTimeWindowSeconds = defaults.object(forKey: "dedupeTimeWindowSeconds") as? Int ?? 30
+        let storedPreset = defaults.string(forKey: "dedupeSimilarityPreset").flatMap(DedupeSimilarityPreset.init(rawValue:))
+        self.dedupeSimilarityPreset = storedPreset ?? .balanced
+        self.dedupeTreatRawJpegPairsAsUnit = defaults.object(forKey: "dedupeTreatRawJpegPairsAsUnit") as? Bool ?? true
+        self.dedupeTreatLivePhotoPairsAsUnit = defaults.object(forKey: "dedupeTreatLivePhotoPairsAsUnit") as? Bool ?? true
+        self.dedupeIncludeExactDuplicates = defaults.object(forKey: "dedupeIncludeExactDuplicates") as? Bool ?? true
+        self.dedupeAllowHardDelete = defaults.object(forKey: "dedupeAllowHardDelete") as? Bool ?? false
+    }
+
+    public func makeDeduplicateConfiguration(destinationPath: String) -> DeduplicateConfiguration {
+        DeduplicateConfiguration(
+            destinationPath: destinationPath,
+            timeWindowSeconds: dedupeTimeWindowSeconds,
+            similarityThreshold: dedupeSimilarityPreset.similarityThreshold,
+            dhashHammingThreshold: dedupeSimilarityPreset.dhashHammingThreshold,
+            treatRawJpegPairsAsUnit: dedupeTreatRawJpegPairsAsUnit,
+            treatLivePhotoPairsAsUnit: dedupeTreatLivePhotoPairsAsUnit,
+            enableExactDuplicateGroup: dedupeIncludeExactDuplicates,
+            workerCount: workerCount
+        )
     }
 
     public func bookmark(for key: String) -> FolderBookmark? {

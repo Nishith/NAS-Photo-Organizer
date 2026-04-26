@@ -22,7 +22,8 @@ final class AppStateTests: XCTestCase {
     func testUITestAppStateFactorySeedsHistoryAndProfilesScenarios() {
         let historyState = UITestAppStateFactory.make(scenario: .historyPopulated)
 
-        XCTAssertEqual(historyState.selection, .history)
+        XCTAssertEqual(historyState.selection, .organize)
+        XCTAssertEqual(historyState.organizeSubSelection, .history)
         XCTAssertEqual(historyState.historyStore.destinationRoot, "/Volumes/Archive/Chronoframe Library")
         XCTAssertEqual(historyState.historyStore.entries.map(\.title), ["Dry Run Report", "Transfer Receipt", "Run Log"])
         XCTAssertEqual(historyState.historyStore.transferredSources.count, 1)
@@ -46,7 +47,8 @@ final class AppStateTests: XCTestCase {
         }
 
         XCTAssertTrue(finished)
-        XCTAssertEqual(appState.selection, .run)
+        XCTAssertEqual(appState.selection, .organize)
+        XCTAssertEqual(appState.organizeSubSelection, .run)
         XCTAssertEqual(appState.runSessionStore.summary?.metrics.plannedCount, 42)
         XCTAssertEqual(
             appState.runSessionStore.summary?.artifacts.reportPath,
@@ -111,7 +113,8 @@ final class AppStateTests: XCTestCase {
         let finished = await waitForCondition { appState.runSessionStore.summary != nil }
 
         XCTAssertTrue(finished)
-        XCTAssertEqual(appState.selection, .run)
+        XCTAssertEqual(appState.selection, .organize)
+        XCTAssertEqual(appState.organizeSubSelection, .run)
         XCTAssertEqual(harness.engine.startConfigurations.count, 1)
         harness.engine.preflightResult = .success(
             RunPreflight(
@@ -134,7 +137,8 @@ final class AppStateTests: XCTestCase {
 
         await appState.startTransfer()
 
-        XCTAssertEqual(appState.selection, .run)
+        XCTAssertEqual(appState.selection, .organize)
+        XCTAssertEqual(appState.organizeSubSelection, .run)
         XCTAssertEqual(appState.runSessionStore.prompt?.kind, .resumePendingJobs)
 
         appState.confirmRunPrompt()
@@ -169,7 +173,8 @@ final class AppStateTests: XCTestCase {
         )
         appState.useHistoricalSource(record)
 
-        XCTAssertEqual(appState.selection, .setup)
+        XCTAssertEqual(appState.selection, .organize)
+        XCTAssertEqual(appState.organizeSubSelection, .setup)
         XCTAssertEqual(appState.setupStore.selectedProfileName, "")
         XCTAssertEqual(appState.setupStore.sourcePath, "/Volumes/Card")
         XCTAssertEqual(harness.repository.savedProfiles.last?.name, "archive")

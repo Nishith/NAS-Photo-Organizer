@@ -40,7 +40,7 @@ struct RunHeroSection: View {
         switch action {
         case .setup:
             Button {
-                appState.selection = .setup
+                appState.navigate(to: .organize(.setup))
             } label: {
                 Label("Return to Setup", systemImage: "slider.horizontal.3")
                     .frame(maxWidth: .infinity)

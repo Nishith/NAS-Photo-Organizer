@@ -80,6 +80,79 @@ final class MockOrganizerEngine: OrganizerEngine {
 }
 
 @MainActor
+final class MockDeduplicateEngine: DeduplicateEngine {
+    var clustersToEmit: [DuplicateCluster] = []
+    var summary: DeduplicateSummary = DeduplicateSummary()
+    var commitEvents: [DeduplicateCommitEvent] = []
+    var revertEvents: [DeduplicateCommitEvent] = []
+    var scanError: Error?
+    var lastScanConfiguration: DeduplicateConfiguration?
+    var lastCommitDecisions: DedupeDecisions?
+    var lastCommitClusters: [DuplicateCluster] = []
+    var lastCommitConfiguration: DeduplicateConfiguration?
+
+    init(
+        clusters: [DuplicateCluster] = [],
+        summary: DeduplicateSummary = DeduplicateSummary(),
+        commitEvents: [DeduplicateCommitEvent] = [],
+        revertEvents: [DeduplicateCommitEvent] = []
+    ) {
+        self.clustersToEmit = clusters
+        self.summary = summary
+        self.commitEvents = commitEvents
+        self.revertEvents = revertEvents
+    }
+
+    func scan(_ configuration: DeduplicateConfiguration) throws -> AsyncThrowingStream<DeduplicateEvent, Error> {
+        lastScanConfiguration = configuration
+        if let scanError {
+            throw scanError
+        }
+        let clusters = clustersToEmit
+        let summary = summary
+        return AsyncThrowingStream { continuation in
+            Task { @MainActor in
+                continuation.yield(.startup)
+                for cluster in clusters {
+                    continuation.yield(.clusterDiscovered(cluster))
+                }
+                continuation.yield(.complete(summary))
+                continuation.finish()
+            }
+        }
+    }
+
+    func cancelCurrentScan() {}
+
+    func commit(
+        decisions: DedupeDecisions,
+        clusters: [DuplicateCluster],
+        configuration: DeduplicateConfiguration
+    ) throws -> AsyncThrowingStream<DeduplicateCommitEvent, Error> {
+        lastCommitDecisions = decisions
+        lastCommitClusters = clusters
+        lastCommitConfiguration = configuration
+        let events = commitEvents
+        return AsyncThrowingStream { continuation in
+            Task { @MainActor in
+                for event in events { continuation.yield(event) }
+                continuation.finish()
+            }
+        }
+    }
+
+    func revert(receiptURL: URL) throws -> AsyncThrowingStream<DeduplicateCommitEvent, Error> {
+        let events = revertEvents
+        return AsyncThrowingStream { continuation in
+            Task { @MainActor in
+                for event in events { continuation.yield(event) }
+                continuation.finish()
+            }
+        }
+    }
+}
+
+@MainActor
 func waitForCondition(
     timeoutNanoseconds: UInt64 = 1_000_000_000,
     pollNanoseconds: UInt64 = 20_000_000,

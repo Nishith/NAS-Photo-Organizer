@@ -523,7 +523,7 @@ public final class OrganizerDatabase {
         return sqlite3_column_int(statement, 0)
     }
 
-    private func execute(_ sql: String) throws {
+    func execute(_ sql: String) throws {
         guard let database else {
             throw OrganizerDatabaseError.databaseClosed
         }
@@ -533,7 +533,7 @@ public final class OrganizerDatabase {
         }
     }
 
-    private func prepare(_ sql: String) throws -> OpaquePointer? {
+    func prepare(_ sql: String) throws -> OpaquePointer? {
         guard let database else {
             throw OrganizerDatabaseError.databaseClosed
         }
@@ -545,23 +545,23 @@ public final class OrganizerDatabase {
         return statement
     }
 
-    private func lastErrorMessage() -> String {
+    func lastErrorMessage() -> String {
         Self.errorMessage(from: database)
     }
 
-    private static func errorMessage(from database: OpaquePointer?) -> String {
+    static func errorMessage(from database: OpaquePointer?) -> String {
         if let database, let message = sqlite3_errmsg(database) {
             return String(cString: message)
         }
         return "Unknown SQLite error"
     }
 
-    private static func sqliteString(_ statement: OpaquePointer?, column: Int32) -> String? {
+    static func sqliteString(_ statement: OpaquePointer?, column: Int32) -> String? {
         guard let pointer = sqlite3_column_text(statement, column) else {
             return nil
         }
         return String(cString: pointer)
     }
 
-    private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+    static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 }

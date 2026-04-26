@@ -33,6 +33,7 @@ public struct FolderBookmark: Codable, Equatable, Sendable {
 public enum RunHistoryEntryKind: String, Codable, CaseIterable, Sendable {
     case dryRunReport
     case auditReceipt
+    case dedupeAuditReceipt
     case runLog
     case queueDatabase
     case csvArtifact
@@ -44,6 +45,8 @@ public enum RunHistoryEntryKind: String, Codable, CaseIterable, Sendable {
             return "Dry Run Report"
         case .auditReceipt:
             return "Audit Receipt"
+        case .dedupeAuditReceipt:
+            return "Dedupe Receipt"
         case .runLog:
             return "Run Log"
         case .queueDatabase:
@@ -61,6 +64,8 @@ public enum RunHistoryEntryKind: String, Codable, CaseIterable, Sendable {
             return "doc.text.magnifyingglass"
         case .auditReceipt:
             return "checklist"
+        case .dedupeAuditReceipt:
+            return "rectangle.on.rectangle.angled"
         case .runLog:
             return "text.append"
         case .queueDatabase:
@@ -102,10 +107,52 @@ public struct RunHistoryEntry: Identifiable, Equatable, Sendable {
 }
 
 public enum SidebarDestination: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case organize
+    case deduplicate
+    case profiles
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .organize:
+            return "Organize"
+        case .deduplicate:
+            return "Deduplicate"
+        case .profiles:
+            return "Profiles"
+        }
+    }
+
+    public var subtitle: String {
+        switch self {
+        case .organize:
+            return "Setup, run, and run history"
+        case .deduplicate:
+            return "Find similar shots and prune"
+        case .profiles:
+            return "Reusable saved setups"
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .organize:
+            return "square.stack.3d.up"
+        case .deduplicate:
+            return "rectangle.on.rectangle.angled"
+        case .profiles:
+            return "person.crop.rectangle.stack"
+        }
+    }
+}
+
+/// Sub-sections nested inside the Organize sidebar destination. The original
+/// Setup / Run / Run History flows live here.
+public enum OrganizeSubSection: String, CaseIterable, Identifiable, Hashable, Sendable, Codable {
     case setup
     case run
     case history
-    case profiles
 
     public var id: String { rawValue }
 
@@ -116,9 +163,7 @@ public enum SidebarDestination: String, CaseIterable, Identifiable, Hashable, Se
         case .run:
             return "Run"
         case .history:
-            return "Run History"
-        case .profiles:
-            return "Profiles"
+            return "History"
         }
     }
 
@@ -130,8 +175,6 @@ public enum SidebarDestination: String, CaseIterable, Identifiable, Hashable, Se
             return "Preview, transfer, inspect"
         case .history:
             return "Reports, receipts, logs"
-        case .profiles:
-            return "Reusable saved setups"
         }
     }
 
@@ -143,8 +186,28 @@ public enum SidebarDestination: String, CaseIterable, Identifiable, Hashable, Se
             return "bolt.horizontal.circle"
         case .history:
             return "clock.arrow.circlepath"
-        case .profiles:
-            return "person.crop.rectangle.stack"
         }
+    }
+}
+
+/// Two-axis routing target. Combines the top-level sidebar destination with
+/// the optional Organize sub-section so coordinators can navigate to a
+/// specific tab+sub-tab in one call.
+public enum AppRoute: Hashable, Sendable {
+    case organize(OrganizeSubSection)
+    case deduplicate
+    case profiles
+
+    public var sidebar: SidebarDestination {
+        switch self {
+        case .organize: return .organize
+        case .deduplicate: return .deduplicate
+        case .profiles: return .profiles
+        }
+    }
+
+    public var organizeSubSection: OrganizeSubSection? {
+        if case let .organize(sub) = self { return sub }
+        return nil
     }
 }
