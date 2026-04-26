@@ -605,3 +605,26 @@ final class DeduplicateTests: XCTestCase {
         )
     }
 }
+
+private final class TrashedURLBag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var urlsByOriginalPath: [String: URL] = [:]
+
+    func add(originalPath: String, trashURL: URL) {
+        lock.lock()
+        defer { lock.unlock() }
+        urlsByOriginalPath[originalPath] = trashURL
+    }
+
+    func snapshot() -> [String: URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return urlsByOriginalPath
+    }
+
+    func clear() {
+        lock.lock()
+        defer { lock.unlock() }
+        urlsByOriginalPath.removeAll()
+    }
+}
