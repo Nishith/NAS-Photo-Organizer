@@ -2,8 +2,10 @@
 import ChronoframeAppCore
 #endif
 import AppKit
+import ImageIO
 import QuickLookThumbnailing
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Tiny reusable loader for QuickLook thumbnails, keyed by path. Backs the
 /// strip thumbnails and the large preview in the dedupe review UI. We keep
@@ -22,19 +24,20 @@ final class DedupeThumbnailLoader: ObservableObject {
         guard thumbnails[path] == nil, !inFlight.contains(path) else { return }
         inFlight.insert(path)
         let url = URL(fileURLWithPath: path)
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
         Task { [weak self] in
-            let image = await Self.generate(url: url, size: size, scale: NSScreen.main?.backingScaleFactor ?? 2.0)
+            let imageData = await Self.thumbnailData(for: url, size: size, scale: scale)
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.inFlight.remove(path)
-                if let image {
+                if let imageData, let image = NSImage(data: imageData) {
                     self.thumbnails[path] = image
                 }
             }
         }
     }
 
-    nonisolated private static func generate(url: URL, size: CGSize, scale: CGFloat) async -> NSImage? {
+    nonisolated static func thumbnailData(for url: URL, size: CGSize, scale: CGFloat) async -> Data? {
         let request = QLThumbnailGenerator.Request(
             fileAt: url,
             size: size,
@@ -43,9 +46,30 @@ final class DedupeThumbnailLoader: ObservableObject {
         )
         return await withCheckedContinuation { continuation in
             QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { rep, _ in
-                continuation.resume(returning: rep?.nsImage)
+                guard let cgImage = rep?.cgImage else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: pngData(for: cgImage))
             }
         }
+    }
+
+    nonisolated private static func pngData(for image: CGImage) -> Data? {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            data,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        ) else {
+            return nil
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            return nil
+        }
+        return data as Data
     }
 }
 

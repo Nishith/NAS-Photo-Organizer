@@ -2,7 +2,6 @@
 import ChronoframeAppCore
 #endif
 import AppKit
-import QuickLookThumbnailing
 import SwiftUI
 
 /// Right pane: large preview of the focused photo plus the cluster member
@@ -223,21 +222,13 @@ private struct LargePreviewImage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: path) {
             image = nil
-            image = await Self.loadLarge(path: path)
-        }
-    }
-
-    nonisolated private static func loadLarge(path: String) async -> NSImage? {
-        let url = URL(fileURLWithPath: path)
-        let request = QLThumbnailGenerator.Request(
-            fileAt: url,
-            size: CGSize(width: 1200, height: 1200),
-            scale: NSScreen.main?.backingScaleFactor ?? 2.0,
-            representationTypes: .thumbnail
-        )
-        return await withCheckedContinuation { continuation in
-            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { rep, _ in
-                continuation.resume(returning: rep?.nsImage)
+            let imageData = await DedupeThumbnailLoader.thumbnailData(
+                for: URL(fileURLWithPath: path),
+                size: CGSize(width: 1200, height: 1200),
+                scale: NSScreen.main?.backingScaleFactor ?? 2.0
+            )
+            if let imageData {
+                image = NSImage(data: imageData)
             }
         }
     }
