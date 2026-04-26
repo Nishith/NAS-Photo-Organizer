@@ -147,11 +147,12 @@ public final class DeduplicateSessionStore: ObservableObject {
         cancelStream()
         commitSummary = nil
         status = .committing
+        let commitConfiguration = lastScanConfiguration ?? configuration
         do {
             let stream = try engine.commit(
                 decisions: applySuggestionsToDecisions(),
                 clusters: clusters,
-                configuration: configuration
+                configuration: commitConfiguration
             )
             streamTask = Task { [weak self] in
                 do {

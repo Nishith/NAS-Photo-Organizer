@@ -361,6 +361,53 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertEqual(movItem?.pairOrigin, .livePhoto)
     }
 
+    /// Pair-expanded partners may be outside `cluster.members`; Live Photo
+    /// MOV halves are the common case. The planner must still account for
+    /// their real filesystem size so the footer's recoverable-bytes value
+    /// matches the executor's receipt summary.
+    func testPlannerUsesFilesystemSizeForExternalLivePhotoSidecar() throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let heicURL = temporaryDirectory.appendingPathComponent("IMG.HEIC")
+        let movURL = temporaryDirectory.appendingPathComponent("IMG.MOV")
+        try Data(repeating: 0xAA, count: 32).write(to: heicURL)
+        try Data(repeating: 0xBB, count: 64).write(to: movURL)
+
+        let heic = candidate(
+            path: heicURL.path,
+            size: 32,
+            pairedPath: movURL.path,
+            isLivePhotoStill: true
+        )
+        let other = candidate(
+            path: temporaryDirectory.appendingPathComponent("OTHER.HEIC").path,
+            qualityScore: 0.9,
+            size: 50
+        )
+        let cluster = DuplicateCluster(
+            kind: .burst,
+            members: [heic, other],
+            suggestedKeeperIDs: [other.path],
+            bytesIfPruned: 32
+        )
+        let decisions = DedupeDecisions(byPath: [
+            heic.path: .delete,
+            other.path: .keep,
+        ])
+
+        let plan = DeduplicationPlanner.plan(
+            decisions: decisions,
+            clusters: [cluster],
+            configuration: DeduplicateConfiguration(destinationPath: temporaryDirectory.path, treatLivePhotoPairsAsUnit: true)
+        )
+        let movItem = try XCTUnwrap(plan.items.first { $0.path == movURL.path })
+        XCTAssertEqual(movItem.sizeBytes, 64)
+        XCTAssertEqual(plan.totalBytes, 96)
+    }
+
     // MARK: - Executor preflight
 
     /// Regression: a receipt-write failure used to be a non-fatal issue
