@@ -196,6 +196,110 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertTrue(Set(planRawOn.pathsToDelete).contains("/dest/IMG.CR2"))
     }
 
+    /// Live Photo pairing toggle is honored independently of the
+    /// RAW+JPEG toggle: with Live Photo OFF and RAW ON, a deleted HEIC
+    /// must not pull the MOV partner into the plan via expansion.
+    func testPlannerHonorsLivePhotoToggleIndependently() {
+        let heic = candidate(
+            path: "/dest/IMG.HEIC",
+            pairedPath: "/dest/IMG.MOV",
+            isLivePhotoStill: true
+        )
+        let other = candidate(path: "/dest/OTHER.HEIC", qualityScore: 0.9)
+        let cluster = DuplicateCluster(
+            kind: .burst,
+            members: [heic, other],
+            suggestedKeeperIDs: ["/dest/OTHER.HEIC"],
+            bytesIfPruned: 100
+        )
+        let decisions = DedupeDecisions(byPath: [
+            "/dest/IMG.HEIC": .delete,
+            "/dest/OTHER.HEIC": .keep,
+        ])
+
+        let configLivePhotoOff = DeduplicateConfiguration(
+            destinationPath: "/dest",
+            treatRawJpegPairsAsUnit: true,
+            treatLivePhotoPairsAsUnit: false
+        )
+        let plan = DeduplicationPlanner.plan(
+            decisions: decisions,
+            clusters: [cluster],
+            configuration: configLivePhotoOff
+        )
+        XCTAssertTrue(Set(plan.pathsToDelete).contains("/dest/IMG.HEIC"))
+        XCTAssertFalse(
+            Set(plan.pathsToDelete).contains("/dest/IMG.MOV"),
+            "MOV partner must not be expanded when Live Photo pairing is off"
+        )
+    }
+
+    /// Both pair toggles off: pairs are completely independent, no
+    /// expansion of any kind. Whatever the user (or the suggestion
+    /// engine) decided per path is what happens.
+    func testPlannerHonorsBothPairTogglesOff() {
+        let jpeg = candidate(path: "/dest/IMG.JPG", pairedPath: "/dest/IMG.CR2")
+        let heic = candidate(
+            path: "/dest/LIVE.HEIC",
+            pairedPath: "/dest/LIVE.MOV",
+            isLivePhotoStill: true
+        )
+        let other = candidate(path: "/dest/OTHER.JPG", qualityScore: 0.9)
+        let cluster = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [jpeg, heic, other],
+            suggestedKeeperIDs: ["/dest/OTHER.JPG"],
+            bytesIfPruned: 200
+        )
+        let decisions = DedupeDecisions(byPath: [
+            "/dest/IMG.JPG": .delete,
+            "/dest/LIVE.HEIC": .delete,
+            "/dest/OTHER.JPG": .keep,
+        ])
+
+        let configBothOff = DeduplicateConfiguration(
+            destinationPath: "/dest",
+            treatRawJpegPairsAsUnit: false,
+            treatLivePhotoPairsAsUnit: false
+        )
+        let plan = DeduplicationPlanner.plan(
+            decisions: decisions,
+            clusters: [cluster],
+            configuration: configBothOff
+        )
+        let paths = Set(plan.pathsToDelete)
+        XCTAssertTrue(paths.contains("/dest/IMG.JPG"))
+        XCTAssertTrue(paths.contains("/dest/LIVE.HEIC"))
+        XCTAssertFalse(paths.contains("/dest/IMG.CR2"), "RAW partner must not be expanded")
+        XCTAssertFalse(paths.contains("/dest/LIVE.MOV"), "MOV partner must not be expanded")
+    }
+
+    /// Symmetric to `testPlannerKeepWinsOverDeleteOnPairConflict`: this
+    /// time the JPEG is the explicit Keep and the RAW is the explicit
+    /// Delete. Pair Keep-wins must protect the RAW too.
+    func testPlannerJpegKeepProtectsRawPartner() {
+        let raw = candidate(path: "/dest/IMG.CR2", pairedPath: "/dest/IMG.JPG", isRaw: true)
+        let jpeg = candidate(path: "/dest/IMG.JPG", pairedPath: "/dest/IMG.CR2")
+        let other = candidate(path: "/dest/OTHER.JPG", qualityScore: 0.9)
+        let cluster = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [raw, jpeg, other],
+            suggestedKeeperIDs: ["/dest/OTHER.JPG"],
+            bytesIfPruned: 200
+        )
+        let decisions = DedupeDecisions(byPath: [
+            "/dest/IMG.CR2": .delete,
+            "/dest/IMG.JPG": .keep,
+            "/dest/OTHER.JPG": .keep,
+        ])
+        let config = DeduplicateConfiguration(destinationPath: "/dest", treatRawJpegPairsAsUnit: true)
+
+        let plan = DeduplicationPlanner.plan(decisions: decisions, clusters: [cluster], configuration: config)
+        let paths = Set(plan.pathsToDelete)
+        XCTAssertFalse(paths.contains("/dest/IMG.JPG"), "Explicit Keep must never be deleted")
+        XCTAssertFalse(paths.contains("/dest/IMG.CR2"), "Pair Keep-wins must protect the RAW partner")
+    }
+
     /// Regression: the executor previously inserted any partner into
     /// `toDelete` after the safety check, so an explicit Keep on one
     /// half of a pair could be silently flipped to Delete by the other
@@ -309,6 +413,101 @@ final class DeduplicateTests: XCTestCase {
             FileManager.default.fileExists(atPath: fileURL.path),
             "Victim file must be untouched when preflight aborts the commit"
         )
+    }
+
+    /// End-to-end: a deleted Live Photo HEIC carries its MOV partner
+    /// through commit + receipt + revert. Verifies that
+    ///   1. both files leave their original location,
+    ///   2. the audit receipt records both items with cluster ownership,
+    ///   3. revert restores both files from the Trash.
+    /// Uses the real macOS Trash; trashed items are cleaned up if the
+    /// revert step doesn't restore them (e.g. on test failure).
+    func testCommitAndRevertLivePhotoPair() async throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("DedupeLivePhotoE2E-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+
+        let heicURL = temporaryDirectory.appendingPathComponent("IMG.HEIC")
+        let movURL = temporaryDirectory.appendingPathComponent("IMG.MOV")
+        try Data(repeating: 0xAA, count: 32).write(to: heicURL)
+        try Data(repeating: 0xBB, count: 64).write(to: movURL)
+
+        let clusterID = UUID()
+        let plan = DeduplicationPlan(items: [
+            DeduplicationPlan.Item(
+                path: heicURL.path,
+                sizeBytes: 32,
+                owningClusterID: clusterID,
+                owningClusterKind: .burst,
+                pairOrigin: nil
+            ),
+            DeduplicationPlan.Item(
+                path: movURL.path,
+                sizeBytes: 64,
+                owningClusterID: clusterID,
+                owningClusterKind: .burst,
+                pairOrigin: .livePhoto
+            ),
+        ])
+
+        let executor = DeduplicateExecutor()
+        let trashed = TrashedURLBag()
+        var commitSummary: DeduplicateCommitSummary?
+
+        let commitStream = executor.commit(
+            plan: plan,
+            destinationRoot: temporaryDirectory.path,
+            hardDelete: false
+        )
+        for try await event in commitStream {
+            switch event {
+            case let .itemTrashed(originalPath, trashURL, _):
+                if let trashURL { trashed.add(originalPath: originalPath, trashURL: trashURL) }
+            case let .complete(summary):
+                commitSummary = summary
+            default:
+                break
+            }
+        }
+
+        // Cleanup hook in case revert doesn't run — trashed items must
+        // not pile up in the user's Trash across test runs.
+        let cleanupDirectory = temporaryDirectory
+        addTeardownBlock {
+            for url in trashed.snapshot().values {
+                try? FileManager.default.removeItem(at: url)
+            }
+            try? FileManager.default.removeItem(at: cleanupDirectory)
+        }
+
+        XCTAssertEqual(commitSummary?.deletedCount, 2)
+        XCTAssertEqual(commitSummary?.failedCount, 0)
+        XCTAssertEqual(commitSummary?.bytesReclaimed, 96)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: heicURL.path), "HEIC must leave its original path")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: movURL.path), "MOV partner must leave its original path")
+
+        let receiptPath = try XCTUnwrap(commitSummary?.receiptPath, "Receipt must be written for both items")
+        let receiptData = try Data(contentsOf: URL(fileURLWithPath: receiptPath))
+        let receipt = try JSONDecoder.dedupe.decode(DeduplicateAuditReceipt.self, from: receiptData)
+        let receiptPaths = Set(receipt.items.map(\.originalPath))
+        XCTAssertTrue(receiptPaths.contains(heicURL.path))
+        XCTAssertTrue(receiptPaths.contains(movURL.path), "MOV partner must have a receipt entry, otherwise Run History cannot revert it")
+        for item in receipt.items {
+            XCTAssertEqual(item.method, .trash)
+            XCTAssertEqual(item.clusterID, clusterID)
+            XCTAssertEqual(item.clusterKind, .burst)
+            XCTAssertNotNil(item.trashURL, "Trash URL must be captured for revert")
+        }
+
+        // Revert and verify both files come back.
+        let revertStream = executor.revert(receiptURL: URL(fileURLWithPath: receiptPath))
+        for try await _ in revertStream {}
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: heicURL.path), "Revert must restore HEIC")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: movURL.path), "Revert must restore MOV partner")
+        // Restored files came back, so the trashURLs no longer point at
+        // anything to clean up.
+        trashed.clear()
     }
 
     // MARK: - DedupeFeatureCache round-trip
