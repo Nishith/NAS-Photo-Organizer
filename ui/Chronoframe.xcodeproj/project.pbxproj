@@ -95,6 +95,7 @@
 		AA000000000000000000025C /* ClusterListPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000192 /* ClusterListPane.swift */; };
 		AA000000000000000000025D /* ClusterDetailPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000193 /* ClusterDetailPane.swift */; };
 		AA000000000000000000025E /* DeduplicationPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000194 /* DeduplicationPlanner.swift */; };
+		AA000000000000000000025F /* ThumbnailRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000195 /* ThumbnailRenderer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -206,6 +207,7 @@
 		AA0000000000000000000192 /* ClusterListPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterListPane.swift; sourceTree = "<group>"; };
 		AA0000000000000000000193 /* ClusterDetailPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterDetailPane.swift; sourceTree = "<group>"; };
 		AA0000000000000000000194 /* DeduplicationPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeduplicationPlanner.swift; sourceTree = "<group>"; };
+		AA0000000000000000000195 /* ThumbnailRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailRenderer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -325,6 +327,7 @@
 				AA0000000000000000000143 /* ContactSheetView.swift */,
 				AA0000000000000000000144 /* TickerRow.swift */,
 				AA0000000000000000000147 /* OnboardingCard.swift */,
+				AA0000000000000000000195 /* ThumbnailRenderer.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -738,6 +741,7 @@
 				AA0000000000000000000255 /* VisionFeaturePrinter.swift in Sources */,
 				AA0000000000000000000256 /* PhotoQualityScorer.swift in Sources */,
 				AA000000000000000000025E /* DeduplicationPlanner.swift in Sources */,
+				AA000000000000000000025F /* ThumbnailRenderer.swift in Sources */,
 				AA0000000000000000000257 /* DeduplicateEngine.swift in Sources */,
 				AA0000000000000000000258 /* DeduplicateSessionStore.swift in Sources */,
 				AA0000000000000000000259 /* OrganizeContainerView.swift in Sources */,

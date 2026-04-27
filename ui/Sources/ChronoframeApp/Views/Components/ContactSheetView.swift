@@ -116,38 +116,7 @@ enum ContactSheetThumbnailPipeline {
     }
 
     private static func thumbnailData(for url: URL, size: CGSize, scale: CGFloat) async -> Data? {
-        let request = QLThumbnailGenerator.Request(
-            fileAt: url,
-            size: size,
-            scale: scale,
-            representationTypes: .thumbnail
-        )
-        return await withCheckedContinuation { continuation in
-            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { rep, _ in
-                guard let cgImage = rep?.cgImage else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                continuation.resume(returning: pngData(for: cgImage))
-            }
-        }
-    }
-
-    private static func pngData(for image: CGImage) -> Data? {
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(
-            data,
-            UTType.png.identifier as CFString,
-            1,
-            nil
-        ) else {
-            return nil
-        }
-        CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else {
-            return nil
-        }
-        return data as Data
+        await ThumbnailRenderer.pngData(for: url, size: size, scale: scale)
     }
 }
 

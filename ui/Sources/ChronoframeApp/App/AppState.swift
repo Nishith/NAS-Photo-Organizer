@@ -275,10 +275,34 @@ final class AppState: ObservableObject {
             return
         }
 
-        preferencesStore.lastDeduplicateDestinationPath = url.path
-        if let bookmark = try? folderAccessService.makeBookmark(for: url, key: Self.deduplicateDestinationBookmarkKey) {
+        // Persist the bookmark BEFORE the path so the two never drift. If
+        // bookmark creation fails (e.g. APFS volume not bookmarkable, sandbox
+        // mismatch), surface the error and leave the destination unchanged
+        // — the previously-chosen folder, if any, stays valid.
+        do {
+            let bookmark = try folderAccessService.makeBookmark(for: url, key: Self.deduplicateDestinationBookmarkKey)
             preferencesStore.storeBookmark(bookmark)
+            preferencesStore.lastDeduplicateDestinationPath = url.path
+        } catch {
+            transientErrorMessage = UserFacingErrorMessage.message(for: error, context: .setup)
         }
+    }
+
+    /// Drop the dedicated Deduplicate folder and any bookmark backing it.
+    /// `deduplicateDestinationPath` then falls back to the active Organize
+    /// destination (or the most recently used history root) on next access.
+    func clearDeduplicateDestinationFolder() {
+        preferencesStore.removeBookmark(for: Self.deduplicateDestinationBookmarkKey)
+        preferencesStore.lastDeduplicateDestinationPath = ""
+    }
+
+    /// Open Finder with the active Deduplicate destination selected. Only
+    /// meaningful when `hasDedicatedDeduplicateDestinationPath` is true —
+    /// the Organize destination already has its own reveal in Setup.
+    func revealDeduplicateDestinationInFinder() {
+        let path = deduplicateDestinationPath
+        guard !path.isEmpty else { return }
+        finderService.revealInFinder(path)
     }
 
     func startDeduplicateScan() {
@@ -310,10 +334,18 @@ final class AppState: ObservableObject {
     }
 
     private func restoreDeduplicateDestinationBookmark() {
-        guard
-            let bookmark = preferencesStore.bookmark(for: Self.deduplicateDestinationBookmarkKey),
-            let resolvedBookmark = folderAccessService.resolveBookmark(bookmark)
-        else {
+        guard let bookmark = preferencesStore.bookmark(for: Self.deduplicateDestinationBookmarkKey) else {
+            // Never set a Deduplicate folder; nothing to restore.
+            return
+        }
+        guard let resolvedBookmark = folderAccessService.resolveBookmark(bookmark) else {
+            // Bookmark exists but the folder is gone (deleted, volume
+            // unmounted, app moved). Drop the dead path + bookmark so
+            // `deduplicateDestinationPath` falls back to the Organize
+            // destination instead of silently scanning a stale location
+            // — or scanning nothing at all.
+            preferencesStore.removeBookmark(for: Self.deduplicateDestinationBookmarkKey)
+            preferencesStore.lastDeduplicateDestinationPath = ""
             return
         }
 

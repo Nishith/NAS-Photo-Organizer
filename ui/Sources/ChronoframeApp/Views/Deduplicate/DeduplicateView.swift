@@ -43,9 +43,22 @@ struct DeduplicateView: View {
             }
         }
         .navigationTitle("Deduplicate")
+        .onDisappear { thumbnailLoader.cancelAll() }
     }
 
     // MARK: - Idle
+
+    private var destinationCard: some View {
+        MeridianSurfaceCard(
+            style: .inner,
+            tint: appState.deduplicateDestinationPath.isEmpty ? DesignTokens.ColorSystem.statusDanger : DesignTokens.ColorSystem.statusSuccess
+        ) {
+            ViewThatFits(in: .horizontal) {
+                DeduplicateDestinationCardContent(appState: appState, isVertical: false)
+                DeduplicateDestinationCardContent(appState: appState, isVertical: true)
+            }
+        }
+    }
 
     private var idleView: some View {
         ScrollView {
@@ -58,40 +71,7 @@ struct DeduplicateView: View {
                         .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
                 }
 
-                MeridianSurfaceCard(
-                    style: .inner,
-                    tint: appState.deduplicateDestinationPath.isEmpty ? DesignTokens.ColorSystem.statusDanger : DesignTokens.ColorSystem.statusSuccess
-                ) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 12) {
-                            PathValueView(
-                                title: "Scan Folder",
-                                value: appState.deduplicateDestinationPath,
-                                helper: appState.deduplicateDestinationHelper
-                            )
-
-                            Spacer(minLength: 12)
-
-                            Button("Choose Folder…") {
-                                Task { await appState.chooseDeduplicateDestinationFolder() }
-                            }
-                            .accessibilityHint("Opens a folder picker for Deduplicate scans")
-                        }
-
-                        VStack(alignment: .leading, spacing: 12) {
-                            PathValueView(
-                                title: "Scan Folder",
-                                value: appState.deduplicateDestinationPath,
-                                helper: appState.deduplicateDestinationHelper
-                            )
-
-                            Button("Choose Folder…") {
-                                Task { await appState.chooseDeduplicateDestinationFolder() }
-                            }
-                            .accessibilityHint("Opens a folder picker for Deduplicate scans")
-                        }
-                    }
-                }
+                destinationCard
 
                 Divider()
 
@@ -348,5 +328,60 @@ struct DeduplicateView: View {
         formatter.allowedUnits = [.useMB, .useGB]
         formatter.countStyle = .file
         return formatter
+    }
+}
+
+/// Content of the Deduplicate destination card. Hosted twice inside a
+/// `ViewThatFits` (horizontal vs vertical) so the layout adapts to a
+/// narrow main column. The `Reveal` and `Use Organize Destination`
+/// buttons appear only when a dedicated dedupe folder is set; otherwise
+/// the card just shows the fallback (Organize destination) and the
+/// `Choose Folder…` action.
+private struct DeduplicateDestinationCardContent: View {
+    @ObservedObject var appState: AppState
+    let isVertical: Bool
+
+    var body: some View {
+        if isVertical {
+            VStack(alignment: .leading, spacing: 12) {
+                pathView
+                actionRow
+            }
+        } else {
+            HStack(alignment: .top, spacing: 12) {
+                pathView
+                Spacer(minLength: 12)
+                actionRow
+            }
+        }
+    }
+
+    private var pathView: some View {
+        PathValueView(
+            title: "Scan Folder",
+            value: appState.deduplicateDestinationPath,
+            helper: appState.deduplicateDestinationHelper
+        )
+    }
+
+    private var actionRow: some View {
+        HStack(spacing: 8) {
+            Button("Choose Folder…") {
+                Task { await appState.chooseDeduplicateDestinationFolder() }
+            }
+            .accessibilityHint("Opens a folder picker for Deduplicate scans")
+
+            if appState.hasDedicatedDeduplicateDestinationPath {
+                Button("Reveal") {
+                    appState.revealDeduplicateDestinationInFinder()
+                }
+                .accessibilityHint("Reveals the Deduplicate folder in Finder")
+
+                Button("Use Organize Destination") {
+                    appState.clearDeduplicateDestinationFolder()
+                }
+                .accessibilityHint("Clears the Deduplicate folder so scans use the Organize destination")
+            }
+        }
     }
 }

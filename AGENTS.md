@@ -40,10 +40,13 @@ The app defaults to the native `SwiftOrganizerEngine`. `HybridOrganizerEngine` c
 
 Shared on-disk artifacts include:
 
-- `.organize_cache.db`
+- `.organize_cache.db` (now also hosts a `DedupeFeatures` table caching per-photo Vision feature prints, dHash, and quality scores so dedupe re-scans are incremental)
 - `.organize_logs/dry_run_report_*.csv`
-- `.organize_logs/audit_receipt_*.json`
+- `.organize_logs/audit_receipt_*.json` (organize transfer audit receipt)
+- `.organize_logs/dedupe_audit_receipt_*.json` (Deduplicate run audit receipt — used by Run History → Revert)
 - `.organize_log.txt`
+
+The macOS app sidebar consolidates the original Setup / Run / Run History flows under a single **Organize** destination (`ui/Sources/ChronoframeApp/Views/Organize/OrganizeContainerView.swift`) and adds a peer **Deduplicate** destination (`ui/Sources/ChronoframeApp/Views/Deduplicate/`). Both share the active organize destination by default; Deduplicate may also point at a user-picked dedicated folder.
 
 ## Safety Invariants
 
@@ -57,6 +60,22 @@ Do not weaken these unless the user explicitly asks for a product change.
 - Revert deletes only destination files whose current hash still matches the audit receipt.
 - Aborted runs should make it clear that source files were left untouched.
 - Failure thresholds intentionally stop bad runs: 5 consecutive failures or 20 total failures.
+- Deduplicate moves files to the macOS Trash by default. Hard delete is only available behind an explicit Settings toggle gated by a confirmation dialog.
+- The dedupe audit receipt directory (`.organize_logs/`) is preflighted before any deletion. An unwritable destination aborts the commit with `ReceiptPreflightError` and zero files touched.
+- Pair-as-unit conflict resolution is **Keep-wins**: if a user explicitly keeps either half of a RAW+JPEG or Live Photo HEIC+MOV pair, neither is deleted, even when the other half is marked Delete.
+
+## Deduplicate Workspace
+
+`ui/Sources/ChronoframeCore/DeduplicateScanner.swift` runs the scan; `DeduplicationPlanner.plan` is the single source of truth for "what files will the executor mutate". Both the commit-footer preview and `DeduplicateExecutor.commit` consume the same `DeduplicationPlan` so what the user sees in the footer is exactly what happens.
+
+- Per-pair-kind toggles (`treatRawJpegPairsAsUnit`, `treatLivePhotoPairsAsUnit`) are honored independently. Disabling RAW pairing must not affect Live Photo behaviour and vice versa.
+- The plan carries owning-cluster metadata for **every** mutation, including pair partners that aren't cluster members on their own (Live Photo MOV halves, mainly), so the audit receipt is exhaustive and Run History → Revert can restore everything the executor touched.
+- Thumbnails go through `ui/Sources/ChronoframeApp/Views/Components/ThumbnailRenderer.swift` (single QuickLook entry point shared by ContactSheet and DedupeThumbnailLoader). The dedupe loader uses `NSCache<NSString, NSImage>` with `countLimit = 256` for steady-state memory and bumps a `@Published version` so SwiftUI redraws after each insert. `cancelAll()` is called on `.onDisappear` to drop in-flight renders when the user leaves the workspace.
+- The dedicated dedupe folder picker stores its bookmark under key `deduplicate.destination`. If the bookmark fails to resolve at bootstrap, both the bookmark and the path are dropped so `deduplicateDestinationPath` falls back to the organize destination instead of silently scanning a dead path.
+
+## Sandbox Status
+
+`ui/Packaging/Chronoframe.entitlements` is currently empty — **App Sandbox is not enabled** in the shipped build. Both organize and dedupe rely on `FolderAccessService.resolveBookmark` calling `startAccessingSecurityScopedResource` once at bootstrap and never `stop`ing (process-wide hold). If sandboxing is enabled later, both flows need an explicit `withSecurityScopedAccess { ... }` lifecycle around their scans. Update both at the same time, not one in isolation.
 
 ## User-Facing Error Handling
 

@@ -77,6 +77,15 @@ final class MockFolderAccessService: FolderAccessServicing {
     var bookmarkURLs: [URL] = []
     var resolvedBookmarks: [String: ResolvedFolderBookmark] = [:]
     var validationFailures: [String: Error] = [:]
+    /// Force `makeBookmark` to throw the next time it is called for any
+    /// of these bookmark keys. Used to verify that the dedupe folder
+    /// picker surfaces a transient error instead of silently swallowing
+    /// `try?`.
+    var bookmarkCreationFailures: [String: Error] = [:]
+    /// Force `resolveBookmark` to return `nil` for any of these keys.
+    /// Used to verify that bootstrap clears the stale path when the
+    /// stored bookmark no longer resolves.
+    var bookmarkResolutionFailures: Set<String> = []
 
     func chooseFolder(startingAt path: String?, prompt: String) -> URL? {
         chooseFolderCalls.append((startingAt: path, prompt: prompt))
@@ -84,12 +93,18 @@ final class MockFolderAccessService: FolderAccessServicing {
     }
 
     func makeBookmark(for url: URL, key: String) throws -> FolderBookmark {
+        if let error = bookmarkCreationFailures[key] {
+            throw error
+        }
         bookmarkURLs.append(url)
         return FolderBookmark(key: key, path: url.path, data: Data(url.path.utf8))
     }
 
     func resolveBookmark(_ bookmark: FolderBookmark) -> ResolvedFolderBookmark? {
-        resolvedBookmarks[bookmark.key] ?? ResolvedFolderBookmark(url: URL(fileURLWithPath: bookmark.path))
+        if bookmarkResolutionFailures.contains(bookmark.key) {
+            return nil
+        }
+        return resolvedBookmarks[bookmark.key] ?? ResolvedFolderBookmark(url: URL(fileURLWithPath: bookmark.path))
     }
 
     func validateFolder(_ url: URL, role: FolderRole) throws {

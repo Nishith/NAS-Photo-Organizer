@@ -115,10 +115,87 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(harness.setupStore.destinationPath, "/Volumes/Organize")
         XCTAssertEqual(harness.preferencesStore.lastDeduplicateDestinationPath, "/Volumes/Dedupe")
         XCTAssertEqual(appState.deduplicateDestinationPath, "/Volumes/Dedupe")
+        XCTAssertEqual(harness.folderAccessService.chooseFolderCalls.count, 1, "Picker must not double-prompt")
         XCTAssertEqual(harness.folderAccessService.chooseFolderCalls.last?.startingAt, "/Volumes/Organize")
         XCTAssertEqual(harness.folderAccessService.chooseFolderCalls.last?.prompt, "Choose Deduplicate Folder")
         XCTAssertEqual(harness.folderAccessService.bookmarkURLs, [URL(fileURLWithPath: "/Volumes/Dedupe")])
         XCTAssertEqual(harness.preferencesStore.bookmark(for: "deduplicate.destination")?.path, "/Volumes/Dedupe")
+    }
+
+    /// Regression for review rec #2: bookmark-creation failure used to be
+    /// swallowed via `try?`, leaving the path persisted with no bookmark.
+    /// The picker must now leave the path unchanged and surface a
+    /// transient error so the user knows the folder didn't take.
+    @MainActor
+    func testChooseDeduplicateDestinationSurfacesBookmarkCreationFailure() async {
+        let harness = AppStateHarness()
+        harness.preferencesStore.lastDeduplicateDestinationPath = "/Volumes/Existing"
+        harness.folderAccessService.nextChosenFolder = URL(fileURLWithPath: "/Volumes/NewFolder")
+        harness.folderAccessService.bookmarkCreationFailures["deduplicate.destination"] = AppTestFailure.expectedFailure("disk full")
+        let appState = harness.makeAppState(performInitialBootstrap: false)
+
+        await appState.chooseDeduplicateDestinationFolder()
+
+        XCTAssertNotNil(appState.transientErrorMessage, "Bookmark failure must surface a transient error")
+        XCTAssertEqual(
+            harness.preferencesStore.lastDeduplicateDestinationPath,
+            "/Volumes/Existing",
+            "Path must remain unchanged when the bookmark could not be created"
+        )
+        XCTAssertNil(harness.preferencesStore.bookmark(for: "deduplicate.destination"))
+    }
+
+    /// Regression for review rec #1: when the stored bookmark no longer
+    /// resolves (folder deleted, volume unmounted), bootstrap must drop
+    /// both the bookmark and the path so future scans fall back to the
+    /// Organize destination instead of silently scanning a dead path.
+    @MainActor
+    func testBootstrapClearsDeduplicateDestinationWhenBookmarkResolutionFails() {
+        let harness = AppStateHarness()
+        harness.preferencesStore.lastDeduplicateDestinationPath = "/Volumes/Gone"
+        harness.preferencesStore.storeBookmark(
+            FolderBookmark(key: "deduplicate.destination", path: "/Volumes/Gone", data: Data([0x09]))
+        )
+        harness.folderAccessService.bookmarkResolutionFailures.insert("deduplicate.destination")
+
+        let appState = harness.makeAppState()
+
+        XCTAssertEqual(harness.preferencesStore.lastDeduplicateDestinationPath, "")
+        XCTAssertNil(harness.preferencesStore.bookmark(for: "deduplicate.destination"))
+        XCTAssertFalse(appState.hasDedicatedDeduplicateDestinationPath)
+    }
+
+    /// Review rec #4: explicit "Use Organize Destination" affordance
+    /// drops the dedicated dedupe folder and reverts to the fallback.
+    @MainActor
+    func testClearDeduplicateDestinationFolderRevertsToOrganizeFallback() {
+        let harness = AppStateHarness()
+        harness.setupStore.destinationPath = "/Volumes/Organize"
+        harness.preferencesStore.lastDeduplicateDestinationPath = "/Volumes/Dedupe"
+        harness.preferencesStore.storeBookmark(
+            FolderBookmark(key: "deduplicate.destination", path: "/Volumes/Dedupe", data: Data([0x10]))
+        )
+        let appState = harness.makeAppState(performInitialBootstrap: false)
+
+        XCTAssertTrue(appState.hasDedicatedDeduplicateDestinationPath)
+
+        appState.clearDeduplicateDestinationFolder()
+
+        XCTAssertFalse(appState.hasDedicatedDeduplicateDestinationPath)
+        XCTAssertEqual(appState.deduplicateDestinationPath, "/Volumes/Organize")
+        XCTAssertNil(harness.preferencesStore.bookmark(for: "deduplicate.destination"))
+    }
+
+    /// Review rec #14: Reveal in Finder for the dedupe folder.
+    @MainActor
+    func testRevealDeduplicateDestinationCallsFinderService() {
+        let harness = AppStateHarness()
+        harness.preferencesStore.lastDeduplicateDestinationPath = "/Volumes/Dedupe"
+        let appState = harness.makeAppState(performInitialBootstrap: false)
+
+        appState.revealDeduplicateDestinationInFinder()
+
+        XCTAssertEqual(harness.finderService.revealedPaths, ["/Volumes/Dedupe"])
     }
 
     @MainActor

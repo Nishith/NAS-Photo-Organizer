@@ -222,14 +222,14 @@ private struct LargePreviewImage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: path) {
             image = nil
-            let imageData = await DedupeThumbnailLoader.thumbnailData(
+            let cgImage = await ThumbnailRenderer.cgImage(
                 for: URL(fileURLWithPath: path),
                 size: CGSize(width: 1200, height: 1200),
                 scale: NSScreen.main?.backingScaleFactor ?? 2.0
             )
-            if let imageData {
-                image = NSImage(data: imageData)
-            }
+            guard !Task.isCancelled, let cgImage else { return }
+            let pixelSize = CGSize(width: cgImage.width, height: cgImage.height)
+            image = NSImage(cgImage: cgImage, size: pixelSize)
         }
     }
 }

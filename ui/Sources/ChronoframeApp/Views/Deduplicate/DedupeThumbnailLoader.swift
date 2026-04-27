@@ -2,74 +2,73 @@
 import ChronoframeAppCore
 #endif
 import AppKit
-import ImageIO
-import QuickLookThumbnailing
 import SwiftUI
-import UniformTypeIdentifiers
 
-/// Tiny reusable loader for QuickLook thumbnails, keyed by path. Backs the
-/// strip thumbnails and the large preview in the dedupe review UI. We keep
-/// it in-memory only — the SwiftUI views own one loader each and discard
-/// it when their view goes away.
+/// QuickLook thumbnail cache for the Deduplicate review UI. Keyed by
+/// path; backed by `NSCache` (auto-eviction under memory pressure +
+/// `countLimit` for steady-state memory). The cache is process-shared via
+/// `NSCache`'s thread safety, but UI invalidation is driven through the
+/// `@Published version` counter on the @MainActor — SwiftUI re-renders
+/// whenever the loader bumps `version`.
+///
+/// Cancellation: each in-flight render is tracked so `cancelAll()` (or
+/// requesting the same path again) can stop wasted work when the user
+/// navigates away from the Deduplicate workspace.
 @MainActor
 final class DedupeThumbnailLoader: ObservableObject {
-    @Published private(set) var thumbnails: [String: NSImage] = [:]
-    private var inFlight: Set<String> = []
+    /// Bumps after every successful cache insert. Views observing this
+    /// loader redraw whenever `version` changes.
+    @Published private(set) var version: Int = 0
+
+    private let cache: NSCache<NSString, NSImage>
+    private var inFlight: [String: Task<Void, Never>] = [:]
+
+    init(countLimit: Int = 256) {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = countLimit
+        self.cache = cache
+    }
 
     func image(for path: String) -> NSImage? {
-        thumbnails[path]
+        cache.object(forKey: path as NSString)
     }
 
     func request(path: String, size: CGSize) {
-        guard thumbnails[path] == nil, !inFlight.contains(path) else { return }
-        inFlight.insert(path)
+        if cache.object(forKey: path as NSString) != nil { return }
+        if inFlight[path] != nil { return }
         let url = URL(fileURLWithPath: path)
         let scale = NSScreen.main?.backingScaleFactor ?? 2.0
-        Task { [weak self] in
-            let imageData = await Self.thumbnailData(for: url, size: size, scale: scale)
+        let task = Task { [weak self] in
+            let cgImage = await ThumbnailRenderer.cgImage(for: url, size: size, scale: scale)
+            if Task.isCancelled { return }
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.inFlight.remove(path)
-                if let imageData, let image = NSImage(data: imageData) {
-                    self.thumbnails[path] = image
+                self.inFlight.removeValue(forKey: path)
+                if let cgImage {
+                    let pixelSize = CGSize(width: cgImage.width, height: cgImage.height)
+                    let image = NSImage(cgImage: cgImage, size: pixelSize)
+                    self.cache.setObject(image, forKey: path as NSString)
+                    self.version &+= 1
                 }
             }
         }
+        inFlight[path] = task
     }
 
-    nonisolated static func thumbnailData(for url: URL, size: CGSize, scale: CGFloat) async -> Data? {
-        let request = QLThumbnailGenerator.Request(
-            fileAt: url,
-            size: size,
-            scale: scale,
-            representationTypes: .thumbnail
-        )
-        return await withCheckedContinuation { continuation in
-            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { rep, _ in
-                guard let cgImage = rep?.cgImage else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                continuation.resume(returning: pngData(for: cgImage))
-            }
-        }
+    /// Cancel every in-flight render and discard its task handle. Called
+    /// when the Deduplicate workspace disappears so we don't keep
+    /// rendering thumbnails for clusters the user is no longer looking
+    /// at. The cache is preserved so re-entering the workspace is fast.
+    func cancelAll() {
+        for task in inFlight.values { task.cancel() }
+        inFlight.removeAll()
     }
 
-    nonisolated private static func pngData(for image: CGImage) -> Data? {
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(
-            data,
-            UTType.png.identifier as CFString,
-            1,
-            nil
-        ) else {
-            return nil
-        }
-        CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else {
-            return nil
-        }
-        return data as Data
+    /// Drop every cached thumbnail. Intended for tests + memory-pressure
+    /// recovery; not used in the normal UI flow.
+    func purgeCache() {
+        cache.removeAllObjects()
+        version &+= 1
     }
 }
 
