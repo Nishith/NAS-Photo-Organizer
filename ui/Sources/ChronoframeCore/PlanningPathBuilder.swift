@@ -9,11 +9,15 @@ enum PlanningPathBuilder {
         duplicateDirectoryName: String?,
         namingRules: PlannerNamingRules,
         folderStructure: FolderStructure = .yyyyMMDD,
-        sourceRoot: String? = nil
+        sourceRoot: String? = nil,
+        minimumSequenceWidth: Int? = nil
     ) -> String {
         let fileExtension = URL(fileURLWithPath: sourcePath).pathExtension
         let suffix = fileExtension.isEmpty ? "" : ".\(fileExtension)"
-        let sequenceString = formatSequence(sequence, minimumWidth: namingRules.sequenceWidth)
+        let sequenceString = formatSequence(
+            sequence,
+            minimumWidth: minimumSequenceWidth ?? namingRules.sequenceWidth
+        )
 
         var path = URL(fileURLWithPath: destinationRoot, isDirectory: true)
         if let duplicateDirectoryName {

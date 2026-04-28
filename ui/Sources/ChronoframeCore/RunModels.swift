@@ -175,6 +175,8 @@ public struct RunMetrics: Equatable, Codable, Sendable {
     public var copiedCount: Int
     public var failedCount: Int
     public var errorCount: Int
+    public var bytesCopied: Int64
+    public var bytesTotal: Int64
     public var speedMBps: Double
     public var etaSeconds: Double?
     public var revertedCount: Int
@@ -192,6 +194,8 @@ public struct RunMetrics: Equatable, Codable, Sendable {
         copiedCount: Int = 0,
         failedCount: Int = 0,
         errorCount: Int = 0,
+        bytesCopied: Int64 = 0,
+        bytesTotal: Int64 = 0,
         speedMBps: Double = 0,
         etaSeconds: Double? = nil,
         revertedCount: Int = 0,
@@ -208,6 +212,8 @@ public struct RunMetrics: Equatable, Codable, Sendable {
         self.copiedCount = copiedCount
         self.failedCount = failedCount
         self.errorCount = errorCount
+        self.bytesCopied = bytesCopied
+        self.bytesTotal = bytesTotal
         self.speedMBps = speedMBps
         self.etaSeconds = etaSeconds
         self.revertedCount = revertedCount
@@ -219,7 +225,8 @@ public struct RunMetrics: Equatable, Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case discoveredCount, plannedCount, alreadyInDestinationCount, duplicateCount,
-             hashErrorCount, copiedCount, failedCount, errorCount, speedMBps, etaSeconds,
+             hashErrorCount, copiedCount, failedCount, errorCount, bytesCopied, bytesTotal,
+             speedMBps, etaSeconds,
              revertedCount, skippedCount, missingCount, movedCount,
              dateHistogram
     }
@@ -234,6 +241,8 @@ public struct RunMetrics: Equatable, Codable, Sendable {
         self.copiedCount = try c.decodeIfPresent(Int.self, forKey: .copiedCount) ?? 0
         self.failedCount = try c.decodeIfPresent(Int.self, forKey: .failedCount) ?? 0
         self.errorCount = try c.decodeIfPresent(Int.self, forKey: .errorCount) ?? 0
+        self.bytesCopied = try c.decodeIfPresent(Int64.self, forKey: .bytesCopied) ?? 0
+        self.bytesTotal = try c.decodeIfPresent(Int64.self, forKey: .bytesTotal) ?? 0
         self.speedMBps = try c.decodeIfPresent(Double.self, forKey: .speedMBps) ?? 0
         self.etaSeconds = try c.decodeIfPresent(Double.self, forKey: .etaSeconds)
         self.revertedCount = try c.decodeIfPresent(Int.self, forKey: .revertedCount) ?? 0

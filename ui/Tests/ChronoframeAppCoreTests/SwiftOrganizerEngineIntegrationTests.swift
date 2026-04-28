@@ -103,6 +103,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
             "phaseCompleted:discovery",
             "phaseStarted:classification",
             "phaseCompleted:classification",
+            "dateHistogram:1",
             "copyPlanReady:1",
             "complete:dryRunFinished",
         ])
@@ -113,6 +114,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
 
         XCTAssertEqual(summary.metrics.discoveredCount, 1)
         XCTAssertEqual(summary.metrics.plannedCount, 1)
+        XCTAssertEqual(summary.metrics.dateHistogram, [DateHistogramBucket(key: "2024-01", plannedCount: 1)])
         XCTAssertEqual(summary.status, .dryRunFinished)
         XCTAssertEqual(summary.title, "Preview complete")
         XCTAssertEqual(summary.artifacts.destinationRoot, destinationURL.path)
@@ -135,6 +137,64 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
             destinationURL.appendingPathComponent(".organize_log.txt").path
         )
         XCTAssertTrue(FileManager.default.fileExists(atPath: summary.artifacts.logFilePath ?? ""))
+    }
+
+    @MainActor
+    func testStartPreviewSurfacesCrowdedGreenfieldDayAsInfo() async throws {
+        let sourceURL = temporaryDirectoryURL.appendingPathComponent("crowded-source", isDirectory: true)
+        let destinationURL = temporaryDirectoryURL.appendingPathComponent("crowded-dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+
+        for index in 1...1_001 {
+            let fileURL = sourceURL.appendingPathComponent(
+                String(format: "batch/IMG_20260419_%06d.jpg", index)
+            )
+            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("source-\(index)".utf8).write(to: fileURL)
+        }
+
+        let engine = SwiftOrganizerEngine(
+            profilesRepository: TestProfilesRepository(
+                profiles: [],
+                profilesFileURL: temporaryDirectoryURL.appendingPathComponent("profiles.yaml")
+            )
+        )
+
+        let stream = try engine.start(
+            RunConfiguration(
+                mode: .preview,
+                sourcePath: sourceURL.path,
+                destinationPath: destinationURL.path,
+                useFastDestinationScan: false
+            )
+        )
+        let events = try await Self.collect(stream)
+
+        let issues = events.compactMap { event -> RunIssue? in
+            if case let .issue(issue) = event {
+                return issue
+            }
+            return nil
+        }
+        XCTAssertTrue(issues.contains {
+            $0.severity == .info
+                && $0.message == "Day 2026-04-19: 1,001 files — using 4-digit sequence numbers."
+        })
+        XCTAssertFalse(issues.contains {
+            $0.severity == .warning && $0.message.contains("Sequence overflow")
+        })
+        XCTAssertTrue(events.contains {
+            if case let .dateHistogram(buckets) = $0 {
+                return buckets == [DateHistogramBucket(key: "2026-04", plannedCount: 1_001)]
+            }
+            return false
+        })
+
+        guard case let .complete(summary)? = events.last else {
+            return XCTFail("Expected complete event")
+        }
+        XCTAssertEqual(summary.metrics.dateHistogram, [DateHistogramBucket(key: "2026-04", plannedCount: 1_001)])
     }
 
     @MainActor
@@ -175,6 +235,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
             "phaseCompleted:discovery",
             "phaseStarted:classification",
             "phaseCompleted:classification",
+            "dateHistogram:1",
             "copyPlanReady:1",
             "phaseStarted:copy",
             "phaseProgress:copy:1/1",
@@ -192,6 +253,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
         XCTAssertEqual(summary.metrics.plannedCount, 1)
         XCTAssertEqual(summary.metrics.copiedCount, 1)
         XCTAssertEqual(summary.metrics.failedCount, 0)
+        XCTAssertEqual(summary.metrics.dateHistogram, [DateHistogramBucket(key: "2024-01", plannedCount: 1)])
 
         let copiedFileURL = destinationURL.appendingPathComponent("2024/01/02/2024-01-02_001.jpg")
         XCTAssertTrue(FileManager.default.fileExists(atPath: copiedFileURL.path))

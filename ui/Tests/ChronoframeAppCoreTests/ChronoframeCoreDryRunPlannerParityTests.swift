@@ -35,6 +35,109 @@ final class ChronoframeCoreDryRunPlannerParityTests: XCTestCase {
         }
     }
 
+    func testPlannerUsesWideSequenceForGreenfieldCrowdedDayWithInfoAndHistogram() throws {
+        let sourceRoot = temporaryDirectoryURL.appendingPathComponent("crowded-source", isDirectory: true)
+        let destinationRoot = temporaryDirectoryURL.appendingPathComponent("crowded-dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+
+        for index in 1...1_001 {
+            let fileURL = sourceRoot.appendingPathComponent(
+                String(format: "batch/IMG_20260419_%06d.jpg", index)
+            )
+            try writeMediaFile(at: fileURL, contents: "source-\(index)")
+        }
+
+        let result = try DryRunPlanner().plan(sourceRoot: sourceRoot, destinationRoot: destinationRoot)
+        let destinations = result.copyJobs.map(\.destinationPath)
+
+        XCTAssertEqual(destinations.first, destinationRoot.appendingPathComponent("2026/04/19/2026-04-19_0001.jpg").path)
+        XCTAssertEqual(destinations[998], destinationRoot.appendingPathComponent("2026/04/19/2026-04-19_0999.jpg").path)
+        XCTAssertEqual(destinations[999], destinationRoot.appendingPathComponent("2026/04/19/2026-04-19_1000.jpg").path)
+        XCTAssertEqual(destinations.last, destinationRoot.appendingPathComponent("2026/04/19/2026-04-19_1001.jpg").path)
+        XCTAssertEqual(result.warningMessages, [])
+        XCTAssertEqual(
+            result.infoMessages,
+            ["Day 2026-04-19: 1,001 files — using 4-digit sequence numbers."]
+        )
+        XCTAssertEqual(result.dateHistogram, [DateHistogramBucket(key: "2026-04", plannedCount: 1_001)])
+    }
+
+    func testPlannerWarnsOnlyWhenExistingDateCrossesSequenceWidth() throws {
+        let sourceRoot = temporaryDirectoryURL.appendingPathComponent("crossing-source", isDirectory: true)
+        let destinationRoot = temporaryDirectoryURL.appendingPathComponent("crossing-dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+
+        try writeMediaFile(
+            at: destinationRoot.appendingPathComponent("2024/02/14/2024-02-14_999.jpg"),
+            contents: "existing"
+        )
+        try writeMediaFile(
+            at: sourceRoot.appendingPathComponent("batch/IMG_20240214_230000.jpg"),
+            contents: "new"
+        )
+
+        let result = try DryRunPlanner().plan(sourceRoot: sourceRoot, destinationRoot: destinationRoot)
+
+        XCTAssertEqual(
+            result.copyJobs.map(\.destinationPath),
+            [destinationRoot.appendingPathComponent("2024/02/14/2024-02-14_1000.jpg").path]
+        )
+        XCTAssertEqual(result.infoMessages, [])
+        XCTAssertEqual(result.warningMessages, ["Sequence overflow on dates (>999 files/day): 2024-02-14"])
+    }
+
+    func testPlannerUsesWideSequenceForCrowdedDuplicateBucket() throws {
+        let sourceRoot = temporaryDirectoryURL.appendingPathComponent("duplicate-source", isDirectory: true)
+        let destinationRoot = temporaryDirectoryURL.appendingPathComponent("duplicate-dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+
+        for index in 0...1_000 {
+            let fileURL = sourceRoot.appendingPathComponent(
+                String(format: "dups/IMG_20260419_%06d.jpg", index)
+            )
+            try writeMediaFile(at: fileURL, contents: "same")
+        }
+
+        let result = try DryRunPlanner().plan(sourceRoot: sourceRoot, destinationRoot: destinationRoot)
+        let duplicateDestinations = result.transfers
+            .filter(\.isDuplicate)
+            .map(\.destinationPath)
+
+        XCTAssertEqual(result.counts.newCount, 1)
+        XCTAssertEqual(result.counts.duplicateCount, 1_000)
+        XCTAssertEqual(duplicateDestinations.first, destinationRoot.appendingPathComponent("Duplicate/2026/04/19/2026-04-19_0001.jpg").path)
+        XCTAssertEqual(duplicateDestinations[998], destinationRoot.appendingPathComponent("Duplicate/2026/04/19/2026-04-19_0999.jpg").path)
+        XCTAssertEqual(duplicateDestinations[999], destinationRoot.appendingPathComponent("Duplicate/2026/04/19/2026-04-19_1000.jpg").path)
+        XCTAssertEqual(result.dateHistogram, [DateHistogramBucket(key: "2026-04", plannedCount: 1_001)])
+    }
+
+    func testPlannerDateHistogramIncludesDatedAndUnknownTransfers() throws {
+        let sourceRoot = temporaryDirectoryURL.appendingPathComponent("histogram-source", isDirectory: true)
+        let destinationRoot = temporaryDirectoryURL.appendingPathComponent("histogram-dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+
+        try writeMediaFile(at: sourceRoot.appendingPathComponent("b/IMG_20260201_010101.jpg"), contents: "feb")
+        try writeMediaFile(at: sourceRoot.appendingPathComponent("a/IMG_20260131_010101.jpg"), contents: "jan")
+        try writeMediaFile(at: sourceRoot.appendingPathComponent("unknown/orphan.jpg"), contents: "unknown")
+
+        let result = try DryRunPlanner(
+            dateResolver: FileDateResolver(metadataReader: NoDateMetadataReader())
+        ).plan(sourceRoot: sourceRoot, destinationRoot: destinationRoot)
+
+        XCTAssertEqual(
+            result.dateHistogram,
+            [
+                DateHistogramBucket(key: "2026-01", plannedCount: 1),
+                DateHistogramBucket(key: "2026-02", plannedCount: 1),
+                DateHistogramBucket(key: "Unknown", plannedCount: 1),
+            ]
+        )
+    }
+
     private func assertScenario(named scenario: String) throws {
         let scenarioRoot = fixtureRoot.appendingPathComponent(scenario, isDirectory: true)
         let manifest = try decode(Manifest.self, from: scenarioRoot.appendingPathComponent("manifest.json"))
@@ -176,6 +279,11 @@ final class ChronoframeCoreDryRunPlannerParityTests: XCTestCase {
         return try JSONDecoder().decode(type, from: data)
     }
 
+    private func writeMediaFile(at url: URL, contents: String) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(contents.utf8).write(to: url)
+    }
+
     private var fixtureRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -264,4 +372,10 @@ private struct ExpectedReportRow: Decodable, Equatable {
     var destination: String
     var hash: String
     var status: String
+}
+
+private struct NoDateMetadataReader: MediaMetadataDateReading {
+    func photoMetadataDate(at url: URL) -> Date? { nil }
+    func fileSystemCreationDate(at url: URL) -> Date? { nil }
+    func fileSystemModificationDate(at url: URL) -> Date? { nil }
 }

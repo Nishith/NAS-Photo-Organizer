@@ -6,6 +6,8 @@ final class ChronoframeCoreMediaDateTests: XCTestCase {
     func testExtensionSetsAndSkipRulesRemainStable() {
         XCTAssertTrue(MediaLibraryRules.isPhotoFile(path: "/photos/test.jpg"))
         XCTAssertTrue(MediaLibraryRules.isPhotoFile(path: "/photos/test.HEIC"))
+        XCTAssertTrue(MediaLibraryRules.isPhotoFile(path: "/photos/test.CR3"))
+        XCTAssertTrue(MediaLibraryRules.isPhotoFile(path: "/photos/test.RW2"))
         XCTAssertTrue(MediaLibraryRules.isVideoFile(path: "/videos/test.mov"))
         XCTAssertTrue(MediaLibraryRules.isSupportedMediaFile(path: "/videos/test.mp4"))
         XCTAssertFalse(MediaLibraryRules.isSupportedMediaFile(path: "/docs/readme.txt"))

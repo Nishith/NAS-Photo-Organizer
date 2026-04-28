@@ -81,4 +81,38 @@ final class RunWorkspaceModelTests: XCTestCase {
         XCTAssertEqual(model.issueEntries.count, 1)
         XCTAssertEqual(model.issueTone, .danger)
     }
+
+    func testRunningTransferFormatsVisibleProgressDetails() {
+        let model = RunWorkspaceModel(
+            context: RunWorkspaceContext(
+                status: .running,
+                currentMode: .transfer,
+                currentTaskTitle: "Copying files...",
+                currentPhase: .copy,
+                progress: 0.85,
+                metrics: RunMetrics(
+                    plannedCount: 8_271,
+                    copiedCount: 7_064,
+                    bytesCopied: 1_500_000,
+                    bytesTotal: 3_000_000,
+                    speedMBps: 12.3,
+                    etaSeconds: 95
+                ),
+                summary: nil,
+                lastErrorMessage: nil,
+                warningCount: 0,
+                errorCount: 0,
+                issueCount: 0,
+                logEntries: [],
+                historyDestinationRoot: "/Volumes/Archive",
+                currentSourceRoot: "/Volumes/Ingest",
+                canStartRun: true
+            )
+        )
+
+        XCTAssertTrue(model.showsCopyProgressDetails)
+        XCTAssertEqual(model.fileProgressSummaryValue, "7,064 of 8,271 files · 85%")
+        XCTAssertEqual(model.throughputSummaryValue, "12.3 MB/s · 1m 35s")
+        XCTAssertNotEqual(model.byteProgressSummaryValue, "Measuring")
+    }
 }

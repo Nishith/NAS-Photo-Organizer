@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 #if canImport(ChronoframeAppCore)
 import ChronoframeAppCore
@@ -356,6 +357,41 @@ struct RunWorkspaceModel {
         formattedETA(context.metrics.etaSeconds)
     }
 
+    var showsCopyProgressDetails: Bool {
+        context.currentPhase == .copy || context.metrics.copiedCount > 0
+    }
+
+    var fileProgressSummaryValue: String {
+        let total = max(context.metrics.plannedCount, 0)
+        let copied = max(context.metrics.copiedCount, 0)
+        guard total > 0 else {
+            return copied > 0 ? "\(copied.formatted()) files copied" : "Preparing copy queue"
+        }
+
+        let percent = min(100, max(0, Int((Double(copied) / Double(total) * 100).rounded())))
+        return "\(copied.formatted()) of \(total.formatted()) files · \(percent)%"
+    }
+
+    var byteProgressSummaryValue: String {
+        guard context.metrics.bytesTotal > 0 else {
+            return "Measuring"
+        }
+
+        return "\(formattedBytes(context.metrics.bytesCopied)) of \(formattedBytes(context.metrics.bytesTotal))"
+    }
+
+    var throughputSummaryValue: String {
+        let speed = speedSummaryValue
+        let eta = etaSummaryValue
+        if speed == "—", eta == "—" {
+            return "Waiting for next file"
+        }
+        if eta == "—" {
+            return speed
+        }
+        return "\(speed) · \(eta)"
+    }
+
     var phaseEntries: [RunPhaseTimelineEntry] {
         RunPhase.allCases.map { phase in
             let state: RunPhaseTimelineEntry.State
@@ -548,5 +584,9 @@ struct RunWorkspaceModel {
             return "\(totalSeconds / 60)m \(totalSeconds % 60)s"
         }
         return "\(totalSeconds / 3_600)h \((totalSeconds % 3_600) / 60)m"
+    }
+
+    private func formattedBytes(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }

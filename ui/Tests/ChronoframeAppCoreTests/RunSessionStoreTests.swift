@@ -45,6 +45,7 @@ final class RunSessionStoreTests: XCTestCase {
                 logsDirectoryPath: tempDestinationURL.appendingPathComponent(".organize_logs", isDirectory: true).path
             )
         )
+        let histogram = [DateHistogramBucket(key: "2026-04", plannedCount: 2)]
         let engine = MockOrganizerEngine(
             preflightResult: .success(preflight),
             startMode: .events([
@@ -52,6 +53,7 @@ final class RunSessionStoreTests: XCTestCase {
                 .phaseStarted(phase: .discovery, total: 3),
                 .phaseCompleted(phase: .discovery, result: RunPhaseResult(found: 3)),
                 .copyPlanReady(count: 2),
+                .dateHistogram(buckets: histogram),
                 .issue(RunIssue(severity: .error, message: "Checksum mismatch")),
                 .complete(summary),
             ])
@@ -67,7 +69,9 @@ final class RunSessionStoreTests: XCTestCase {
         XCTAssertEqual(store.metrics.discoveredCount, 3)
         XCTAssertEqual(store.metrics.plannedCount, 2)
         XCTAssertEqual(store.metrics.errorCount, 1)
+        XCTAssertEqual(store.metrics.dateHistogram, histogram)
         XCTAssertEqual(store.summary?.title, "Preview complete")
+        XCTAssertEqual(store.summary?.metrics.dateHistogram, histogram)
         XCTAssertEqual(engine.startConfigurations.count, 1)
         XCTAssertTrue(store.logLines.contains("Engine started."))
         XCTAssertTrue(store.logLines.contains("Plan ready: 2 files queued for copy."))
@@ -254,6 +258,11 @@ final class RunSessionStoreTests: XCTestCase {
         engine.pendingContinuation?.yield(.phaseProgress(phase: .copy, completed: 30, total: 100, bytesCopied: 30_000, bytesTotal: 100_000))
         let progressSet = await waitForCondition { store.progress > 0 }
         XCTAssertTrue(progressSet)
+        XCTAssertEqual(store.currentTaskTitle, "Copying files... 30 of 100 files…")
+        XCTAssertEqual(store.metrics.plannedCount, 100)
+        XCTAssertEqual(store.metrics.copiedCount, 30)
+        XCTAssertEqual(store.metrics.bytesCopied, 30_000)
+        XCTAssertEqual(store.metrics.bytesTotal, 100_000)
 
         store.cancelCurrentRun()
         let cancelled = await waitForCondition { store.status == .cancelled }

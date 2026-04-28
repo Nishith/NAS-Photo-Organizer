@@ -664,7 +664,6 @@ private final class TransferExecutionContext {
     private let totalJobs: Int
     private let bytesTotal: Int64
     private let artifacts: RunArtifactPaths
-    private let progressInterval: Int
     private let receiptWriter: StreamingAuditReceiptWriter
 
     private var copiedCount = 0
@@ -694,7 +693,6 @@ private final class TransferExecutionContext {
         self.totalJobs = totalJobs
         self.bytesTotal = bytesTotal
         self.artifacts = executor.artifactPaths(destinationRoot: destinationRoot)
-        self.progressInterval = max(1, totalJobs / 100)
         self.receiptWriter = try StreamingAuditReceiptWriter(destinationRoot: destinationRoot)
         self.destinationUpdates = []
         self.destinationUpdates.reserveCapacity(min(TransferExecutor.destinationCacheBatchSize, totalJobs))
@@ -764,6 +762,8 @@ private final class TransferExecutionContext {
 
             consecutiveFailures += 1
             failedCount += 1
+            observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal)
+            emittedProgress = true
 
             if executor.shouldAbort(
                 consecutiveFailures: consecutiveFailures,
@@ -802,7 +802,7 @@ private final class TransferExecutionContext {
         consecutiveFailures = 0
         copiedCount += 1
 
-        if !emittedProgress, totalJobs > 0, attemptedJobs % progressInterval == 0 {
+        if !emittedProgress, totalJobs > 0 {
             observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal)
         }
 
@@ -813,7 +813,7 @@ private final class TransferExecutionContext {
         try executor.flushDestinationUpdates(destinationUpdates, database: database)
         try receiptWriter.finish(status: "COMPLETED")
 
-        if totalJobs > 0, attemptedJobs > 0, attemptedJobs % progressInterval != 0 {
+        if totalJobs > 0, attemptedJobs == 0 {
             observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal)
         }
 

@@ -114,6 +114,10 @@ struct RunProgressSurface: View {
                     .accessibilityLabel("Run progress")
                     .accessibilityValue(model.progressAccessibilityValue)
 
+                if model.showsCopyProgressDetails {
+                    copyProgressDetails
+                }
+
                 RunPhaseStrip(model: model)
             }
         }
@@ -132,6 +136,14 @@ struct RunProgressSurface: View {
             ProgressView(value: model.context.progress)
                 .progressViewStyle(.linear)
                 .tint(model.heroState.tone.color)
+        }
+    }
+
+    private var copyProgressDetails: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SummaryLine(title: "Files", value: model.fileProgressSummaryValue)
+            SummaryLine(title: "Data", value: model.byteProgressSummaryValue)
+            SummaryLine(title: "Rate", value: model.throughputSummaryValue)
         }
     }
 }
@@ -471,4 +483,3 @@ struct RunConsolePanel: View {
         }
     }
 }
-

@@ -4,7 +4,7 @@ import ImageIO
 public enum MediaLibraryRules {
     public static let photoExtensions: Set<String> = [
         ".jpg", ".jpeg", ".heic", ".png", ".gif", ".bmp", ".tiff", ".tif",
-        ".dng", ".nef", ".cr2", ".arw", ".raf", ".orf",
+        ".dng", ".nef", ".cr2", ".cr3", ".arw", ".raf", ".orf", ".rw2",
     ]
 
     public static let videoExtensions: Set<String> = [

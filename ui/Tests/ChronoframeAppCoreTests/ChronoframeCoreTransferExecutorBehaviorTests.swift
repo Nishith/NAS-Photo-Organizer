@@ -287,6 +287,27 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
         XCTAssertEqual(result.bytesCopied, expectedTotalBytes)
     }
 
+    func testProgressObserverReceivesEveryCompletedFile() throws {
+        let env = try makeEnvironment(jobCount: 4)
+        let progress = Recorder<(completed: Int, total: Int)>()
+
+        _ = try TransferExecutor().execute(
+            queuedJobs: env.jobs,
+            database: env.database,
+            destinationRoot: env.destinationRoot,
+            verifyCopies: false,
+            runLogger: env.logger,
+            observer: TransferExecutionObserver(
+                onPhaseProgress: { completed, total, _, _ in
+                    progress.append((completed, total))
+                }
+            )
+        )
+
+        XCTAssertEqual(progress.values.map { $0.completed }, [1, 2, 3, 4])
+        XCTAssertEqual(progress.values.map { $0.total }, [4, 4, 4, 4])
+    }
+
     // MARK: - Verify cleanup
 
     /// When `verifyCopies` is true and the queued hash doesn't match the
@@ -400,6 +421,23 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
         var database: OrganizerDatabase
         var logger: PersistentRunLogger
         var jobs: [QueuedCopyJob]
+    }
+
+    private final class Recorder<Element>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var items: [Element] = []
+
+        func append(_ value: Element) {
+            lock.lock()
+            defer { lock.unlock() }
+            items.append(value)
+        }
+
+        var values: [Element] {
+            lock.lock()
+            defer { lock.unlock() }
+            return items
+        }
     }
 
     /// Creates a fresh source/destination pair, a SQLite cache, and N seeded

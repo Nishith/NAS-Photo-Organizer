@@ -44,6 +44,14 @@ public struct DryRunPlanningResult: Equatable, Sendable {
         copyPlan.warningMessages
     }
 
+    public var infoMessages: [String] {
+        copyPlan.infoMessages
+    }
+
+    public var dateHistogram: [DateHistogramBucket] {
+        copyPlan.dateHistogram
+    }
+
     public static let dryRunFinishedStatus = "dry_run_finished"
 
     public static let pythonReferencePhaseSequence = [
@@ -175,18 +183,44 @@ public struct DryRunPlanner: Sendable {
         var primarySequences = destinationIndex.snapshot.sequenceState.primaryByDate
         var duplicateSequences = destinationIndex.snapshot.sequenceState.duplicatesByDate
         var overflowDates: Set<String> = []
+        var infoMessages: [String] = []
         var transfers: [PlannedTransfer] = []
 
         for dateBucket in planningSpool.primaryDateBuckets.sorted() {
-            let startSequence = (primarySequences[dateBucket] ?? 0) + 1
+            let groupedFileTotal = planningSpool.primaryCount(for: dateBucket)
+            let existingMaxSequence = primarySequences[dateBucket] ?? 0
+            let startSequence = existingMaxSequence + 1
+            let dayWidth = CopyPlanBuilder.plannedSequenceWidth(
+                existingMaxSequence: existingMaxSequence,
+                newItemCount: groupedFileTotal,
+                defaultWidth: namingRules.sequenceWidth
+            )
+
+            if CopyPlanBuilder.shouldWarnAboutSequenceWidth(
+                existingMaxSequence: existingMaxSequence,
+                plannedWidth: dayWidth,
+                defaultWidth: namingRules.sequenceWidth
+            ) {
+                overflowDates.insert(dateBucket)
+            } else if CopyPlanBuilder.shouldEmitSequenceWidthInfo(
+                existingMaxSequence: existingMaxSequence,
+                plannedWidth: dayWidth,
+                defaultWidth: namingRules.sequenceWidth
+            ) {
+                infoMessages.append(
+                    CopyPlanBuilder.sequenceWidthInfoMessage(
+                        dateBucket: dateBucket,
+                        count: groupedFileTotal,
+                        width: dayWidth
+                    )
+                )
+            }
+
             var groupedFileCount = 0
 
             try planningSpool.enumeratePrimaryRecords(for: dateBucket) { record in
                 groupedFileCount += 1
                 let sequence = startSequence + groupedFileCount - 1
-                if sequence > PlanningPathBuilder.maxSequence(for: namingRules.sequenceWidth) {
-                    overflowDates.insert(dateBucket)
-                }
 
                 transfers.append(
                     PlannedTransfer(
@@ -199,7 +233,8 @@ public struct DryRunPlanner: Sendable {
                             duplicateDirectoryName: nil,
                             namingRules: namingRules,
                             folderStructure: folderStructure,
-                            sourceRoot: sourceRoot.path
+                            sourceRoot: sourceRoot.path,
+                            minimumSequenceWidth: dayWidth
                         ),
                         identity: record.identity,
                         dateBucket: dateBucket,
@@ -213,28 +248,45 @@ public struct DryRunPlanner: Sendable {
             }
         }
 
-        try planningSpool.enumerateDuplicateRecords { duplicate in
-            let sequence = (duplicateSequences[duplicate.dateBucket] ?? 0) + 1
-            duplicateSequences[duplicate.dateBucket] = sequence
-
-            transfers.append(
-                PlannedTransfer(
-                    sourcePath: duplicate.sourcePath,
-                    destinationPath: PlanningPathBuilder.buildDestinationPath(
-                        for: duplicate.sourcePath,
-                        destinationRoot: destinationRoot.path,
-                        dateBucket: duplicate.dateBucket,
-                        sequence: sequence,
-                        duplicateDirectoryName: namingRules.duplicateDirectoryName,
-                        namingRules: namingRules,
-                        folderStructure: folderStructure,
-                        sourceRoot: sourceRoot.path
-                    ),
-                    identity: duplicate.identity,
-                    dateBucket: duplicate.dateBucket,
-                    isDuplicate: true
-                )
+        for dateBucket in planningSpool.duplicateDateBuckets.sorted() {
+            let groupedFileCount = planningSpool.duplicateCount(for: dateBucket)
+            let existingMaxSequence = duplicateSequences[dateBucket] ?? 0
+            let startSequence = existingMaxSequence + 1
+            let dayWidth = CopyPlanBuilder.plannedSequenceWidth(
+                existingMaxSequence: existingMaxSequence,
+                newItemCount: groupedFileCount,
+                defaultWidth: namingRules.sequenceWidth
             )
+            var plannedCount = 0
+
+            try planningSpool.enumerateDuplicateRecords(for: dateBucket) { duplicate in
+                plannedCount += 1
+                let sequence = startSequence + plannedCount - 1
+
+                transfers.append(
+                    PlannedTransfer(
+                        sourcePath: duplicate.sourcePath,
+                        destinationPath: PlanningPathBuilder.buildDestinationPath(
+                            for: duplicate.sourcePath,
+                            destinationRoot: destinationRoot.path,
+                            dateBucket: dateBucket,
+                            sequence: sequence,
+                            duplicateDirectoryName: namingRules.duplicateDirectoryName,
+                            namingRules: namingRules,
+                            folderStructure: folderStructure,
+                            sourceRoot: sourceRoot.path,
+                            minimumSequenceWidth: dayWidth
+                        ),
+                        identity: duplicate.identity,
+                        dateBucket: dateBucket,
+                        isDuplicate: true
+                    )
+                )
+            }
+
+            if plannedCount > 0 {
+                duplicateSequences[dateBucket] = startSequence + plannedCount - 1
+            }
         }
 
         let sortedOverflowDates = overflowDates.sorted()
@@ -255,7 +307,9 @@ public struct DryRunPlanner: Sendable {
                 sequenceState: SequenceCounterState(
                     primaryByDate: primarySequences,
                     duplicatesByDate: duplicateSequences
-                )
+                ),
+                infoMessages: infoMessages,
+                dateHistogram: CopyPlanBuilder.dateHistogram(from: transfers, namingRules: namingRules)
             )
         )
     }
@@ -419,17 +473,18 @@ private struct PrimaryPlanningRecord {
 private struct DuplicatePlanningRecord {
     var sourcePath: String
     var identity: FileIdentity
-    var dateBucket: String
 }
 
 private final class PlanningSpool {
     private let directoryURL: URL
-    private let duplicateURL: URL
     private let fileManager: FileManager
 
     private var primaryHandlesByDateBucket: [String: FileHandle] = [:]
     private var primaryURLsByDateBucket: [String: URL] = [:]
-    private var duplicateHandle: FileHandle?
+    private var primaryCountsByDateBucket: [String: Int] = [:]
+    private var duplicateHandlesByDateBucket: [String: FileHandle] = [:]
+    private var duplicateURLsByDateBucket: [String: URL] = [:]
+    private var duplicateCountsByDateBucket: [String: Int] = [:]
     private var sealed = false
 
     init(
@@ -441,11 +496,8 @@ private final class PlanningSpool {
             "ChronoframePlanning-\(UUID().uuidString)",
             isDirectory: true
         )
-        self.duplicateURL = directoryURL.appendingPathComponent("duplicates.tsv")
 
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        fileManager.createFile(atPath: duplicateURL.path, contents: Data())
-        self.duplicateHandle = try FileHandle(forWritingTo: duplicateURL)
     }
 
     deinit {
@@ -454,19 +506,31 @@ private final class PlanningSpool {
     }
 
     var primaryDateBuckets: [String] {
-        Array(primaryURLsByDateBucket.keys)
+        Array(primaryCountsByDateBucket.keys)
+    }
+
+    var duplicateDateBuckets: [String] {
+        Array(duplicateCountsByDateBucket.keys)
+    }
+
+    func primaryCount(for dateBucket: String) -> Int {
+        primaryCountsByDateBucket[dateBucket] ?? 0
+    }
+
+    func duplicateCount(for dateBucket: String) -> Int {
+        duplicateCountsByDateBucket[dateBucket] ?? 0
     }
 
     func appendPrimary(sourcePath: String, identity: FileIdentity, dateBucket: String) throws {
         let handle = try primaryHandle(for: dateBucket)
         try handle.write(contentsOf: encodeLine([sourcePath, identity.rawValue]))
+        primaryCountsByDateBucket[dateBucket, default: 0] += 1
     }
 
     func appendDuplicate(sourcePath: String, identity: FileIdentity, dateBucket: String) throws {
-        guard let duplicateHandle else {
-            throw PlanningSpoolError.invalidRecord("Duplicate spool is closed")
-        }
-        try duplicateHandle.write(contentsOf: encodeLine([sourcePath, identity.rawValue, dateBucket]))
+        let handle = try duplicateHandle(for: dateBucket)
+        try handle.write(contentsOf: encodeLine([sourcePath, identity.rawValue]))
+        duplicateCountsByDateBucket[dateBucket, default: 0] += 1
     }
 
     func enumeratePrimaryRecords(
@@ -492,18 +556,24 @@ private final class PlanningSpool {
         }
     }
 
-    func enumerateDuplicateRecords(_ body: (DuplicatePlanningRecord) throws -> Void) throws {
+    func enumerateDuplicateRecords(
+        for dateBucket: String,
+        _ body: (DuplicatePlanningRecord) throws -> Void
+    ) throws {
         try sealIfNeeded()
-        try Self.enumerateLines(at: duplicateURL) { line in
-            let fields = try decodeFields(from: line, expectedCount: 3)
+        guard let url = duplicateURLsByDateBucket[dateBucket] else {
+            return
+        }
+
+        try Self.enumerateLines(at: url) { line in
+            let fields = try decodeFields(from: line, expectedCount: 2)
             guard let identity = FileIdentity(rawValue: fields[1]) else {
                 throw PlanningSpoolError.invalidRecord(line)
             }
             try body(
                 DuplicatePlanningRecord(
                     sourcePath: fields[0],
-                    identity: identity,
-                    dateBucket: fields[2]
+                    identity: identity
                 )
             )
         }
@@ -522,6 +592,19 @@ private final class PlanningSpool {
         return handle
     }
 
+    private func duplicateHandle(for dateBucket: String) throws -> FileHandle {
+        if let handle = duplicateHandlesByDateBucket[dateBucket] {
+            return handle
+        }
+
+        let fileURL = directoryURL.appendingPathComponent("duplicate_\(duplicateURLsByDateBucket.count).tsv")
+        fileManager.createFile(atPath: fileURL.path, contents: Data())
+        let handle = try FileHandle(forWritingTo: fileURL)
+        duplicateHandlesByDateBucket[dateBucket] = handle
+        duplicateURLsByDateBucket[dateBucket] = fileURL
+        return handle
+    }
+
     private func sealIfNeeded() throws {
         guard !sealed else {
             return
@@ -536,8 +619,10 @@ private final class PlanningSpool {
         }
         primaryHandlesByDateBucket.removeAll()
 
-        try duplicateHandle?.close()
-        duplicateHandle = nil
+        for handle in duplicateHandlesByDateBucket.values {
+            try handle.close()
+        }
+        duplicateHandlesByDateBucket.removeAll()
     }
 
     private func encodeLine(_ fields: [String]) -> Data {

@@ -358,7 +358,8 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                         plannedCount: result.transferCount,
                         alreadyInDestinationCount: result.counts.alreadyInDestinationCount,
                         duplicateCount: result.counts.duplicateCount,
-                        hashErrorCount: result.counts.hashErrorCount
+                        hashErrorCount: result.counts.hashErrorCount,
+                        dateHistogram: result.dateHistogram
                     )
 
                     Self.emitPostPlanningEvents(for: result, into: continuation)
@@ -510,6 +511,9 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             "Classification: \(result.counts.alreadyInDestinationCount) already in dest, \(result.counts.newCount) new, \(result.counts.duplicateCount) internal dups, \(result.counts.hashErrorCount) hash errors"
         )
 
+        for info in result.infoMessages {
+            runLogger.log(info)
+        }
         for warning in result.warningMessages {
             runLogger.warn(warning)
         }
@@ -526,7 +530,8 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                             plannedCount: 0,
                             alreadyInDestinationCount: result.counts.alreadyInDestinationCount,
                             duplicateCount: result.counts.duplicateCount,
-                            hashErrorCount: result.counts.hashErrorCount
+                            hashErrorCount: result.counts.hashErrorCount,
+                            dateHistogram: result.dateHistogram
                         ),
                         artifacts: transferExecutor.artifactPaths(destinationRoot: destinationURL)
                     )
@@ -598,7 +603,10 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                         hashErrorCount: result.counts.hashErrorCount,
                         copiedCount: executionResult.copiedCount,
                         failedCount: executionResult.failedCount,
-                        errorCount: errorCounter.value
+                        errorCount: errorCounter.value,
+                        bytesCopied: executionResult.bytesCopied,
+                        bytesTotal: executionResult.bytesTotal,
+                        dateHistogram: result.dateHistogram
                     ),
                     artifacts: executionResult.artifacts
                 )
@@ -690,7 +698,9 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                         plannedCount: pendingJobCount,
                         copiedCount: executionResult.copiedCount,
                         failedCount: executionResult.failedCount,
-                        errorCount: errorCounter.value
+                        errorCount: errorCounter.value,
+                        bytesCopied: executionResult.bytesCopied,
+                        bytesTotal: executionResult.bytesTotal
                     ),
                     artifacts: executionResult.artifacts
                 )
@@ -724,10 +734,14 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             )
         )
 
+        continuation.yield(.dateHistogram(buckets: result.dateHistogram))
+
+        for info in result.infoMessages {
+            continuation.yield(.issue(RunIssue(severity: .info, message: info)))
+        }
         for warning in result.warningMessages {
             continuation.yield(.issue(RunIssue(severity: .warning, message: warning)))
         }
-
         continuation.yield(.copyPlanReady(count: result.transferCount))
     }
 

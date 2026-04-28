@@ -281,13 +281,18 @@ public final class RunSessionStore: ObservableObject {
             currentTaskTitle = "Initializing..."
             logStore.append("Engine started.")
 
-        case let .phaseStarted(phase, _):
+        case let .phaseStarted(phase, total):
             currentPhase = phase
             currentTaskTitle = phase.runningTitle
             progress = 0
             metrics.speedMBps = 0
             metrics.etaSeconds = nil
             if phase == .copy {
+                if let total {
+                    metrics.plannedCount = max(metrics.plannedCount, total)
+                }
+                metrics.bytesCopied = 0
+                metrics.bytesTotal = 0
                 copySpeedLastBytes = 0
                 copySpeedLastSampleDate = Date()
             }
@@ -295,6 +300,9 @@ public final class RunSessionStore: ObservableObject {
         case let .phaseProgress(phase, completed, total, bytesCopied, bytesTotal):
             if total > 0 {
                 progress = Double(completed) / Double(total)
+                if phase == .copy {
+                    currentTaskTitle = "\(phase.runningTitle) \(completed.formatted()) of \(total.formatted()) files…"
+                }
             } else {
                 // total == 0 means indeterminate (count is known, total is not).
                 // Show the running count in the title so the user sees forward progress.
@@ -308,6 +316,8 @@ public final class RunSessionStore: ObservableObject {
             }
 
             guard phase == .copy, let bytesCopied, let bytesTotal, bytesTotal > 0 else { return }
+            metrics.bytesCopied = Int64(bytesCopied)
+            metrics.bytesTotal = Int64(bytesTotal)
             let now = Date()
             let elapsed = now.timeIntervalSince(copySpeedLastSampleDate)
             if elapsed >= 0.5 {
@@ -395,12 +405,22 @@ public final class RunSessionStore: ObservableObject {
         case let .complete(summary):
             status = summary.status
             currentTaskTitle = summary.title
-            metrics = summary.metrics
+            var finalMetrics = summary.metrics
+            if finalMetrics.dateHistogram.isEmpty, !metrics.dateHistogram.isEmpty {
+                finalMetrics.dateHistogram = metrics.dateHistogram
+            }
+            let finalSummary = RunSummary(
+                status: summary.status,
+                title: summary.title,
+                metrics: finalMetrics,
+                artifacts: summary.artifacts
+            )
+            metrics = finalMetrics
             artifacts = summary.artifacts
-            self.summary = summary
+            self.summary = finalSummary
             // Record this source path in the per-destination "completed sources" log
             // before refreshing, so the refresh re-reads the updated file.
-            if summary.status == .finished || summary.status == .nothingToCopy {
+            if finalSummary.status == .finished || finalSummary.status == .nothingToCopy {
                 let sourcePath = lastPreflight?.resolvedSourcePath
                     ?? lastPreflight?.configuration.sourcePath
                     ?? ""
@@ -410,14 +430,14 @@ public final class RunSessionStore: ObservableObject {
                 if !DroppedItemStager.isStagingPath(sourcePath) {
                     historyStore.recordSuccessfulTransfer(
                         sourcePath: sourcePath,
-                        destinationRoot: summary.artifacts.destinationRoot,
-                        copiedCount: summary.metrics.copiedCount
+                        destinationRoot: finalSummary.artifacts.destinationRoot,
+                        copiedCount: finalSummary.metrics.copiedCount
                     )
                 }
             }
-            historyStore.refresh(destinationRoot: summary.artifacts.destinationRoot)
-            logStore.append("Finished: \(summary.title)")
-            postRunCompletionNotification(summary: summary)
+            historyStore.refresh(destinationRoot: finalSummary.artifacts.destinationRoot)
+            logStore.append("Finished: \(finalSummary.title)")
+            postRunCompletionNotification(summary: finalSummary)
         }
     }
 
