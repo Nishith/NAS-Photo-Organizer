@@ -23,19 +23,27 @@ final class MockOrganizerEngine: OrganizerEngine {
     var preflightResult: Result<RunPreflight, Error>
     var startMode: StreamMode
     var resumeMode: StreamMode
+    var revertMode: StreamMode
+    var reorganizeMode: StreamMode
     var startConfigurations: [RunConfiguration] = []
     var resumeConfigurations: [RunConfiguration] = []
+    var revertRequests: [(receiptURL: URL, destinationRoot: String)] = []
+    var reorganizeRequests: [(destinationRoot: String, targetStructure: FolderStructure)] = []
     var cancelCallCount = 0
     var pendingContinuation: AsyncThrowingStream<RunEvent, Error>.Continuation?
 
     init(
         preflightResult: Result<RunPreflight, Error>,
         startMode: StreamMode = .events([]),
-        resumeMode: StreamMode = .events([])
+        resumeMode: StreamMode = .events([]),
+        revertMode: StreamMode = .events([]),
+        reorganizeMode: StreamMode = .events([])
     ) {
         self.preflightResult = preflightResult
         self.startMode = startMode
         self.resumeMode = resumeMode
+        self.revertMode = revertMode
+        self.reorganizeMode = reorganizeMode
     }
 
     func preflight(_ configuration: RunConfiguration) async throws -> RunPreflight {
@@ -56,6 +64,19 @@ final class MockOrganizerEngine: OrganizerEngine {
         cancelCallCount += 1
         pendingContinuation?.finish()
         pendingContinuation = nil
+    }
+
+    func revert(receiptURL: URL, destinationRoot: String) throws -> AsyncThrowingStream<RunEvent, Error> {
+        revertRequests.append((receiptURL: receiptURL, destinationRoot: destinationRoot))
+        return try makeStream(for: revertMode)
+    }
+
+    func reorganize(
+        destinationRoot: String,
+        targetStructure: FolderStructure
+    ) throws -> AsyncThrowingStream<RunEvent, Error> {
+        reorganizeRequests.append((destinationRoot: destinationRoot, targetStructure: targetStructure))
+        return try makeStream(for: reorganizeMode)
     }
 
     private func makeStream(for mode: StreamMode) throws -> AsyncThrowingStream<RunEvent, Error> {

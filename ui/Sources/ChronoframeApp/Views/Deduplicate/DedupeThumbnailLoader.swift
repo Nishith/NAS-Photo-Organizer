@@ -16,17 +16,32 @@ import SwiftUI
 /// navigates away from the Deduplicate workspace.
 @MainActor
 final class DedupeThumbnailLoader: ObservableObject {
+    typealias Renderer = @Sendable (URL, CGSize, CGFloat) async -> CGImage?
+    typealias ScaleProvider = @Sendable () -> CGFloat
+
     /// Bumps after every successful cache insert. Views observing this
     /// loader redraw whenever `version` changes.
     @Published private(set) var version: Int = 0
 
     private let cache: NSCache<NSString, NSImage>
+    private let renderer: Renderer
+    private let scaleProvider: ScaleProvider
     private var inFlight: [String: Task<Void, Never>] = [:]
 
-    init(countLimit: Int = 256) {
+    init(
+        countLimit: Int = 256,
+        renderer: @escaping Renderer = { url, size, scale in
+            await ThumbnailRenderer.cgImage(for: url, size: size, scale: scale)
+        },
+        scaleProvider: @escaping ScaleProvider = {
+            NSScreen.main?.backingScaleFactor ?? 2.0
+        }
+    ) {
         let cache = NSCache<NSString, NSImage>()
         cache.countLimit = countLimit
         self.cache = cache
+        self.renderer = renderer
+        self.scaleProvider = scaleProvider
     }
 
     func image(for path: String) -> NSImage? {
@@ -37,9 +52,10 @@ final class DedupeThumbnailLoader: ObservableObject {
         if cache.object(forKey: path as NSString) != nil { return }
         if inFlight[path] != nil { return }
         let url = URL(fileURLWithPath: path)
-        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        let scale = scaleProvider()
+        let renderer = renderer
         let task = Task { [weak self] in
-            let cgImage = await ThumbnailRenderer.cgImage(for: url, size: size, scale: scale)
+            let cgImage = await renderer(url, size, scale)
             if Task.isCancelled { return }
             await MainActor.run { [weak self] in
                 guard let self else { return }

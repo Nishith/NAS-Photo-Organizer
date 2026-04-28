@@ -49,7 +49,9 @@ final class HistoryStoreTests: XCTestCase {
             fileSizeBytes: 2,
             createdAt: .now
         )
-        let store = HistoryStore(entries: [entry])
+        let store = HistoryStore(entries: [entry], trashItem: { url in
+            try FileManager.default.removeItem(at: url)
+        })
         store.remove(entry: entry)
 
         XCTAssertTrue(store.entries.isEmpty, "Entry should be removed from the in-memory list")
@@ -110,7 +112,9 @@ final class HistoryStoreTests: XCTestCase {
             try Data("{}".utf8).write(to: url)
             entries.append(RunHistoryEntry(kind: .auditReceipt, title: "Entry \(i)", path: url.path, createdAt: .now))
         }
-        let store = HistoryStore(entries: entries)
+        let store = HistoryStore(entries: entries, trashItem: { url in
+            try FileManager.default.removeItem(at: url)
+        })
         store.removeAll()
 
         XCTAssertTrue(store.entries.isEmpty, "All entries should be removed")

@@ -104,6 +104,12 @@ Swift coverage:
 jq '.data[0].totals.lines' ui/.build/arm64-apple-macosx/debug/codecov/ChronoframeUI.json
 ```
 
+Meaningful Swift coverage gate (excludes SwiftUI view bodies, app entry points, and OS bridge wrappers; fails below 95%):
+
+```bash
+script/swift_meaningful_coverage.sh
+```
+
 Local Xcode build:
 
 ```bash
@@ -142,8 +148,8 @@ Be precise when discussing coverage.
 - Python production-only coverage was 96% after the April 2026 error-handling/coverage pass.
 - Full Python coverage was 98%.
 - `UserFacingErrorMessage.swift` had 98.2% line coverage.
-- Raw SwiftPM aggregate coverage was around 59.9% because SwiftUI view files are counted but are not all exercised by unit tests.
-- Do not claim project-wide Swift coverage over 95% unless the metric excludes SwiftUI view rendering or includes a broader UI-test coverage story.
+- Raw SwiftPM aggregate coverage was around 62% after the April 2026 meaningful coverage pass because SwiftUI view files are counted but are not all exercised by unit tests.
+- `script/swift_meaningful_coverage.sh` enforces 95%+ on deterministic domain algorithms, planning/path building, hashing, indexing, and user-facing formatting. Do not claim project-wide Swift coverage over 95% unless the metric excludes SwiftUI view rendering or includes a broader UI-test coverage story.
 
 ## GitHub And CI
 

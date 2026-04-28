@@ -11,8 +11,15 @@ import Foundation
 /// guarantees that every successful deletion is recorded.
 public final class DeduplicateExecutor: @unchecked Sendable {
     private var cancelFlag = ManagedAtomicBool()
+    private let fileOperations: DeduplicateFileOperations
 
-    public init() {}
+    public init() {
+        self.fileOperations = FileManagerDeduplicateFileOperations()
+    }
+
+    init(fileOperations: DeduplicateFileOperations) {
+        self.fileOperations = fileOperations
+    }
 
     public func cancel() {
         cancelFlag.set(true)
@@ -52,8 +59,9 @@ public final class DeduplicateExecutor: @unchecked Sendable {
     ) -> AsyncThrowingStream<DeduplicateCommitEvent, Error> {
         cancelFlag.set(false)
         let cancelFlag = self.cancelFlag
+        let fileOperations = self.fileOperations
 
-        return AsyncThrowingStream { continuation in
+        return AsyncThrowingStream<DeduplicateCommitEvent, Error> { continuation in
             Task.detached {
                 let logsDirectory: URL
                 do {
@@ -76,7 +84,7 @@ public final class DeduplicateExecutor: @unchecked Sendable {
 
                     if hardDelete {
                         do {
-                            try FileManager.default.removeItem(at: url)
+                            try fileOperations.removeItem(at: url)
                             deletedCount += 1
                             bytesReclaimed += planItem.sizeBytes
                             continuation.yield(.itemTrashed(originalPath: planItem.path, trashURL: nil, sizeBytes: planItem.sizeBytes))
@@ -95,17 +103,16 @@ public final class DeduplicateExecutor: @unchecked Sendable {
                             continuation.yield(.itemFailed(originalPath: planItem.path, errorMessage: error.localizedDescription))
                         }
                     } else {
-                        var trashURL: NSURL?
                         do {
-                            try FileManager.default.trashItem(at: url, resultingItemURL: &trashURL)
+                            let trashURL = try fileOperations.trashItem(at: url)
                             deletedCount += 1
                             bytesReclaimed += planItem.sizeBytes
-                            continuation.yield(.itemTrashed(originalPath: planItem.path, trashURL: trashURL as URL?, sizeBytes: planItem.sizeBytes))
+                            continuation.yield(.itemTrashed(originalPath: planItem.path, trashURL: trashURL, sizeBytes: planItem.sizeBytes))
                             receiptItems.append(
                                 DeduplicateAuditReceipt.Item(
                                     originalPath: planItem.path,
                                     sizeBytes: planItem.sizeBytes,
-                                    trashURL: (trashURL as URL?)?.absoluteString,
+                                    trashURL: trashURL?.absoluteString,
                                     method: .trash,
                                     clusterID: planItem.owningClusterID,
                                     clusterKind: planItem.owningClusterKind
@@ -164,7 +171,8 @@ public final class DeduplicateExecutor: @unchecked Sendable {
     /// reported as failures. Returns a stream of the same commit events the
     /// forward path uses, so the UI can reuse its progress surface.
     public func revert(receiptURL: URL) -> AsyncThrowingStream<DeduplicateCommitEvent, Error> {
-        AsyncThrowingStream { continuation in
+        let fileOperations = self.fileOperations
+        return AsyncThrowingStream<DeduplicateCommitEvent, Error> { continuation in
             Task.detached {
                 do {
                     let data = try Data(contentsOf: receiptURL)
@@ -188,11 +196,11 @@ public final class DeduplicateExecutor: @unchecked Sendable {
                         }
                         let originalURL = URL(fileURLWithPath: item.originalPath)
                         do {
-                            try FileManager.default.createDirectory(
+                            try fileOperations.createDirectory(
                                 at: originalURL.deletingLastPathComponent(),
                                 withIntermediateDirectories: true
                             )
-                            try FileManager.default.moveItem(at: trashURL, to: originalURL)
+                            try fileOperations.moveItem(at: trashURL, to: originalURL)
                             deletedCount += 1
                             bytesReclaimed += item.sizeBytes
                             continuation.yield(.itemTrashed(originalPath: item.originalPath, trashURL: trashURL, sizeBytes: item.sizeBytes))
@@ -258,6 +266,33 @@ public final class DeduplicateExecutor: @unchecked Sendable {
         let data = try JSONEncoder.dedupe.encode(receipt)
         try data.write(to: receiptURL, options: .atomic)
         return receiptURL.path
+    }
+}
+
+protocol DeduplicateFileOperations: Sendable {
+    func removeItem(at url: URL) throws
+    func trashItem(at url: URL) throws -> URL?
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws
+    func createDirectory(at url: URL, withIntermediateDirectories createIntermediates: Bool) throws
+}
+
+private struct FileManagerDeduplicateFileOperations: DeduplicateFileOperations {
+    func removeItem(at url: URL) throws {
+        try FileManager.default.removeItem(at: url)
+    }
+
+    func trashItem(at url: URL) throws -> URL? {
+        var trashURL: NSURL?
+        try FileManager.default.trashItem(at: url, resultingItemURL: &trashURL)
+        return trashURL as URL?
+    }
+
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {
+        try FileManager.default.moveItem(at: sourceURL, to: destinationURL)
+    }
+
+    func createDirectory(at url: URL, withIntermediateDirectories createIntermediates: Bool) throws {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: createIntermediates)
     }
 }
 

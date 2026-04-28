@@ -43,9 +43,11 @@ public enum DroppedItemStagerError: Error, LocalizedError {
 /// single-folder drop we skip staging entirely and hand the folder back.
 public struct DroppedItemStager {
     private let fileManager: FileManager
+    private let stagingRootURL: URL
 
-    public init(fileManager: FileManager = .default) {
+    public init(fileManager: FileManager = .default, stagingRoot: URL? = nil) {
         self.fileManager = fileManager
+        self.stagingRootURL = stagingRoot ?? Self.stagingRoot
     }
 
     /// Root directory that holds all drag-and-drop staging folders. Used
@@ -61,7 +63,15 @@ public struct DroppedItemStager {
     /// history recorder so drag-and-drop paths aren't saved as reusable
     /// source entries (the temp folder won't exist next launch).
     public static func isStagingPath(_ path: String) -> Bool {
-        let root = stagingRoot.standardizedFileURL.path
+        isStagingPath(path, under: stagingRoot)
+    }
+
+    public func isStagingPath(_ path: String) -> Bool {
+        Self.isStagingPath(path, under: stagingRootURL)
+    }
+
+    private static func isStagingPath(_ path: String, under rootURL: URL) -> Bool {
+        let root = rootURL.standardizedFileURL.path
         let candidate = URL(fileURLWithPath: path).standardizedFileURL.path
         return candidate == root || candidate.hasPrefix(root + "/")
     }
@@ -124,14 +134,14 @@ public struct DroppedItemStager {
     /// sessions (the source transfers already happened, or were never
     /// committed).
     public func cleanupAllStagingDirectories() {
-        let root = Self.stagingRoot
+        let root = stagingRootURL
         guard fileManager.fileExists(atPath: root.path) else { return }
         try? fileManager.removeItem(at: root)
     }
 
     /// Removes a specific staging directory. Tolerant of missing paths.
     public func cleanup(stagingDirectory url: URL) {
-        guard Self.isStagingPath(url.path) else { return }
+        guard isStagingPath(url.path) else { return }
         try? fileManager.removeItem(at: url)
     }
 
@@ -159,7 +169,7 @@ public struct DroppedItemStager {
     }
 
     private func createFreshStagingDirectory(at date: Date) throws -> URL {
-        let root = Self.stagingRoot
+        let root = stagingRootURL
         try? fileManager.createDirectory(at: root, withIntermediateDirectories: true)
 
         let stamp = Self.timestampFormatter.string(from: date)

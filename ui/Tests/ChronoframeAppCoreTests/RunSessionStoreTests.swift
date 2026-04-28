@@ -401,4 +401,169 @@ final class RunSessionStoreTests: XCTestCase {
             "Chronoframe needs attention before it can continue. Review the message below, then try again. Details: Need confirmation"
         )
     }
+
+    @MainActor
+    func testRevertStreamUpdatesMetricsArtifactsAndCompletionCopy() async throws {
+        let receiptURL = tempDestinationURL
+            .appendingPathComponent(".organize_logs", isDirectory: true)
+            .appendingPathComponent("audit_receipt.json")
+        let summary = RunSummary(
+            status: .reverted,
+            title: "Revert complete",
+            metrics: RunMetrics(revertedCount: 2, skippedCount: 1, missingCount: 3),
+            artifacts: RunArtifactPaths(destinationRoot: tempDestinationURL.path, reportPath: receiptURL.path)
+        )
+        let engine = MockOrganizerEngine(
+            preflightResult: .success(
+                RunPreflight(
+                    configuration: RunConfiguration(mode: .preview, sourcePath: "", destinationPath: tempDestinationURL.path),
+                    resolvedSourcePath: "",
+                    resolvedDestinationPath: tempDestinationURL.path
+                )
+            ),
+            revertMode: .events([
+                .phaseStarted(phase: .revert, total: 6),
+                .phaseCompleted(
+                    phase: .revert,
+                    result: RunPhaseResult(revertedCount: 2, skippedCount: 1, missingCount: 3)
+                ),
+                .complete(summary),
+            ])
+        )
+        let store = RunSessionStore(engine: engine, logStore: logStore, historyStore: historyStore)
+
+        store.requestRevert(receiptURL: receiptURL, destinationRoot: tempDestinationURL.path)
+        let finished = await waitForCondition { store.status == .reverted }
+        XCTAssertTrue(finished)
+
+        XCTAssertEqual(engine.revertRequests.count, 1)
+        XCTAssertEqual(engine.revertRequests.first?.receiptURL, receiptURL)
+        XCTAssertEqual(store.currentMode, .revert)
+        XCTAssertEqual(store.metrics.revertedCount, 2)
+        XCTAssertEqual(store.metrics.skippedCount, 1)
+        XCTAssertEqual(store.metrics.missingCount, 3)
+        XCTAssertEqual(store.artifacts.reportPath, receiptURL.path)
+        XCTAssertTrue(store.logLines.contains("Revert complete: 2 reverted, 1 preserved, 3 already missing."))
+        XCTAssertTrue(store.logLines.contains("Finished: Revert complete"))
+    }
+
+    @MainActor
+    func testReorganizeStreamUpdatesMetricsAndCompletionCopy() async throws {
+        let summary = RunSummary(
+            status: .reorganized,
+            title: "Reorganize complete",
+            metrics: RunMetrics(failedCount: 1, skippedCount: 2, movedCount: 4),
+            artifacts: RunArtifactPaths(destinationRoot: tempDestinationURL.path)
+        )
+        let engine = MockOrganizerEngine(
+            preflightResult: .success(
+                RunPreflight(
+                    configuration: RunConfiguration(mode: .preview, sourcePath: "", destinationPath: tempDestinationURL.path),
+                    resolvedSourcePath: "",
+                    resolvedDestinationPath: tempDestinationURL.path
+                )
+            ),
+            reorganizeMode: .events([
+                .phaseStarted(phase: .reorganize, total: 7),
+                .phaseCompleted(
+                    phase: .reorganize,
+                    result: RunPhaseResult(failedCount: 1, skippedCount: 2, movedCount: 4)
+                ),
+                .complete(summary),
+            ])
+        )
+        let store = RunSessionStore(engine: engine, logStore: logStore, historyStore: historyStore)
+
+        store.requestReorganize(destinationRoot: tempDestinationURL.path, targetStructure: .yyyyMM)
+        let finished = await waitForCondition { store.status == .reorganized }
+        XCTAssertTrue(finished)
+
+        XCTAssertEqual(engine.reorganizeRequests.count, 1)
+        XCTAssertEqual(engine.reorganizeRequests.first?.destinationRoot, tempDestinationURL.path)
+        XCTAssertEqual(engine.reorganizeRequests.first?.targetStructure, .yyyyMM)
+        XCTAssertEqual(store.currentMode, .reorganize)
+        XCTAssertEqual(store.metrics.movedCount, 4)
+        XCTAssertEqual(store.metrics.skippedCount, 2)
+        XCTAssertEqual(store.metrics.failedCount, 1)
+        XCTAssertTrue(store.logLines.contains("Reorganize complete: 4 moved, 2 skipped, 1 failed."))
+    }
+
+    @MainActor
+    func testConfirmPromptStartFreshClearsStaleQueueBeforeTransfer() async throws {
+        let dbURL = tempDestinationURL.appendingPathComponent(".organize_cache.db")
+        let database = try OrganizerDatabase(url: dbURL)
+        try database.enqueueJobs([
+            CopyJobRecord(
+                sourcePath: "/src/stale-a.jpg",
+                destinationPath: "/dst/stale-a.jpg",
+                identity: FileIdentity(size: 1, digest: "a"),
+                status: .pending
+            ),
+            CopyJobRecord(
+                sourcePath: "/src/stale-b.jpg",
+                destinationPath: "/dst/stale-b.jpg",
+                identity: FileIdentity(size: 2, digest: "b"),
+                status: .copied
+            ),
+        ])
+        database.close()
+
+        let configuration = RunConfiguration(mode: .transfer, sourcePath: "/tmp/source", destinationPath: tempDestinationURL.path)
+        let preflight = RunPreflight(
+            configuration: configuration,
+            resolvedSourcePath: configuration.sourcePath,
+            resolvedDestinationPath: configuration.destinationPath,
+            pendingJobCount: 1
+        )
+        let engine = MockOrganizerEngine(
+            preflightResult: .success(preflight),
+            startMode: .events([
+                .complete(
+                    RunSummary(
+                        status: .finished,
+                        title: "Done",
+                        metrics: RunMetrics(copiedCount: 0),
+                        artifacts: RunArtifactPaths(destinationRoot: tempDestinationURL.path)
+                    )
+                ),
+            ])
+        )
+        let store = RunSessionStore(engine: engine, logStore: logStore, historyStore: historyStore)
+
+        await store.requestRun(mode: .transfer, configuration: configuration)
+        XCTAssertEqual(store.prompt?.kind, .resumePendingJobs)
+
+        store.confirmPromptStartFresh()
+        let finished = await waitForCondition { store.status == .finished }
+        XCTAssertTrue(finished)
+        XCTAssertEqual(engine.startConfigurations.count, 1)
+        XCTAssertEqual(engine.resumeConfigurations.count, 0)
+
+        let reopened = try OrganizerDatabase(url: dbURL)
+        defer { reopened.close() }
+        XCTAssertEqual(try reopened.queuedJobCount(), 0)
+    }
+
+    @MainActor
+    func testIndeterminateProgressShowsCompletedFileCountWithoutJumpingProgress() async throws {
+        let configuration = RunConfiguration(mode: .preview, sourcePath: "/tmp/source", destinationPath: tempDestinationURL.path)
+        let preflight = RunPreflight(
+            configuration: configuration,
+            resolvedSourcePath: configuration.sourcePath,
+            resolvedDestinationPath: configuration.destinationPath
+        )
+        let engine = MockOrganizerEngine(preflightResult: .success(preflight), startMode: .pending)
+        let store = RunSessionStore(engine: engine, logStore: logStore, historyStore: historyStore)
+
+        await store.requestRun(mode: .preview, configuration: configuration)
+        let continuationReady = await waitForCondition { engine.pendingContinuation != nil }
+        XCTAssertTrue(continuationReady)
+        engine.pendingContinuation?.yield(.phaseStarted(phase: .sourceHashing, total: nil))
+        engine.pendingContinuation?.yield(.phaseProgress(phase: .sourceHashing, completed: 42, total: 0, bytesCopied: nil, bytesTotal: nil))
+        let updated = await waitForCondition { store.currentTaskTitle.contains("42 files") }
+        XCTAssertTrue(updated)
+
+        XCTAssertEqual(store.progress, 0)
+        XCTAssertEqual(store.currentTaskTitle, "Hashing source... 42 files…")
+    }
 }
