@@ -81,6 +81,29 @@ final class ChronoframeCoreFileIdentityHasherTests: XCTestCase {
         XCTAssertFalse(outcome.wasHashed)
     }
 
+    func testHashIdentityThrowsSwiftErrorForDirectoryReadFailure() throws {
+        let directoryURL = temporaryDirectoryURL.appendingPathComponent("looks-like-photo.jpg", isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        XCTAssertThrowsError(try FileIdentityHasher().hashIdentity(at: directoryURL)) { error in
+            let nsError = error as NSError
+            XCTAssertEqual(nsError.domain, NSPOSIXErrorDomain)
+            XCTAssertEqual(nsError.userInfo[NSFilePathErrorKey] as? String, directoryURL.path)
+        }
+    }
+
+    func testProcessFileReturnsMissingResultForDirectoryReadFailure() throws {
+        let directoryURL = temporaryDirectoryURL.appendingPathComponent("looks-like-photo.jpg", isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let outcome = FileIdentityHasher().processFile(at: directoryURL.path, cachedRecord: nil)
+
+        XCTAssertNil(outcome.identity)
+        XCTAssertEqual(outcome.size, 0)
+        XCTAssertEqual(outcome.modificationTime, 0)
+        XCTAssertFalse(outcome.wasHashed)
+    }
+
     private func writeFile(named name: String, contents: String) throws -> URL {
         let fileURL = temporaryDirectoryURL.appendingPathComponent(name)
         try Data(contents.utf8).write(to: fileURL)

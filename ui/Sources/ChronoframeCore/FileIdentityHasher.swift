@@ -77,27 +77,77 @@ public struct FileIdentityHasher: Sendable {
     }
 
     private func hashDigest(at url: URL, size: Int64) throws -> String {
-        guard let handle = try? FileHandle(forReadingFrom: url) else {
-            throw CocoaError(.fileReadUnknown)
+        let path = url.path
+        // FileHandle.readData can raise Objective-C exceptions on read failures,
+        // which Swift cannot catch. POSIX read keeps failures in the throwing path.
+        let descriptor = path.withCString { pointer in
+            Darwin.open(pointer, O_RDONLY | O_CLOEXEC)
+        }
+        guard descriptor >= 0 else {
+            throw Self.posixReadError(code: errno, path: path, operation: "open")
         }
         defer {
-            try? handle.close()
+            _ = Darwin.close(descriptor)
         }
 
         var hasher = BLAKE2bHasher()
         hasher.update(Data(String(size).utf8))
+        var buffer = [UInt8](repeating: 0, count: Self.chunkByteCount)
 
         while true {
-            let chunk = autoreleasepool {
-                handle.readData(ofLength: Self.chunkByteCount)
+            let readResult = Self.readChunk(from: descriptor, into: &buffer)
+            if let errorCode = readResult.errorCode {
+                throw Self.posixReadError(code: errorCode, path: path, operation: "read")
             }
-            if chunk.isEmpty {
+            if readResult.byteCount == 0 {
                 break
             }
-            hasher.update(chunk)
+
+            buffer.withUnsafeBytes { rawBuffer in
+                hasher.update(UnsafeRawBufferPointer(
+                    start: rawBuffer.baseAddress,
+                    count: readResult.byteCount
+                ))
+            }
         }
 
         return hasher.finalizeHexDigest()
+    }
+
+    private static func readChunk(
+        from descriptor: Int32,
+        into buffer: inout [UInt8]
+    ) -> (byteCount: Int, errorCode: Int32?) {
+        while true {
+            let byteCount = buffer.withUnsafeMutableBytes { rawBuffer -> Int in
+                guard let baseAddress = rawBuffer.baseAddress else {
+                    return 0
+                }
+                return Darwin.read(descriptor, baseAddress, rawBuffer.count)
+            }
+
+            if byteCount >= 0 {
+                return (byteCount, nil)
+            }
+
+            let errorCode = errno
+            if errorCode == EINTR {
+                continue
+            }
+            return (0, errorCode)
+        }
+    }
+
+    private static func posixReadError(code: Int32, path: String, operation: String) -> NSError {
+        let message = String(cString: strerror(code))
+        return NSError(
+            domain: NSPOSIXErrorDomain,
+            code: Int(code),
+            userInfo: [
+                NSFilePathErrorKey: path,
+                NSLocalizedDescriptionKey: "Could not \(operation) file: \(message)",
+            ]
+        )
     }
 
     private func fileMetadata(atPath path: String) -> (size: Int64, modificationTime: TimeInterval)? {
