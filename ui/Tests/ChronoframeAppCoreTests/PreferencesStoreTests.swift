@@ -25,6 +25,7 @@ final class PreferencesStoreTests: XCTestCase {
         store.workerCount = 12
         store.useFastDestinationScan = true
         store.verifyCopies = true
+        store.parallelTransferEnabled = true
         store.lastManualSourcePath = "/tmp/source"
         store.lastManualDestinationPath = "/tmp/destination"
         store.lastDeduplicateDestinationPath = "/tmp/dedupe"
@@ -35,6 +36,7 @@ final class PreferencesStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.workerCount, 12)
         XCTAssertTrue(reloaded.useFastDestinationScan)
         XCTAssertTrue(reloaded.verifyCopies)
+        XCTAssertTrue(reloaded.parallelTransferEnabled)
         XCTAssertEqual(reloaded.lastManualSourcePath, "/tmp/source")
         XCTAssertEqual(reloaded.lastManualDestinationPath, "/tmp/destination")
         XCTAssertEqual(reloaded.lastDeduplicateDestinationPath, "/tmp/dedupe")

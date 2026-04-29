@@ -138,6 +138,42 @@ final class ChronoframeCoreDryRunPlannerParityTests: XCTestCase {
         )
     }
 
+    func testPlannerMultiWorkerOutputMatchesSerialOutputAndCacheRows() throws {
+        let serialRoots = try makeConcurrencyScenario(named: "serial")
+        let parallelRoots = try makeConcurrencyScenario(named: "parallel")
+        let planner = DryRunPlanner(
+            dateResolver: FileDateResolver(metadataReader: NoDateMetadataReader())
+        )
+
+        let serial = try planner.plan(
+            sourceRoot: serialRoots.source,
+            destinationRoot: serialRoots.destination,
+            workerCount: 1
+        )
+        let parallel = try planner.plan(
+            sourceRoot: parallelRoots.source,
+            destinationRoot: parallelRoots.destination,
+            workerCount: 4
+        )
+
+        XCTAssertEqual(serial.counts, parallel.counts)
+        XCTAssertEqual(serial.dateHistogram, parallel.dateHistogram)
+        XCTAssertEqual(serial.warningMessages, parallel.warningMessages)
+        XCTAssertEqual(serial.infoMessages, parallel.infoMessages)
+        XCTAssertEqual(
+            normalize(serial.copyJobs, sourceRoot: serialRoots.source, destinationRoot: serialRoots.destination),
+            normalize(parallel.copyJobs, sourceRoot: parallelRoots.source, destinationRoot: parallelRoots.destination)
+        )
+        XCTAssertEqual(
+            try normalizedCacheRows(namespace: .source, destinationRoot: serialRoots.destination, sourceRoot: serialRoots.source),
+            try normalizedCacheRows(namespace: .source, destinationRoot: parallelRoots.destination, sourceRoot: parallelRoots.source)
+        )
+        XCTAssertEqual(
+            try normalizedCacheRows(namespace: .destination, destinationRoot: serialRoots.destination, sourceRoot: serialRoots.source),
+            try normalizedCacheRows(namespace: .destination, destinationRoot: parallelRoots.destination, sourceRoot: parallelRoots.source)
+        )
+    }
+
     private func assertScenario(named scenario: String) throws {
         let scenarioRoot = fixtureRoot.appendingPathComponent(scenario, isDirectory: true)
         let manifest = try decode(Manifest.self, from: scenarioRoot.appendingPathComponent("manifest.json"))
@@ -284,6 +320,55 @@ final class ChronoframeCoreDryRunPlannerParityTests: XCTestCase {
         try Data(contents.utf8).write(to: url)
     }
 
+    private func makeConcurrencyScenario(named name: String) throws -> (source: URL, destination: URL) {
+        let root = temporaryDirectoryURL.appendingPathComponent("concurrency-\(name)", isDirectory: true)
+        let sourceRoot = root.appendingPathComponent("source", isDirectory: true)
+        let destinationRoot = root.appendingPathComponent("dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+
+        let files: [(URL, String)] = [
+            (destinationRoot.appendingPathComponent("2024/01/01/2024-01-01_001.jpg"), "already"),
+            (sourceRoot.appendingPathComponent("a/IMG_20240101_010101.jpg"), "already"),
+            (sourceRoot.appendingPathComponent("b/IMG_20240102_010101.jpg"), "new-b"),
+            (sourceRoot.appendingPathComponent("c/IMG_20240103_010101.jpg"), "dup"),
+            (sourceRoot.appendingPathComponent("d/IMG_20240104_010101.jpg"), "dup"),
+            (sourceRoot.appendingPathComponent("z/orphan.jpg"), "unknown"),
+        ]
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        for (url, contents) in files {
+            try writeMediaFile(at: url, contents: contents)
+            try FileManager.default.setAttributes(
+                [.modificationDate: timestamp, .creationDate: timestamp],
+                ofItemAtPath: url.path
+            )
+        }
+        return (sourceRoot, destinationRoot)
+    }
+
+    private func normalizedCacheRows(
+        namespace: CacheNamespace,
+        destinationRoot: URL,
+        sourceRoot: URL
+    ) throws -> [NormalizedCacheRow] {
+        let database = try OrganizerDatabase(
+            url: destinationRoot.appendingPathComponent(EngineArtifactLayout.pythonReference.queueDatabaseFilename),
+            readOnly: true
+        )
+        defer { database.close() }
+
+        return try database.loadRawCacheRecords(namespace: namespace)
+            .map {
+                NormalizedCacheRow(
+                    path: normalizePath($0.path, sourceRoot: sourceRoot, destinationRoot: destinationRoot),
+                    hash: $0.hash,
+                    size: $0.size,
+                    modificationTime: $0.modificationTime
+                )
+            }
+            .sorted { $0.path < $1.path }
+    }
+
     private var fixtureRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -372,6 +457,13 @@ private struct ExpectedReportRow: Decodable, Equatable {
     var destination: String
     var hash: String
     var status: String
+}
+
+private struct NormalizedCacheRow: Equatable {
+    var path: String
+    var hash: String
+    var size: Int64
+    var modificationTime: TimeInterval
 }
 
 private struct NoDateMetadataReader: MediaMetadataDateReading {

@@ -279,6 +279,7 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
     public var profileName: String?
     public var useFastDestinationScan: Bool
     public var verifyCopies: Bool
+    public var parallelTransferEnabled: Bool
     public var workerCount: Int
     public var folderStructure: FolderStructure
 
@@ -289,6 +290,7 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
         profileName: String? = nil,
         useFastDestinationScan: Bool = false,
         verifyCopies: Bool = false,
+        parallelTransferEnabled: Bool = false,
         workerCount: Int = 8,
         folderStructure: FolderStructure = .yyyyMMDD
     ) {
@@ -298,12 +300,13 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
         self.profileName = profileName
         self.useFastDestinationScan = useFastDestinationScan
         self.verifyCopies = verifyCopies
+        self.parallelTransferEnabled = parallelTransferEnabled
         self.workerCount = workerCount
         self.folderStructure = folderStructure
     }
 
     private enum CodingKeys: String, CodingKey {
-        case mode, sourcePath, destinationPath, profileName, useFastDestinationScan, verifyCopies, workerCount, folderStructure
+        case mode, sourcePath, destinationPath, profileName, useFastDestinationScan, verifyCopies, parallelTransferEnabled, workerCount, folderStructure
     }
 
     public init(from decoder: Decoder) throws {
@@ -314,6 +317,7 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
         self.profileName = try container.decodeIfPresent(String.self, forKey: .profileName)
         self.useFastDestinationScan = try container.decodeIfPresent(Bool.self, forKey: .useFastDestinationScan) ?? false
         self.verifyCopies = try container.decodeIfPresent(Bool.self, forKey: .verifyCopies) ?? false
+        self.parallelTransferEnabled = try container.decodeIfPresent(Bool.self, forKey: .parallelTransferEnabled) ?? false
         self.workerCount = try container.decodeIfPresent(Int.self, forKey: .workerCount) ?? 8
         self.folderStructure = try container.decodeIfPresent(FolderStructure.self, forKey: .folderStructure) ?? .yyyyMMDD
     }

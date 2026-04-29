@@ -90,6 +90,7 @@ public struct DryRunPlanner: Sendable {
         destinationRoot: URL,
         databaseURL: URL? = nil,
         fastDestination: Bool = false,
+        workerCount: Int = 1,
         namingRules: PlannerNamingRules = .pythonReference,
         folderStructure: FolderStructure = .yyyyMMDD,
         /// Called with incremental `RunEvent`s while the walks are in progress.
@@ -105,6 +106,7 @@ public struct DryRunPlanner: Sendable {
             destinationRoot: destinationRoot,
             database: database,
             fastDestination: fastDestination,
+            workerCount: workerCount,
             namingRules: namingRules,
             onEvent: onEvent
         )
@@ -118,14 +120,18 @@ public struct DryRunPlanner: Sendable {
 
         onEvent?(.phaseStarted(phase: .sourceHashing, total: nil))
 
-        try MediaDiscovery.enumerateMediaFiles(at: sourceRoot) { path in
-            discoveredSourceCount += 1
-            if discoveredSourceCount % Self.planningProgressStride == 0 {
-                // total: 0 signals an indeterminate count — UI shows a spinner + count.
-                onEvent?(.phaseProgress(phase: .sourceHashing, completed: discoveredSourceCount,
-                                        total: 0, bytesCopied: nil, bytesTotal: nil))
-            }
-            let result = fileHasher.processFile(at: path, cachedRecord: sourceCacheByPath[path])
+        let sourcePaths = try MediaDiscovery.discoverMediaFiles(at: sourceRoot)
+        discoveredSourceCount = sourcePaths.count
+        let sourceResults = processFiles(
+            sourcePaths,
+            cachedRowsByPath: sourceCacheByPath,
+            workerCount: workerCount,
+            phase: .sourceHashing,
+            onEvent: onEvent
+        )
+
+        for (index, path) in sourcePaths.enumerated() {
+            let result = sourceResults[index]
 
             if let identity = result.identity, result.wasHashed {
                 sourceUpdates.append(
@@ -145,12 +151,12 @@ public struct DryRunPlanner: Sendable {
 
             guard let identity = result.identity else {
                 counts.hashErrorCount += 1
-                return
+                continue
             }
 
             if destinationIndex.snapshot.pathsByIdentity[identity] != nil {
                 counts.alreadyInDestinationCount += 1
-                return
+                continue
             }
 
             let dateBucket = DateClassification.bucket(
@@ -165,7 +171,7 @@ public struct DryRunPlanner: Sendable {
                     dateBucket: dateBucket
                 )
                 counts.duplicateCount += 1
-                return
+                continue
             }
 
             try planningSpool.appendPrimary(
@@ -318,6 +324,7 @@ public struct DryRunPlanner: Sendable {
         destinationRoot: URL,
         database: OrganizerDatabase,
         fastDestination: Bool,
+        workerCount: Int,
         namingRules: PlannerNamingRules,
         onEvent: (@Sendable (RunEvent) -> Void)? = nil
     ) throws -> DestinationIndexBuildResult {
@@ -348,15 +355,19 @@ public struct DryRunPlanner: Sendable {
         var destinationUpdates: [FileCacheRecord] = []
         var indexedFileCount = 0
 
-        try MediaDiscovery.enumerateMediaFiles(at: destinationRoot) { path in
-            indexedFileCount += 1
-            let result = fileHasher.processFile(at: path, cachedRecord: cachedRowsByPath[path])
-            snapshotBuilder.consume(path: path, identity: result.identity)
+        let destinationPaths = try MediaDiscovery.discoverMediaFiles(at: destinationRoot)
+        let destinationResults = processFiles(
+            destinationPaths,
+            cachedRowsByPath: cachedRowsByPath,
+            workerCount: workerCount,
+            phase: .destinationIndexing,
+            onEvent: onEvent
+        )
 
-            if indexedFileCount % Self.planningProgressStride == 0 {
-                onEvent?(.phaseProgress(phase: .destinationIndexing, completed: indexedFileCount,
-                                        total: 0, bytesCopied: nil, bytesTotal: nil))
-            }
+        for (index, path) in destinationPaths.enumerated() {
+            indexedFileCount += 1
+            let result = destinationResults[index]
+            snapshotBuilder.consume(path: path, identity: result.identity)
 
             if let identity = result.identity, result.wasHashed {
                 destinationUpdates.append(
@@ -382,6 +393,54 @@ public struct DryRunPlanner: Sendable {
             indexedFileCount: indexedFileCount,
             snapshot: snapshotBuilder.snapshot
         )
+    }
+
+    private func processFiles(
+        _ paths: [String],
+        cachedRowsByPath: [String: FileCacheRecord],
+        workerCount: Int,
+        phase: RunPhase,
+        onEvent: (@Sendable (RunEvent) -> Void)?
+    ) -> [ProcessedFileIdentity] {
+        guard !paths.isEmpty else {
+            return []
+        }
+
+        let maxWorkers = max(1, workerCount)
+        if maxWorkers == 1 || paths.count == 1 {
+            var results: [ProcessedFileIdentity] = []
+            results.reserveCapacity(paths.count)
+            for (index, path) in paths.enumerated() {
+                results.append(fileHasher.processFile(at: path, cachedRecord: cachedRowsByPath[path]))
+                let completed = index + 1
+                if completed % Self.planningProgressStride == 0 {
+                    onEvent?(.phaseProgress(phase: phase, completed: completed,
+                                            total: 0, bytesCopied: nil, bytesTotal: nil))
+                }
+            }
+            return results
+        }
+
+        let results = OrderedFileProcessingResults(count: paths.count)
+        let queue = OperationQueue()
+        queue.name = "Chronoframe.DryRunPlanner.\(phase.rawValue)"
+        queue.maxConcurrentOperationCount = maxWorkers
+
+        for (index, path) in paths.enumerated() {
+            let cachedRecord = cachedRowsByPath[path]
+            let fileHasher = self.fileHasher
+            queue.addOperation {
+                let result = fileHasher.processFile(at: path, cachedRecord: cachedRecord)
+                let completed = results.store(result, at: index)
+                if completed % Self.planningProgressStride == 0 {
+                    onEvent?(.phaseProgress(phase: phase, completed: completed,
+                                            total: 0, bytesCopied: nil, bytesTotal: nil))
+                }
+            }
+        }
+
+        queue.waitUntilAllOperationsAreFinished()
+        return results.values()
     }
 
     private func loadTypedCacheRecordsByPath(
@@ -458,6 +517,34 @@ private struct DestinationIndexSnapshotBuilder {
                 duplicatesByDate: duplicatesByDate
             )
         )
+    }
+}
+
+private final class OrderedFileProcessingResults: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [ProcessedFileIdentity?]
+    private var completedCount = 0
+
+    init(count: Int) {
+        storage = Array(repeating: nil, count: count)
+    }
+
+    func store(_ result: ProcessedFileIdentity, at index: Int) -> Int {
+        lock.lock()
+        storage[index] = result
+        completedCount += 1
+        let completed = completedCount
+        lock.unlock()
+        return completed
+    }
+
+    func values() -> [ProcessedFileIdentity] {
+        lock.lock()
+        let values = storage.map {
+            $0 ?? ProcessedFileIdentity(identity: nil, size: 0, modificationTime: 0, wasHashed: false)
+        }
+        lock.unlock()
+        return values
     }
 }
 

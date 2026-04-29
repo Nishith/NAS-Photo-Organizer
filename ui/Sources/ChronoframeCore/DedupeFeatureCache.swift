@@ -123,6 +123,90 @@ extension OrganizerDatabase {
         return rows
     }
 
+    /// Load all cached dedupe metadata except the heavyweight Vision feature
+    /// print blob. The scanner uses this as its warm-cache fast path, then
+    /// fetches feature blobs lazily only for pairs that survive cheap filters.
+    public func loadDedupeFeatureMetadataRecords() throws -> [String: DedupeFeatureRecord] {
+        var rows: [String: DedupeFeatureRecord] = [:]
+        let statement = try prepare(
+            "SELECT path, size, mtime, dhash, sharpness, face_score, pixel_width, pixel_height, capture_date, paired_path FROM DedupeFeatures"
+        )
+        defer { sqlite3_finalize(statement) }
+
+        while true {
+            let stepResult = sqlite3_step(statement)
+            if stepResult == SQLITE_DONE { break }
+            guard stepResult == SQLITE_ROW else {
+                throw OrganizerDatabaseError.stepFailed(lastErrorMessage())
+            }
+
+            guard let path = OrganizerDatabase.sqliteString(statement, column: 0) else { continue }
+            let size = sqlite3_column_int64(statement, 1)
+            let mtime = sqlite3_column_double(statement, 2)
+
+            var dhash: UInt64?
+            if sqlite3_column_type(statement, 3) != SQLITE_NULL {
+                dhash = UInt64(bitPattern: sqlite3_column_int64(statement, 3))
+            }
+
+            let sharpness = sqlite3_column_double(statement, 4)
+            let faceScore: Double? = sqlite3_column_type(statement, 5) == SQLITE_NULL ? nil : sqlite3_column_double(statement, 5)
+            let pixelWidth: Int? = sqlite3_column_type(statement, 6) == SQLITE_NULL ? nil : Int(sqlite3_column_int64(statement, 6))
+            let pixelHeight: Int? = sqlite3_column_type(statement, 7) == SQLITE_NULL ? nil : Int(sqlite3_column_int64(statement, 7))
+            let captureDate: Date? = sqlite3_column_type(statement, 8) == SQLITE_NULL ? nil : Date(timeIntervalSince1970: sqlite3_column_double(statement, 8))
+            let pairedPath: String? = OrganizerDatabase.sqliteString(statement, column: 9)
+
+            rows[path] = DedupeFeatureRecord(
+                path: path,
+                size: size,
+                modificationTime: mtime,
+                dhash: dhash,
+                featurePrintData: nil,
+                sharpness: sharpness,
+                faceScore: faceScore,
+                pixelWidth: pixelWidth,
+                pixelHeight: pixelHeight,
+                captureDate: captureDate,
+                pairedPath: pairedPath
+            )
+        }
+        return rows
+    }
+
+    public func loadDedupeFeaturePrintData(for paths: [String]) throws -> [String: Data] {
+        guard !paths.isEmpty else { return [:] }
+
+        let statement = try prepare("SELECT feature_print FROM DedupeFeatures WHERE path = ?")
+        defer { sqlite3_finalize(statement) }
+
+        var rows: [String: Data] = [:]
+        rows.reserveCapacity(paths.count)
+
+        for path in paths {
+            sqlite3_reset(statement)
+            sqlite3_clear_bindings(statement)
+            sqlite3_bind_text(statement, 1, path, -1, OrganizerDatabase.sqliteTransient)
+
+            let stepResult = sqlite3_step(statement)
+            if stepResult == SQLITE_DONE {
+                continue
+            }
+            guard stepResult == SQLITE_ROW else {
+                throw OrganizerDatabaseError.stepFailed(lastErrorMessage())
+            }
+            guard
+                sqlite3_column_type(statement, 0) == SQLITE_BLOB,
+                let bytes = sqlite3_column_blob(statement, 0)
+            else {
+                continue
+            }
+            let length = Int(sqlite3_column_bytes(statement, 0))
+            rows[path] = Data(bytes: bytes, count: length)
+        }
+
+        return rows
+    }
+
     public func saveDedupeFeatureRecords<S: Sequence>(_ records: S) throws where S.Element == DedupeFeatureRecord {
         let statement = try prepare(
             """
@@ -200,20 +284,33 @@ extension OrganizerDatabase {
 
     /// Delete cache rows for any path that no longer exists in `currentPaths`.
     public func pruneDedupeFeatureRecords(notIn currentPaths: Set<String>) throws {
-        let existing = try loadDedupeFeatureRecords()
-        let stale = existing.keys.filter { !currentPaths.contains($0) }
+        let statement = try prepare("SELECT path FROM DedupeFeatures")
+        defer { sqlite3_finalize(statement) }
+
+        var stale: [String] = []
+        while true {
+            let stepResult = sqlite3_step(statement)
+            if stepResult == SQLITE_DONE { break }
+            guard stepResult == SQLITE_ROW else {
+                throw OrganizerDatabaseError.stepFailed(lastErrorMessage())
+            }
+            guard let path = OrganizerDatabase.sqliteString(statement, column: 0) else { continue }
+            if !currentPaths.contains(path) {
+                stale.append(path)
+            }
+        }
         guard !stale.isEmpty else { return }
 
-        let statement = try prepare("DELETE FROM DedupeFeatures WHERE path = ?")
-        defer { sqlite3_finalize(statement) }
+        let deleteStatement = try prepare("DELETE FROM DedupeFeatures WHERE path = ?")
+        defer { sqlite3_finalize(deleteStatement) }
 
         try execute("BEGIN IMMEDIATE TRANSACTION;")
         do {
             for path in stale {
-                sqlite3_reset(statement)
-                sqlite3_clear_bindings(statement)
-                sqlite3_bind_text(statement, 1, path, -1, OrganizerDatabase.sqliteTransient)
-                guard sqlite3_step(statement) == SQLITE_DONE else {
+                sqlite3_reset(deleteStatement)
+                sqlite3_clear_bindings(deleteStatement)
+                sqlite3_bind_text(deleteStatement, 1, path, -1, OrganizerDatabase.sqliteTransient)
+                guard sqlite3_step(deleteStatement) == SQLITE_DONE else {
                     throw OrganizerDatabaseError.stepFailed(lastErrorMessage())
                 }
             }

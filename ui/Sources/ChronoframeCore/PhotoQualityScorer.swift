@@ -28,8 +28,42 @@ public enum PhotoQualityScorer {
         pixelWidth: Int?,
         pixelHeight: Int?
     ) -> PhotoQualityScore {
-        let sharpness = sharpnessLaplacian(at: url) ?? 0.05
-        let faceScore = detectFaceScore(at: url)
+        let context = CIContext(options: [.useSoftwareRenderer: false])
+        let sharpness = sharpnessLaplacian(at: url, ciContext: context) ?? 0.05
+        return score(
+            sharpness: sharpness,
+            faceScore: detectFaceScore(at: url),
+            sizeBytes: sizeBytes,
+            pixelWidth: pixelWidth,
+            pixelHeight: pixelHeight
+        )
+    }
+
+    static func score(
+        at url: URL,
+        sizeBytes: Int64,
+        pixelWidth: Int?,
+        pixelHeight: Int?,
+        ciContext: CIContext,
+        faceScore: Double?
+    ) -> PhotoQualityScore {
+        let sharpness = sharpnessLaplacian(at: url, ciContext: ciContext) ?? 0.05
+        return score(
+            sharpness: sharpness,
+            faceScore: faceScore,
+            sizeBytes: sizeBytes,
+            pixelWidth: pixelWidth,
+            pixelHeight: pixelHeight
+        )
+    }
+
+    private static func score(
+        sharpness: Double,
+        faceScore: Double?,
+        sizeBytes: Int64,
+        pixelWidth: Int?,
+        pixelHeight: Int?
+    ) -> PhotoQualityScore {
         let resolution = Double(max(0, (pixelWidth ?? 0) * (pixelHeight ?? 0)))
         let resolutionScore = resolution > 0 ? min(1.0, log2(resolution) / 24.0) : 0.3
         let sizeScore = sizeBytes > 0 ? min(1.0, log2(Double(sizeBytes)) / 26.0) : 0.3
@@ -49,6 +83,11 @@ public enum PhotoQualityScorer {
     /// 0…1. Higher = sharper. Uses a short-side downscale to bound work for
     /// very large RAWs.
     public static func sharpnessLaplacian(at url: URL) -> Double? {
+        let context = CIContext(options: [.useSoftwareRenderer: false])
+        return sharpnessLaplacian(at: url, ciContext: context)
+    }
+
+    static func sharpnessLaplacian(at url: URL, ciContext: CIContext) -> Double? {
         guard let source = CIImage(contentsOf: url) else { return nil }
 
         // Downscale so the Laplacian pass runs in tens of milliseconds even
@@ -85,9 +124,8 @@ public enum PhotoQualityScorer {
             return nil
         }
 
-        let context = CIContext(options: [.useSoftwareRenderer: false])
         var bitmap: [UInt8] = [0, 0, 0, 0]
-        context.render(
+        ciContext.render(
             varianceFilter,
             toBitmap: &bitmap,
             rowBytes: 4,
@@ -113,8 +151,11 @@ public enum PhotoQualityScorer {
         } catch {
             return nil
         }
-        guard let faces = request.results, !faces.isEmpty else { return nil }
+        return faceScore(from: request.results)
+    }
 
+    static func faceScore(from faces: [VNFaceObservation]?) -> Double? {
+        guard let faces, !faces.isEmpty else { return nil }
         var total: Double = 0
         for face in faces {
             // Confidence is 0…1; landmarked faces get a +0.2 boost up to a

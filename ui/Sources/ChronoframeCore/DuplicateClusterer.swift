@@ -9,12 +9,14 @@ public enum DuplicateClusterer {
     /// Pluggable distance comparator so tests can supply a deterministic
     /// stand-in for Vision (which would otherwise need real image data).
     public typealias FeaturePrintDistance = @Sendable (Data, Data) -> Double?
+    public typealias FeaturePrintDataProvider = @Sendable (String) -> Data?
 
     public static func cluster(
         candidates: [PhotoCandidate],
         configuration: DeduplicateConfiguration,
         burstWindowSeconds: Int = 10,
-        featurePrintDistance: FeaturePrintDistance = defaultFeaturePrintDistance
+        featurePrintDistance: FeaturePrintDistance? = nil,
+        featurePrintDataProvider: FeaturePrintDataProvider? = nil
     ) -> [DuplicateCluster] {
         // Pair members are committed alongside their primary, so we cluster
         // only on primaries (those with no partner OR who are listed first
@@ -32,6 +34,8 @@ public enum DuplicateClusterer {
 
         var unionFind = UnionFind(count: sorted.count)
         let timeWindow = TimeInterval(configuration.timeWindowSeconds)
+        let defaultDistanceCache = VisionFeaturePrintDistanceCache()
+        let featurePrintCache = FeaturePrintDataCache(provider: featurePrintDataProvider)
 
         for i in 0..<sorted.count {
             let lhs = sorted[i]
@@ -46,14 +50,24 @@ public enum DuplicateClusterer {
                     continue
                 }
 
-                guard let lhsPrint = lhs.featurePrintData, let rhsPrint = rhs.featurePrintData else {
+                guard
+                    let lhsPrint = featurePrintData(for: lhs, cache: featurePrintCache),
+                    let rhsPrint = featurePrintData(for: rhs, cache: featurePrintCache)
+                else {
                     // Without Vision data we keep the dHash match; this lets
                     // tests run without exercising Vision and gives a sane
                     // fallback if a feature print failed to compute.
                     unionFind.union(i, j)
                     continue
                 }
-                guard let distance = featurePrintDistance(lhsPrint, rhsPrint) else { continue }
+                let distance = featurePrintDistance?(lhsPrint, rhsPrint)
+                    ?? defaultDistanceCache.distance(
+                        lhsPath: lhs.path,
+                        lhsData: lhsPrint,
+                        rhsPath: rhs.path,
+                        rhsData: rhsPrint
+                    )
+                guard let distance else { continue }
                 if distance <= configuration.similarityThreshold {
                     unionFind.union(i, j)
                 }
@@ -131,6 +145,38 @@ public enum DuplicateClusterer {
 
     public static let defaultFeaturePrintDistance: FeaturePrintDistance = { @Sendable lhs, rhs in
         try? VisionFeaturePrinter.distance(lhs, rhs)
+    }
+
+    private static func featurePrintData(
+        for candidate: PhotoCandidate,
+        cache: FeaturePrintDataCache
+    ) -> Data? {
+        candidate.featurePrintData ?? cache.data(for: candidate.path)
+    }
+}
+
+private final class FeaturePrintDataCache: @unchecked Sendable {
+    private let provider: DuplicateClusterer.FeaturePrintDataProvider?
+    private var cache: [String: Data] = [:]
+    private var missing: Set<String> = []
+
+    init(provider: DuplicateClusterer.FeaturePrintDataProvider?) {
+        self.provider = provider
+    }
+
+    func data(for path: String) -> Data? {
+        if let cached = cache[path] {
+            return cached
+        }
+        if missing.contains(path) {
+            return nil
+        }
+        guard let data = provider?(path) else {
+            missing.insert(path)
+            return nil
+        }
+        cache[path] = data
+        return data
     }
 }
 

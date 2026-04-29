@@ -150,6 +150,59 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertTrue(clusters.isEmpty)
     }
 
+    func testClustererDoesNotRequestLazyFeaturePrintsForRejectedPairs() {
+        let baseDate = Date(timeIntervalSinceReferenceDate: 0)
+        let requests = FeaturePrintRequestLog()
+        let candidates = [
+            candidate(path: "/dest/a.jpg", captureDate: baseDate, dhash: 0x0000),
+            candidate(path: "/dest/b.jpg", captureDate: baseDate.addingTimeInterval(2), dhash: 0xFFFF),
+            candidate(path: "/dest/c.jpg", captureDate: baseDate.addingTimeInterval(3_600), dhash: 0x0000),
+        ]
+        let config = DeduplicateConfiguration(destinationPath: "/dest", timeWindowSeconds: 30, dhashHammingThreshold: 4)
+
+        let clusters = DuplicateClusterer.cluster(
+            candidates: candidates,
+            configuration: config,
+            featurePrintDistance: { _, _ in 0.0 },
+            featurePrintDataProvider: { path in
+                requests.record(path)
+                return Data(path.utf8)
+            }
+        )
+
+        XCTAssertTrue(clusters.isEmpty)
+        XCTAssertTrue(requests.paths.isEmpty, "Cheap filters should run before lazy feature blob loads")
+    }
+
+    func testClustererCachesLazyFeaturePrintRequestsAcrossDenseBurst() {
+        let baseDate = Date(timeIntervalSinceReferenceDate: 0)
+        let requests = FeaturePrintRequestLog()
+        let candidates = [
+            candidate(path: "/dest/a.jpg", captureDate: baseDate, dhash: 0xAAAA, qualityScore: 0.9),
+            candidate(path: "/dest/b.jpg", captureDate: baseDate.addingTimeInterval(1), dhash: 0xAAAA, qualityScore: 0.7),
+            candidate(path: "/dest/c.jpg", captureDate: baseDate.addingTimeInterval(2), dhash: 0xAAAA, qualityScore: 0.6),
+        ]
+        let config = DeduplicateConfiguration(
+            destinationPath: "/dest",
+            timeWindowSeconds: 30,
+            similarityThreshold: 1.0,
+            dhashHammingThreshold: 5
+        )
+
+        let clusters = DuplicateClusterer.cluster(
+            candidates: candidates,
+            configuration: config,
+            featurePrintDistance: { _, _ in 0.1 },
+            featurePrintDataProvider: { path in
+                requests.record(path)
+                return Data(path.utf8)
+            }
+        )
+
+        XCTAssertEqual(clusters.count, 1)
+        XCTAssertEqual(requests.countsByPath, ["/dest/a.jpg": 1, "/dest/b.jpg": 1, "/dest/c.jpg": 1])
+    }
+
     func testExactDuplicateClusterEmits() {
         let identity = FileIdentity(size: 100, digest: "deadbeef")
         let candidates = [
@@ -885,9 +938,51 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(restored.captureDate?.timeIntervalSince1970), 1_700_000_000, accuracy: 0.0001)
         XCTAssertEqual(restored.pairedPath, "/dest/a.cr2")
 
+        let metadataOnly = try db.loadDedupeFeatureMetadataRecords()
+        let metadataRecord = try XCTUnwrap(metadataOnly[fixturePath])
+        XCTAssertNil(metadataRecord.featurePrintData)
+        XCTAssertEqual(metadataRecord.dhash, 0xDEADBEEFCAFEBABE)
+        XCTAssertEqual(
+            try db.loadDedupeFeaturePrintData(for: [fixturePath, "/missing.jpg"])[fixturePath],
+            Data([1, 2, 3, 4])
+        )
+
         // Pruning removes paths absent from the fresh set.
         try db.pruneDedupeFeatureRecords(notIn: [])
         XCTAssertTrue(try db.loadDedupeFeatureRecords().isEmpty)
+    }
+
+    func testLazyFeaturePrintStoreFallsBackToStandardizedPath() throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let dbURL = temporaryDirectory.appendingPathComponent(".organize_cache.db")
+        let db = try OrganizerDatabase(url: dbURL)
+        defer { db.close() }
+        try db.ensureDedupeFeaturesSchema()
+
+        let aliasedPath = "/var/tmp/chronoframe-lazy-feature-\(UUID().uuidString).jpg"
+        let standardizedPath = URL(fileURLWithPath: aliasedPath).standardizedFileURL.path
+        try db.saveDedupeFeatureRecords([
+            DedupeFeatureRecord(
+                path: standardizedPath,
+                size: 1,
+                modificationTime: 2,
+                dhash: nil,
+                featurePrintData: Data([9, 8, 7]),
+                sharpness: 0.1,
+                faceScore: nil,
+                pixelWidth: nil,
+                pixelHeight: nil,
+                captureDate: nil,
+                pairedPath: nil
+            ),
+        ])
+
+        let store = LazyDedupeFeaturePrintStore(database: db)
+        XCTAssertEqual(store.featurePrintData(for: aliasedPath), Data([9, 8, 7]))
     }
 
     // MARK: - DedupeSimilarityPreset
@@ -1031,6 +1126,31 @@ private struct TestDedupeFileError: Error, LocalizedError, Equatable {
     }
 
     var errorDescription: String? { message }
+}
+
+private final class FeaturePrintRequestLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+
+    var paths: [String] {
+        lock.lock()
+        let paths = storage
+        lock.unlock()
+        return paths
+    }
+
+    var countsByPath: [String: Int] {
+        lock.lock()
+        let counts = storage.reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
+        lock.unlock()
+        return counts
+    }
+
+    func record(_ path: String) {
+        lock.lock()
+        storage.append(path)
+        lock.unlock()
+    }
 }
 
 private final class MockDeduplicateFileOperations: DeduplicateFileOperations, @unchecked Sendable {

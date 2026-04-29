@@ -308,6 +308,122 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
         XCTAssertEqual(progress.values.map { $0.total }, [4, 4, 4, 4])
     }
 
+    func testParallelTransferResolvesSameDestinationCollisionsWithoutOverwritingAndWritesReceipt() throws {
+        let env = try makeEnvironment(jobCount: 0)
+        let sharedDestination = env.destinationRoot.appendingPathComponent("2024/01/01/shared.jpg")
+        try FileManager.default.createDirectory(at: sharedDestination.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        var jobs: [QueuedCopyJob] = []
+        var expectedPayloads = Set<String>()
+        for index in 0..<3 {
+            let payload = "parallel-payload-\(index)"
+            expectedPayloads.insert(payload)
+            let sourceURL = env.sourceRoot.appendingPathComponent("parallel_\(index).jpg")
+            try Data(payload.utf8).write(to: sourceURL)
+            let hash = try FileIdentityHasher().hashIdentity(at: sourceURL).rawValue
+            jobs.append(
+                QueuedCopyJob(
+                    sourcePath: sourceURL.path,
+                    destinationPath: sharedDestination.path,
+                    hash: hash,
+                    status: .pending
+                )
+            )
+        }
+        try env.database.enqueueQueuedJobs(jobs)
+
+        let result = try TransferExecutor().execute(
+            queuedJobs: jobs,
+            database: env.database,
+            destinationRoot: env.destinationRoot,
+            verifyCopies: false,
+            runLogger: env.logger,
+            maxConcurrentCopies: 3
+        )
+
+        XCTAssertEqual(result.copiedCount, 3)
+        XCTAssertEqual(result.failedCount, 0)
+
+        let copiedFiles = try FileManager.default.contentsOfDirectory(at: sharedDestination.deletingLastPathComponent(), includingPropertiesForKeys: nil)
+            .filter { !$0.lastPathComponent.hasSuffix(".tmp") }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        XCTAssertEqual(copiedFiles.map(\.lastPathComponent), ["shared.jpg", "shared_collision_1.jpg", "shared_collision_2.jpg"])
+
+        let copiedPayloads = try Set(copiedFiles.map { try String(contentsOf: $0, encoding: .utf8) })
+        XCTAssertEqual(copiedPayloads, expectedPayloads)
+
+        let queueRows = try env.database.loadQueuedJobs(orderByInsertion: true)
+        XCTAssertEqual(queueRows.filter { $0.status == .copied }.count, 3)
+        XCTAssertEqual(try env.database.loadRawCacheRecords(namespace: .destination).count, 3)
+
+        let receipt = try readAuditReceipt(in: env.destinationRoot)
+        XCTAssertEqual(receipt.totalJobs, 3)
+        XCTAssertEqual(receipt.transferCount, 3)
+    }
+
+    func testParallelTransferCleansPreparedCopiesWhenAbortThresholdTripsWithInFlightWork() throws {
+        let destinationRoot = temporaryDirectoryURL.appendingPathComponent("parallel_abort", isDirectory: true)
+        let sourceRoot = temporaryDirectoryURL.appendingPathComponent("parallel_abort_src", isDirectory: true)
+        try FileManager.default.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sourceRoot, withIntermediateDirectories: true)
+
+        let database = try OrganizerDatabase(url: destinationRoot.appendingPathComponent(".organize_cache.db"))
+        defer { database.close() }
+
+        var jobs: [QueuedCopyJob] = [
+            QueuedCopyJob(
+                sourcePath: sourceRoot.appendingPathComponent("missing_0.jpg").path,
+                destinationPath: destinationRoot.appendingPathComponent("2024/01/01/missing_0.jpg").path,
+                hash: "0_missing_0",
+                status: .pending
+            ),
+            QueuedCopyJob(
+                sourcePath: sourceRoot.appendingPathComponent("missing_1.jpg").path,
+                destinationPath: destinationRoot.appendingPathComponent("2024/01/01/missing_1.jpg").path,
+                hash: "0_missing_1",
+                status: .pending
+            ),
+        ]
+        for index in 0..<2 {
+            let sourceURL = sourceRoot.appendingPathComponent("good_\(index).jpg")
+            try Data("good-\(index)".utf8).write(to: sourceURL)
+            let hash = try FileIdentityHasher().hashIdentity(at: sourceURL).rawValue
+            jobs.append(
+                QueuedCopyJob(
+                    sourcePath: sourceURL.path,
+                    destinationPath: destinationRoot.appendingPathComponent("2024/01/01/good_\(index).jpg").path,
+                    hash: hash,
+                    status: .pending
+                )
+            )
+        }
+        try database.enqueueQueuedJobs(jobs)
+
+        let logger = PersistentRunLogger(logURL: destinationRoot.appendingPathComponent(".organize_log.txt"))
+        try logger.open()
+        defer { logger.close() }
+
+        let executor = TransferExecutor(failureThresholds: FailureThresholds(consecutive: 2, total: 100))
+        let result = try executor.execute(
+            queuedJobs: jobs,
+            database: database,
+            destinationRoot: destinationRoot,
+            verifyCopies: false,
+            runLogger: logger,
+            maxConcurrentCopies: 4
+        )
+
+        XCTAssertEqual(result.copiedCount, 0)
+        XCTAssertEqual(result.failedCount, 2)
+
+        let queueRows = try database.loadQueuedJobs(orderByInsertion: true)
+        XCTAssertEqual(queueRows.filter { $0.status == .failed }.count, 2)
+        XCTAssertEqual(queueRows.filter { $0.status == .pending }.count, 2)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: jobs[2].destinationPath))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: jobs[3].destinationPath))
+        XCTAssertEqual(temporaryFilesUnder(destinationRoot), [])
+    }
+
     // MARK: - Verify cleanup
 
     /// When `verifyCopies` is true and the queued hash doesn't match the
@@ -342,6 +458,52 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
 
         let queue = try env.database.loadQueuedJobs()
         XCTAssertEqual(queue.first(where: { $0.sourcePath == job.sourcePath })?.status, .failed)
+    }
+
+    func testCopyFallsBackWhenCloneIsUnavailable() throws {
+        let env = try makeEnvironment(jobCount: 1)
+        let cloneCalls = Counter()
+        let copyAllCalls = Counter()
+        let metadataCalls = Counter()
+        let strategy = TransferFileCopyStrategy(
+            clone: { _, _ in
+                cloneCalls.increment()
+                errno = ENOTSUP
+                return -1
+            },
+            copyAll: { sourcePath, destinationPath in
+                copyAllCalls.increment()
+                do {
+                    try FileManager.default.copyItem(atPath: sourcePath, toPath: destinationPath)
+                    return 0
+                } catch {
+                    errno = EIO
+                    return -1
+                }
+            },
+            copyMetadata: { _, _ in
+                metadataCalls.increment()
+                return 0
+            }
+        )
+
+        let result = try TransferExecutor(fileCopyStrategy: strategy).execute(
+            queuedJobs: env.jobs,
+            database: env.database,
+            destinationRoot: env.destinationRoot,
+            verifyCopies: false,
+            runLogger: env.logger
+        )
+
+        XCTAssertEqual(result.copiedCount, 1)
+        XCTAssertEqual(result.failedCount, 0)
+        XCTAssertEqual(cloneCalls.value, 1)
+        XCTAssertEqual(copyAllCalls.value, 1)
+        XCTAssertEqual(metadataCalls.value, 0)
+        XCTAssertEqual(
+            try String(contentsOfFile: env.jobs[0].destinationPath, encoding: .utf8),
+            try String(contentsOfFile: env.jobs[0].sourcePath, encoding: .utf8)
+        )
     }
 
     // MARK: - Audit receipt
@@ -440,6 +602,28 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
         }
     }
 
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+
+        func increment() {
+            lock.lock()
+            count += 1
+            lock.unlock()
+        }
+
+        var value: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return count
+        }
+    }
+
+    private struct ReceiptSummary {
+        var totalJobs: Int
+        var transferCount: Int
+    }
+
     /// Creates a fresh source/destination pair, a SQLite cache, and N seeded
     /// PENDING jobs whose source files exist on disk with deterministic content.
     /// `payloadStride` lets a test vary the file sizes (useful for byte tracking).
@@ -478,5 +662,37 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
             logger: logger,
             jobs: jobs
         )
+    }
+
+    private func readAuditReceipt(in destinationRoot: URL) throws -> ReceiptSummary {
+        let logsDirectory = destinationRoot.appendingPathComponent(".organize_logs", isDirectory: true)
+        let receiptURL = try FileManager.default
+            .contentsOfDirectory(at: logsDirectory, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("audit_receipt_") && $0.pathExtension == "json" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            .last
+        let url = try XCTUnwrap(receiptURL)
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let transfers = payload["transfers"] as? [[String: Any]] ?? []
+        return ReceiptSummary(
+            totalJobs: payload["total_jobs"] as? Int ?? 0,
+            transferCount: transfers.count
+        )
+    }
+
+    private func temporaryFilesUnder(_ root: URL) -> [String] {
+        let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        var files: [String] = []
+        while let url = enumerator?.nextObject() as? URL {
+            if url.lastPathComponent.hasSuffix(".tmp") {
+                files.append(url.path)
+            }
+        }
+        return files.sorted()
     }
 }

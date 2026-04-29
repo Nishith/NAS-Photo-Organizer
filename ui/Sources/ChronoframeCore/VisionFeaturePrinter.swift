@@ -54,7 +54,52 @@ public enum VisionFeaturePrinter {
         return Double(distance)
     }
 
-    private static func unarchive(_ data: Data) throws -> VNFeaturePrintObservation? {
+    fileprivate static func unarchive(_ data: Data) throws -> VNFeaturePrintObservation? {
         try NSKeyedUnarchiver.unarchivedObject(ofClass: VNFeaturePrintObservation.self, from: data)
+    }
+}
+
+final class VisionFeaturePrintDistanceCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var observationsByPath: [String: VNFeaturePrintObservation] = [:]
+
+    func distance(
+        lhsPath: String,
+        lhsData: Data,
+        rhsPath: String,
+        rhsData: Data
+    ) -> Double? {
+        guard
+            let lhs = observation(for: lhsPath, data: lhsData),
+            let rhs = observation(for: rhsPath, data: rhsData)
+        else {
+            return nil
+        }
+
+        var distance: Float = 0
+        do {
+            try lhs.computeDistance(&distance, to: rhs)
+        } catch {
+            return nil
+        }
+        return Double(distance)
+    }
+
+    private func observation(for path: String, data: Data) -> VNFeaturePrintObservation? {
+        lock.lock()
+        if let observation = observationsByPath[path] {
+            lock.unlock()
+            return observation
+        }
+        lock.unlock()
+
+        guard let decoded = try? VisionFeaturePrinter.unarchive(data) else {
+            return nil
+        }
+
+        lock.lock()
+        observationsByPath[path] = decoded
+        lock.unlock()
+        return decoded
     }
 }
