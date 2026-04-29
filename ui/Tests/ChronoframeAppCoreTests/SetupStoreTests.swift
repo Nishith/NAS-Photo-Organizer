@@ -100,6 +100,7 @@ final class SetupStoreTests: XCTestCase {
         preferences.workerCount = 0
         preferences.useFastDestinationScan = true
         preferences.verifyCopies = true
+        preferences.parallelTransferEnabled = true
 
         let store = SetupStore(
             sourcePath: " /tmp/source ",
@@ -115,6 +116,7 @@ final class SetupStoreTests: XCTestCase {
         XCTAssertEqual(configuration.profileName, "saved")
         XCTAssertTrue(configuration.useFastDestinationScan)
         XCTAssertTrue(configuration.verifyCopies)
+        XCTAssertTrue(configuration.parallelTransferEnabled)
         XCTAssertEqual(configuration.workerCount, 1)
         defaults.removePersistentDomain(forName: suiteName)
     }

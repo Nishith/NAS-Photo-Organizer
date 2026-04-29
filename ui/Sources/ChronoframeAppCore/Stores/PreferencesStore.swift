@@ -22,6 +22,10 @@ public final class PreferencesStore: ObservableObject {
         didSet { persist(verifyCopies, key: "verifyCopies") }
     }
 
+    @Published public var parallelTransferEnabled: Bool {
+        didSet { persist(parallelTransferEnabled, key: "parallelTransferEnabled") }
+    }
+
     @Published public var logBufferCapacity: Int {
         didSet {
             let clamped = max(Self.minimumLogCapacity, min(Self.maximumLogCapacity, logBufferCapacity))
@@ -82,6 +86,7 @@ public final class PreferencesStore: ObservableObject {
         self.workerCount = defaults.object(forKey: "workerCount") as? Int ?? 8
         self.useFastDestinationScan = defaults.object(forKey: "useFastDestinationScan") as? Bool ?? false
         self.verifyCopies = defaults.object(forKey: "verifyCopies") as? Bool ?? false
+        self.parallelTransferEnabled = defaults.object(forKey: "parallelTransferEnabled") as? Bool ?? false
         self.logBufferCapacity = defaults.object(forKey: "logBufferCapacity") as? Int ?? 2_000
         self.lastManualSourcePath = defaults.string(forKey: "lastManualSourcePath") ?? ""
         self.lastManualDestinationPath = defaults.string(forKey: "lastManualDestinationPath") ?? ""

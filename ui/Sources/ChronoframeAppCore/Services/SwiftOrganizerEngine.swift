@@ -340,6 +340,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                         sourceRoot: URL(fileURLWithPath: configuration.sourcePath, isDirectory: true),
                         destinationRoot: URL(fileURLWithPath: configuration.destinationPath, isDirectory: true),
                         fastDestination: configuration.useFastDestinationScan,
+                        workerCount: max(1, configuration.workerCount),
                         folderStructure: configuration.folderStructure,
                         onEvent: { continuation.yield($0) }
                     )
@@ -497,6 +498,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             sourceRoot: URL(fileURLWithPath: configuration.sourcePath, isDirectory: true),
             destinationRoot: destinationURL,
             fastDestination: configuration.useFastDestinationScan,
+            workerCount: max(1, configuration.workerCount),
             folderStructure: configuration.folderStructure,
             onEvent: { continuation.yield($0) }
         )
@@ -550,6 +552,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             runLogger: runLogger,
             status: .pending,
             orderByInsertion: true,
+            maxConcurrentCopies: Self.maxConcurrentCopies(for: configuration),
             observer: TransferExecutionObserver(
                 onPhaseStarted: { total, _ in
                     continuation.yield(.phaseStarted(phase: .copy, total: total))
@@ -649,6 +652,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             runLogger: runLogger,
             status: .pending,
             orderByInsertion: true,
+            maxConcurrentCopies: Self.maxConcurrentCopies(for: configuration),
             observer: TransferExecutionObserver(
                 onPhaseStarted: { total, _ in
                     continuation.yield(.phaseStarted(phase: .copy, total: total))
@@ -707,6 +711,13 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             )
         )
         continuation.finish()
+    }
+
+    private nonisolated static func maxConcurrentCopies(for configuration: RunConfiguration) -> Int {
+        guard configuration.parallelTransferEnabled else {
+            return 1
+        }
+        return min(max(1, configuration.workerCount), 4)
     }
 
     /// Emits the summary events that follow the planner walk.

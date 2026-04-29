@@ -122,10 +122,11 @@ private struct PerformanceSettingsTab: View {
                 }
 
                 Toggle("Use Cached Destination Scan", isOn: $preferencesStore.useFastDestinationScan)
+                Toggle("Parallel Transfers", isOn: $preferencesStore.parallelTransferEnabled)
             } header: {
                 Text("Throughput")
             } footer: {
-                Text("More worker threads can improve throughput on faster storage. Cached destination scanning speeds up repeated runs by reading the existing index instead of rebuilding it every time.")
+                Text("More worker threads can improve throughput on faster storage. Cached destination scanning speeds up repeated runs by reading the existing index. Parallel transfers are off by default and only affect future transfer runs.")
             }
 
             Section {

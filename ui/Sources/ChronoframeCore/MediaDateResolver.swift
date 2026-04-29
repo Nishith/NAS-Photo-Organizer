@@ -158,7 +158,7 @@ public struct NativeMediaMetadataDateReader: MediaMetadataDateReading {
         if
             let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any],
             let rawValue = exif[kCGImagePropertyExifDateTimeOriginal] as? String,
-            let parsed = parseImagePropertyDate(rawValue)
+            let parsed = Self.parseImagePropertyDate(rawValue)
         {
             return parsed
         }
@@ -166,7 +166,7 @@ public struct NativeMediaMetadataDateReader: MediaMetadataDateReading {
         if
             let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any],
             let rawValue = tiff[kCGImagePropertyTIFFDateTime] as? String,
-            let parsed = parseImagePropertyDate(rawValue)
+            let parsed = Self.parseImagePropertyDate(rawValue)
         {
             return parsed
         }
@@ -182,7 +182,7 @@ public struct NativeMediaMetadataDateReader: MediaMetadataDateReading {
         try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
     }
 
-    private func parseImagePropertyDate(_ rawValue: String) -> Date? {
+    static func parseImagePropertyDate(_ rawValue: String) -> Date? {
         for formatter in dateFormatters {
             if let date = formatter.date(from: rawValue) {
                 return date
@@ -191,7 +191,7 @@ public struct NativeMediaMetadataDateReader: MediaMetadataDateReading {
         return nil
     }
 
-    private var dateFormatters: [DateFormatter] {
+    private static var dateFormatters: [DateFormatter] {
         [
             Self.exifFormatter,
             Self.isoLikeFormatter,
@@ -225,12 +225,35 @@ public struct FileDateResolver: Sendable {
     }
 
     public func resolveDate(for path: String) -> Date? {
+        resolveDate(for: path, precomputedPhotoMetadataDate: nil, shouldReadPhotoMetadata: true)
+    }
+
+    func resolveDate(for path: String, precomputedPhotoMetadataDate: Date?) -> Date? {
+        resolveDate(
+            for: path,
+            precomputedPhotoMetadataDate: precomputedPhotoMetadataDate,
+            shouldReadPhotoMetadata: !(metadataReader is NativeMediaMetadataDateReader)
+        )
+    }
+
+    private func resolveDate(
+        for path: String,
+        precomputedPhotoMetadataDate: Date?,
+        shouldReadPhotoMetadata: Bool
+    ) -> Date? {
         let url = URL(fileURLWithPath: path)
 
-        if MediaLibraryRules.isPhotoFile(path: path),
-           let metadataDate = metadataReader.photoMetadataDate(at: url),
-           !DateClassification.isUnknown(metadataDate) {
-            return metadataDate
+        if MediaLibraryRules.isPhotoFile(path: path) {
+            if let precomputedPhotoMetadataDate,
+               !DateClassification.isUnknown(precomputedPhotoMetadataDate) {
+                return precomputedPhotoMetadataDate
+            }
+
+            if shouldReadPhotoMetadata,
+               let metadataDate = metadataReader.photoMetadataDate(at: url),
+               !DateClassification.isUnknown(metadataDate) {
+                return metadataDate
+            }
         }
 
         if let filenameDate = FilenameDateParser.parse(from: path) {
