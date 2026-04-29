@@ -644,6 +644,15 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             return
         }
 
+        // The Run screen's Timeline reads buckets from `metrics.dateHistogram`,
+        // which is populated by this event. The fresh-transfer path emits it
+        // from the planner result; on resume there's no planner run, so we
+        // reconstruct it from the persisted job queue.
+        let resumedHistogram = try resumeDateHistogram(database: database)
+        if !resumedHistogram.isEmpty {
+            continuation.yield(.dateHistogram(buckets: resumedHistogram))
+        }
+
         let errorCounter = IssueCounter()
         let executionResult = try transferExecutor.executeQueuedJobs(
             database: database,
@@ -704,13 +713,24 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                         failedCount: executionResult.failedCount,
                         errorCount: errorCounter.value,
                         bytesCopied: executionResult.bytesCopied,
-                        bytesTotal: executionResult.bytesTotal
+                        bytesTotal: executionResult.bytesTotal,
+                        dateHistogram: resumedHistogram
                     ),
                     artifacts: executionResult.artifacts
                 )
             )
         )
         continuation.finish()
+    }
+
+    private nonisolated static func resumeDateHistogram(
+        database: OrganizerDatabase
+    ) throws -> [DateHistogramBucket] {
+        let pendingJobs = try database.loadQueuedJobs(status: .pending, orderByInsertion: true)
+        return CopyPlanBuilder.dateHistogram(
+            fromDestinationPaths: pendingJobs.lazy.map { $0.destinationPath },
+            namingRules: .pythonReference
+        )
     }
 
     private nonisolated static func maxConcurrentCopies(for configuration: RunConfiguration) -> Int {

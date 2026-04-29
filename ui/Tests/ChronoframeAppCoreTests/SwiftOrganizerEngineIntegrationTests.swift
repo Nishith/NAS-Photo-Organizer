@@ -323,11 +323,22 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
 
         XCTAssertEqual(Self.render(events), [
             "startup",
+            "dateHistogram:1",
             "phaseStarted:copy",
             "phaseProgress:copy:1/1",
             "phaseCompleted:copy",
             "complete:finished",
         ])
+
+        let histogramBuckets = events.compactMap { event -> [DateHistogramBucket]? in
+            if case let .dateHistogram(buckets) = event { return buckets }
+            return nil
+        }
+        XCTAssertEqual(
+            histogramBuckets,
+            [[DateHistogramBucket(key: "2023-06", plannedCount: 1)]],
+            "Resume must reconstruct the source-timeline histogram from the persisted queue so the Run screen's Timeline panel renders bars instead of the empty 'Scanning source' state."
+        )
 
         guard case let .complete(summary)? = events.last else {
             return XCTFail("Expected completion summary")
@@ -337,6 +348,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
         XCTAssertEqual(summary.metrics.plannedCount, 1)
         XCTAssertEqual(summary.metrics.copiedCount, 1)
         XCTAssertEqual(summary.metrics.failedCount, 0)
+        XCTAssertEqual(summary.metrics.dateHistogram, [DateHistogramBucket(key: "2023-06", plannedCount: 1)])
 
         let resumedFileURL = destinationURL.appendingPathComponent("2023/06/15/2023-06-15_001.jpg")
         XCTAssertTrue(FileManager.default.fileExists(atPath: resumedFileURL.path))

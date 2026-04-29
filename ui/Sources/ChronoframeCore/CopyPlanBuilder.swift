@@ -262,6 +262,62 @@ public enum CopyPlanBuilder {
         }
     }
 
+    /// Reconstructs a `[DateHistogramBucket]` from the destination filenames of
+    /// queued copy jobs. Used by the resume path, which restarts a previously
+    /// interrupted transfer straight from the persisted job queue (no planner
+    /// run, so `PlannedTransfer.dateBucket` is unavailable).
+    ///
+    /// Planner-built filenames carry the bucket in their prefix:
+    /// `YYYY-MM-DD_<seq>.<ext>` for dated files and
+    /// `<unknownFilenamePrefix><seq>.<ext>` for undated ones (see
+    /// `PlanningPathBuilder.buildDestinationPath`).
+    public static func dateHistogram(
+        fromDestinationPaths paths: some Sequence<String>,
+        namingRules: PlannerNamingRules
+    ) -> [DateHistogramBucket] {
+        var countsByBucket: [String: Int] = [:]
+        for path in paths {
+            guard let key = histogramKey(forDestinationPath: path, namingRules: namingRules) else {
+                continue
+            }
+            countsByBucket[key, default: 0] += 1
+        }
+
+        return countsByBucket.keys.sorted(by: histogramSort).map { key in
+            DateHistogramBucket(key: key, plannedCount: countsByBucket[key] ?? 0)
+        }
+    }
+
+    static func histogramKey(
+        forDestinationPath path: String,
+        namingRules: PlannerNamingRules
+    ) -> String? {
+        let filename = (path as NSString).lastPathComponent
+        if filename.hasPrefix(namingRules.unknownFilenamePrefix) {
+            return "Unknown"
+        }
+        // Expect "YYYY-MM-DD_..." — 10 chars of date, then '_'.
+        guard filename.count >= 11 else { return nil }
+        let underscoreIndex = filename.index(filename.startIndex, offsetBy: 10)
+        guard filename[underscoreIndex] == "_" else { return nil }
+        let datePart = filename[filename.startIndex..<underscoreIndex]
+        guard isISODayString(datePart) else { return nil }
+        return String(datePart.prefix(7))
+    }
+
+    private static func isISODayString(_ value: Substring) -> Bool {
+        guard value.count == 10 else { return false }
+        for (offset, char) in value.enumerated() {
+            switch offset {
+            case 4, 7:
+                if char != "-" { return false }
+            default:
+                if !char.isASCII || !char.isNumber { return false }
+            }
+        }
+        return true
+    }
+
     static func plannedSequenceWidth(
         existingMaxSequence: Int,
         newItemCount: Int,
