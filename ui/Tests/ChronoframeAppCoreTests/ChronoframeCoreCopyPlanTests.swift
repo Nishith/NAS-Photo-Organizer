@@ -181,6 +181,52 @@ final class ChronoframeCoreCopyPlanTests: XCTestCase {
         )
     }
 
+    func testDateHistogramFromDestinationPathsAggregatesByYearMonth() {
+        let buckets = CopyPlanBuilder.dateHistogram(
+            fromDestinationPaths: [
+                "/dest/2026/02/01/2026-02-01_001.jpg",
+                "/dest/2026/02/14/2026-02-14_001.mov",
+                "/dest/2026/01/31/2026-01-31_001.jpg",
+                "/dest/Unknown_Date/Unknown_001.jpg",
+                "/dest/Duplicate/2026/02/14/2026-02-14_001.mov",
+            ],
+            namingRules: .pythonReference
+        )
+
+        XCTAssertEqual(
+            buckets,
+            [
+                DateHistogramBucket(key: "2026-01", plannedCount: 1),
+                DateHistogramBucket(key: "2026-02", plannedCount: 3),
+                DateHistogramBucket(key: "Unknown", plannedCount: 1),
+            ]
+        )
+    }
+
+    func testDateHistogramFromDestinationPathsIgnoresUnrecognizedFilenames() {
+        let buckets = CopyPlanBuilder.dateHistogram(
+            fromDestinationPaths: [
+                "/dest/legacy/random_name.jpg",
+                "/dest/2024-bad/notadate_001.jpg",
+                "/dest/2024/03/15/2024-03-15_001.jpg",
+            ],
+            namingRules: .pythonReference
+        )
+
+        XCTAssertEqual(
+            buckets,
+            [DateHistogramBucket(key: "2024-03", plannedCount: 1)]
+        )
+    }
+
+    func testDateHistogramFromDestinationPathsReturnsEmptyForEmptyInput() {
+        let buckets = CopyPlanBuilder.dateHistogram(
+            fromDestinationPaths: [String](),
+            namingRules: .pythonReference
+        )
+        XCTAssertEqual(buckets, [])
+    }
+
     func testBuildCountsHashErrorsWithoutPlanningThem() {
         let result = CopyPlanBuilder.build(
             sourceFiles: [
