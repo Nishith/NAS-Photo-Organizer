@@ -41,6 +41,7 @@ class CacheDB:
                                   hash TEXT,
                                   status TEXT
                                )''')
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_copyjobs_status ON CopyJobs(status)")
             self.conn.commit()
 
     def get_cache_dict(self, type_id):
@@ -86,4 +87,3 @@ class CacheDB:
         with self._lock:
             self.conn.execute("DELETE FROM CopyJobs")
             self.conn.commit()
-

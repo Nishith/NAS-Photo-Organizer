@@ -420,6 +420,8 @@ class TestCacheDB(TempDirMixin, unittest.TestCase):
                 ("status", "TEXT", 0),
             ],
         )
+        copy_jobs_indexes = db.conn.execute("PRAGMA index_list(CopyJobs);").fetchall()
+        self.assertIn("idx_copyjobs_status", [row[1] for row in copy_jobs_indexes])
 
         db.close()
 
