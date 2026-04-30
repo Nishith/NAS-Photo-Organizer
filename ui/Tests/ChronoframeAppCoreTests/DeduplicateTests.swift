@@ -203,6 +203,89 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertEqual(requests.countsByPath, ["/dest/a.jpg": 1, "/dest/b.jpg": 1, "/dest/c.jpg": 1])
     }
 
+    func testBurstModeOffClustersFarApartVisuallySimilarPairs() {
+        let baseDate = Date(timeIntervalSinceReferenceDate: 0)
+        let print1 = Data([1, 2, 3])
+        let print2 = Data([4, 5, 6])
+        let candidates = [
+            candidate(path: "/dest/a.jpg", captureDate: baseDate, dhash: 0xAAAA, featurePrintData: print1, qualityScore: 0.6),
+            candidate(path: "/dest/b.jpg", captureDate: baseDate.addingTimeInterval(36_000), dhash: 0xAAAA, featurePrintData: print2, qualityScore: 0.5),
+        ]
+        let configBurstOn = DeduplicateConfiguration(
+            destinationPath: "/dest",
+            timeWindowSeconds: 30,
+            burstModeEnabled: true,
+            similarityThreshold: 1.0,
+            dhashHammingThreshold: 5
+        )
+        let configBurstOff = DeduplicateConfiguration(
+            destinationPath: "/dest",
+            timeWindowSeconds: 30,
+            burstModeEnabled: false,
+            similarityThreshold: 1.0,
+            dhashHammingThreshold: 5
+        )
+
+        let burstOn = DuplicateClusterer.cluster(
+            candidates: candidates,
+            configuration: configBurstOn,
+            featurePrintDistance: { _, _ in 0.1 }
+        )
+        XCTAssertTrue(burstOn.isEmpty, "Far-apart pair must not cluster while burst mode is on")
+
+        let burstOff = DuplicateClusterer.cluster(
+            candidates: candidates,
+            configuration: configBurstOff,
+            featurePrintDistance: { _, _ in 0.1 }
+        )
+        XCTAssertEqual(burstOff.count, 1)
+        XCTAssertEqual(burstOff.first?.kind, .nearDuplicate)
+        XCTAssertEqual(burstOff.first?.members.count, 2)
+    }
+
+    func testBurstModeOffStillRespectsDhashThreshold() {
+        let baseDate = Date(timeIntervalSinceReferenceDate: 0)
+        let candidates = [
+            candidate(path: "/dest/a.jpg", captureDate: baseDate, dhash: 0x0000),
+            candidate(path: "/dest/b.jpg", captureDate: baseDate.addingTimeInterval(36_000), dhash: 0xFFFF),
+        ]
+        let config = DeduplicateConfiguration(
+            destinationPath: "/dest",
+            timeWindowSeconds: 30,
+            burstModeEnabled: false,
+            dhashHammingThreshold: 4
+        )
+
+        let clusters = DuplicateClusterer.cluster(
+            candidates: candidates,
+            configuration: config,
+            featurePrintDistance: { _, _ in 0.0 }
+        )
+        XCTAssertTrue(clusters.isEmpty, "dHash pre-filter must still reject visually-distant pairs in burst-off mode")
+    }
+
+    func testBurstModeOffIncludesUndatedCandidates() {
+        let baseDate = Date(timeIntervalSinceReferenceDate: 0)
+        let candidates = [
+            candidate(path: "/dest/undated.jpg", captureDate: nil, dhash: 0xAAAA, qualityScore: 0.6),
+            candidate(path: "/dest/dated.jpg", captureDate: baseDate, dhash: 0xAAAA, qualityScore: 0.5),
+        ]
+        let config = DeduplicateConfiguration(
+            destinationPath: "/dest",
+            timeWindowSeconds: 30,
+            burstModeEnabled: false,
+            dhashHammingThreshold: 5
+        )
+
+        let clusters = DuplicateClusterer.cluster(
+            candidates: candidates,
+            configuration: config,
+            featurePrintDistance: { _, _ in nil }
+        )
+        XCTAssertEqual(clusters.count, 1, "Undated candidates must participate in burst-off scans")
+        XCTAssertEqual(Set(clusters.first?.members.map(\.path) ?? []), ["/dest/undated.jpg", "/dest/dated.jpg"])
+    }
+
     func testExactDuplicateClusterEmits() {
         let identity = FileIdentity(size: 100, digest: "deadbeef")
         let candidates = [

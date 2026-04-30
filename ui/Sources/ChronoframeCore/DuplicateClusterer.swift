@@ -33,17 +33,23 @@ public enum DuplicateClusterer {
         guard sorted.count > 1 else { return [] }
 
         var unionFind = UnionFind(count: sorted.count)
+        let burstMode = configuration.burstModeEnabled
         let timeWindow = TimeInterval(configuration.timeWindowSeconds)
         let defaultDistanceCache = VisionFeaturePrintDistanceCache()
         let featurePrintCache = FeaturePrintDataCache(provider: featurePrintDataProvider)
 
         for i in 0..<sorted.count {
             let lhs = sorted[i]
-            guard let lhsDate = lhs.captureDate, let lhsHash = lhs.dhash else { continue }
+            guard let lhsHash = lhs.dhash else { continue }
+            if burstMode, lhs.captureDate == nil { continue }
             for j in (i + 1)..<sorted.count {
                 let rhs = sorted[j]
-                guard let rhsDate = rhs.captureDate else { break }
-                if rhsDate.timeIntervalSince(lhsDate) > timeWindow { break }
+                if burstMode,
+                   let lhsDate = lhs.captureDate,
+                   let rhsDate = rhs.captureDate,
+                   rhsDate.timeIntervalSince(lhsDate) > timeWindow {
+                    break
+                }
                 guard let rhsHash = rhs.dhash else { continue }
 
                 if PerceptualHash.hammingDistance(lhsHash, rhsHash) > configuration.dhashHammingThreshold {
