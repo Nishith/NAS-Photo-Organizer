@@ -50,8 +50,14 @@ public enum DedupeSimilarityPreset: String, CaseIterable, Sendable, Codable, Ide
 public struct DeduplicateConfiguration: Equatable, Sendable {
     public var destinationPath: String
     /// Photos must be taken within this many seconds of each other to be
-    /// considered for the same near-duplicate cluster.
+    /// considered for the same near-duplicate cluster. Only consulted when
+    /// `burstModeEnabled` is true.
     public var timeWindowSeconds: Int
+    /// When true, only candidates within `timeWindowSeconds` of each other
+    /// are compared (today's behavior — fast, focused on burst sequences).
+    /// When false, every candidate in the destination is compared against
+    /// every other candidate, ignoring capture-date proximity.
+    public var burstModeEnabled: Bool
     /// Vision feature-print distance threshold. Lower = stricter (more similar
     /// required to cluster). VNFeaturePrintObservation distances are
     /// unbounded but typically fall in 0.0–2.0 for natural photos.
@@ -67,6 +73,7 @@ public struct DeduplicateConfiguration: Equatable, Sendable {
     public init(
         destinationPath: String,
         timeWindowSeconds: Int = 30,
+        burstModeEnabled: Bool = true,
         similarityThreshold: Double = 0.35,
         dhashHammingThreshold: Int = 10,
         treatRawJpegPairsAsUnit: Bool = true,
@@ -76,6 +83,7 @@ public struct DeduplicateConfiguration: Equatable, Sendable {
     ) {
         self.destinationPath = destinationPath
         self.timeWindowSeconds = timeWindowSeconds
+        self.burstModeEnabled = burstModeEnabled
         self.similarityThreshold = similarityThreshold
         self.dhashHammingThreshold = dhashHammingThreshold
         self.treatRawJpegPairsAsUnit = treatRawJpegPairsAsUnit

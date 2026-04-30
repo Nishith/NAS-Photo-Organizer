@@ -61,6 +61,10 @@ public final class PreferencesStore: ObservableObject {
         didSet { persist(dedupeTimeWindowSeconds, key: "dedupeTimeWindowSeconds") }
     }
 
+    @Published public var dedupeBurstModeEnabled: Bool {
+        didSet { persist(dedupeBurstModeEnabled, key: "dedupeBurstModeEnabled") }
+    }
+
     @Published public var dedupeSimilarityPreset: DedupeSimilarityPreset {
         didSet { persist(dedupeSimilarityPreset.rawValue, key: "dedupeSimilarityPreset") }
     }
@@ -95,6 +99,7 @@ public final class PreferencesStore: ObservableObject {
         let storedStructure = defaults.string(forKey: "folderStructure").flatMap(FolderStructure.init(rawValue:))
         self.folderStructure = storedStructure ?? .yyyyMMDD
         self.dedupeTimeWindowSeconds = defaults.object(forKey: "dedupeTimeWindowSeconds") as? Int ?? 30
+        self.dedupeBurstModeEnabled = defaults.object(forKey: "dedupeBurstModeEnabled") as? Bool ?? true
         let storedPreset = defaults.string(forKey: "dedupeSimilarityPreset").flatMap(DedupeSimilarityPreset.init(rawValue:))
         self.dedupeSimilarityPreset = storedPreset ?? .balanced
         self.dedupeTreatRawJpegPairsAsUnit = defaults.object(forKey: "dedupeTreatRawJpegPairsAsUnit") as? Bool ?? true
@@ -107,6 +112,7 @@ public final class PreferencesStore: ObservableObject {
         DeduplicateConfiguration(
             destinationPath: destinationPath,
             timeWindowSeconds: dedupeTimeWindowSeconds,
+            burstModeEnabled: dedupeBurstModeEnabled,
             similarityThreshold: dedupeSimilarityPreset.similarityThreshold,
             dhashHammingThreshold: dedupeSimilarityPreset.dhashHammingThreshold,
             treatRawJpegPairsAsUnit: dedupeTreatRawJpegPairsAsUnit,

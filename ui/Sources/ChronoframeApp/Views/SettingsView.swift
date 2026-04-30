@@ -148,6 +148,8 @@ private struct DeduplicateSettingsTab: View {
     var body: some View {
         Form {
             Section {
+                Toggle("Burst mode", isOn: $preferencesStore.dedupeBurstModeEnabled)
+
                 Picker("Similarity", selection: $preferencesStore.dedupeSimilarityPreset) {
                     ForEach(DedupeSimilarityPreset.allCases) { preset in
                         Text(preset.title).tag(preset)
@@ -159,16 +161,20 @@ private struct DeduplicateSettingsTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Stepper(value: $preferencesStore.dedupeTimeWindowSeconds, in: 5...600, step: 5) {
-                    LabeledContent("Time Window") {
-                        Text("\(preferencesStore.dedupeTimeWindowSeconds)s")
-                            .monospacedDigit()
+                if preferencesStore.dedupeBurstModeEnabled {
+                    Stepper(value: $preferencesStore.dedupeTimeWindowSeconds, in: 5...600, step: 5) {
+                        LabeledContent("Time Window") {
+                            Text("\(preferencesStore.dedupeTimeWindowSeconds)s")
+                                .monospacedDigit()
+                        }
                     }
                 }
             } header: {
                 Text("Detection")
             } footer: {
-                Text("Photos taken within the time window are compared for similarity. Stricter presets reduce false positives; looser presets surface more potential duplicates.")
+                Text(preferencesStore.dedupeBurstModeEnabled
+                    ? "Burst mode only compares photos taken within the time window — fast, ideal for catching burst sequences and rapid retakes. Stricter similarity presets reduce false positives; looser presets surface more potential duplicates."
+                    : "Without burst mode, every photo in the destination is compared against every other. Slower on large libraries, but catches duplicates that don't share a capture time.")
             }
 
             Section {
