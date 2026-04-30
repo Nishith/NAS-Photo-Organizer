@@ -753,13 +753,15 @@ private final class PlanningSpool {
 
             remainder.append(chunk)
 
-            while let newlineIndex = remainder.firstIndex(of: 0x0A) {
-                let lineData = remainder[..<newlineIndex]
-                remainder.removeSubrange(...newlineIndex)
+            var searchRange: Range<Data.Index> = remainder.startIndex..<remainder.endIndex
+            while let newlineIndex = remainder[searchRange].firstIndex(of: 0x0A) {
+                let lineData = remainder[searchRange.lowerBound..<newlineIndex]
                 if !lineData.isEmpty {
                     try body(String(decoding: lineData, as: UTF8.self))
                 }
+                searchRange = (newlineIndex + 1)..<remainder.endIndex
             }
+            remainder = Data(remainder[searchRange])
         }
 
         if !remainder.isEmpty {

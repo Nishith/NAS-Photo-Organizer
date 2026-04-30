@@ -48,7 +48,7 @@ struct DeduplicateView: View {
             }
         }
         .navigationTitle("Deduplicate")
-        .onDisappear { thumbnailLoader.cancelAll() }
+
         .onChange(of: preferencesStore.dedupeAllowHardDelete) { allowHardDelete in
             if !allowHardDelete {
                 hardDeleteForThisCommit = false

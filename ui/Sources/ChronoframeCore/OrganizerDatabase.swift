@@ -180,6 +180,12 @@ public final class OrganizerDatabase {
             );
             """
         )
+
+        try execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_copyjobs_status ON CopyJobs(status);
+            """
+        )
     }
 
     public func journalMode() throws -> String {

@@ -1,7 +1,7 @@
 import AppKit
 import CoreGraphics
 import ImageIO
-import QuickLookThumbnailing
+@preconcurrency import QuickLookThumbnailing
 import UniformTypeIdentifiers
 
 /// Single source of truth for QuickLook-backed thumbnail rendering.
@@ -24,10 +24,14 @@ enum ThumbnailRenderer {
             scale: scale,
             representationTypes: .thumbnail
         )
-        return await withCheckedContinuation { continuation in
-            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { rep, _ in
-                continuation.resume(returning: rep?.cgImage)
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { rep, _ in
+                    continuation.resume(returning: rep?.cgImage)
+                }
             }
+        } onCancel: {
+            QLThumbnailGenerator.shared.cancel(request)
         }
     }
 
