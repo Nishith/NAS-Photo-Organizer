@@ -2,6 +2,7 @@
 import ChronoframeAppCore
 #endif
 import AppKit
+import ImageIO
 import SwiftUI
 
 /// Right pane: large preview of the focused photo plus the cluster member
@@ -36,15 +37,10 @@ struct ClusterDetailPane: View {
         let focused = focusedMember(in: cluster)
 
         VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: DesignTokens.Spacing.lg) {
-                preview(for: focused)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if let focused {
-                    metadataPanel(for: focused, cluster: cluster)
-                        .frame(minWidth: 200, idealWidth: 240, maxWidth: 260)
-                }
+            ViewThatFits(in: .horizontal) {
+                detailContentWide(focused: focused, cluster: cluster)
+                detailContentCompact(focused: focused, cluster: cluster)
             }
-            .padding(DesignTokens.Spacing.lg)
 
             Divider()
 
@@ -69,6 +65,30 @@ struct ClusterDetailPane: View {
             }
             .padding(.vertical, DesignTokens.Spacing.sm)
         }
+    }
+
+    private func detailContentWide(focused: PhotoCandidate?, cluster: DuplicateCluster) -> some View {
+        HStack(alignment: .top, spacing: DesignTokens.Spacing.lg) {
+            preview(for: focused)
+                .frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
+            if let focused {
+                metadataPanel(for: focused, cluster: cluster)
+                    .frame(minWidth: 200, idealWidth: 240, maxWidth: 260)
+                    .layoutPriority(1)
+            }
+        }
+        .padding(DesignTokens.Spacing.lg)
+    }
+
+    private func detailContentCompact(focused: PhotoCandidate?, cluster: DuplicateCluster) -> some View {
+        VStack(spacing: DesignTokens.Spacing.md) {
+            preview(for: focused)
+                .frame(maxWidth: .infinity, minHeight: 200, maxHeight: .infinity)
+            if let focused {
+                metadataPanel(for: focused, cluster: cluster)
+            }
+        }
+        .padding(DesignTokens.Spacing.md)
     }
 
     private func preview(for member: PhotoCandidate?) -> some View {
@@ -229,18 +249,33 @@ private struct LargePreviewImage: View {
         .task(id: path) {
             image = nil
             failed = false
-            let cgImage = await ThumbnailRenderer.cgImage(
-                for: URL(fileURLWithPath: path),
-                size: CGSize(width: 1200, height: 1200),
-                scale: NSScreen.main?.backingScaleFactor ?? 2.0
-            )
+            let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+            let loaded = await Self.loadPreviewImage(at: path, scale: scale)
             guard !Task.isCancelled else { return }
-            guard let cgImage else {
+            guard let loaded else {
                 failed = true
                 return
             }
-            let pixelSize = CGSize(width: cgImage.width, height: cgImage.height)
-            image = NSImage(cgImage: cgImage, size: pixelSize)
+            image = loaded
         }
+    }
+
+    private nonisolated static func loadPreviewImage(at path: String, scale: CGFloat) async -> NSImage? {
+        let url = URL(fileURLWithPath: path)
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            return nil
+        }
+        let maxPixelSize = Int(1200 * scale)
+        let options: [CFString: Any] = [
+            kCGImageSourceShouldCache: false,
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        let pixelSize = CGSize(width: cgImage.width, height: cgImage.height)
+        return NSImage(cgImage: cgImage, size: pixelSize)
     }
 }
