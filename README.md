@@ -11,7 +11,7 @@ Most photo libraries do not become messy all at once. They pile up slowly across
 
 Chronoframe gives you a calm, reversible way to turn that sprawl into a clean library. It shows you what it plans to do before it copies anything, helps you fix uncertain dates and duplicate photos, and keeps your original files untouched. You stay in control of the decisions that matter, while Chronoframe handles the boring, error-prone work of sorting, naming, checking, and keeping a receipt for what changed.
 
-| ![Chronoframe setup overview](docs/screenshots/ui-setup-overview.png) | ![Run preview with timeline](docs/screenshots/ui-run-preview.png) |
+| ![Chronoframe setup overview](docs/screenshots/ui-organize-setup-2026-05.png) | ![Run preview with timeline](docs/screenshots/ui-organize-run-preview-2026-05.png) |
 | :---: | :---: |
 | Organize / Setup - choose source, destination, and layout | Organize / Run - preview, review, then transfer |
 
