@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parity tests for checked-in planning fixtures."""
+"""Parity tests for checked-in execution fixtures."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from pathlib import Path
 
 
 def _load_generator_module():
-    repo_root = Path(__file__).resolve().parent
-    module_path = repo_root / "tests" / "fixtures" / "parity" / "generate_planning_golden.py"
-    spec = importlib.util.spec_from_file_location("generate_planning_golden", module_path)
+    repo_root = Path(__file__).resolve().parents[1]
+    module_path = repo_root / "tests" / "fixtures" / "parity" / "generate_execution_golden.py"
+    spec = importlib.util.spec_from_file_location("generate_execution_golden", module_path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     sys.modules[spec.name] = module
@@ -24,8 +24,8 @@ def _load_generator_module():
 generator = _load_generator_module()
 
 
-class PlanningParityFixtureTests(unittest.TestCase):
-    def test_checked_in_golden_outputs_match_current_python_engine(self):
+class ExecutionParityFixtureTests(unittest.TestCase):
+    def test_checked_in_execution_golden_outputs_match_current_python_engine(self):
         for scenario_dir in generator.scenario_dirs():
             with self.subTest(scenario=scenario_dir.name):
                 expected_path = scenario_dir / "expected.json"

@@ -347,23 +347,23 @@ python3 ui/Packaging/validate_app_bundle.py ui/build/Chronoframe.app
 ### Python tests
 
 ```bash
-python3 -m unittest test_chronoframe test_ui_build test_ui_packaging -v
+python3 -m unittest discover -s tests -t . -v
 ```
 
 Python coverage:
 
 ```bash
-python3 -m coverage run -m unittest test_chronoframe test_ui_build test_ui_packaging -v
-python3 -m coverage report -m --omit "test_*"
+python3 -m coverage run -m unittest discover -s tests -t . -v
+python3 -m coverage report -m --omit "tests/*"
 ```
 
 Additional parity and benchmark suites:
 
 | File | Focus |
 | :--- | :--- |
-| `test_parity_fixtures.py` | Swift and Python dry-run planning parity |
-| `test_execution_parity_fixtures.py` | Swift and Python transfer execution parity |
-| `test_benchmarks.py` | Hashing and scanning microbenchmarks |
+| `tests/test_parity_fixtures.py` | Swift and Python dry-run planning parity |
+| `tests/test_execution_parity_fixtures.py` | Swift and Python transfer execution parity |
+| `tests/test_benchmarks.py` | Hashing and scanning microbenchmarks |
 
 Before committing:
 

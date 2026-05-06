@@ -42,7 +42,7 @@ Pull requests should:
 Run the checks that match your change:
 
 ```bash
-python3 -m unittest test_chronoframe test_ui_build test_ui_packaging test_parity_fixtures test_execution_parity_fixtures test_benchmarks -v
+python3 -m unittest discover -s tests -t . -v
 ```
 
 ```bash

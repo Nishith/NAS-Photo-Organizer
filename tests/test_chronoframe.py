@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Comprehensive test suite for Chronoframe.
-Run: python3 -m pytest test_chronoframe.py -v
-  or: python3 -m unittest test_chronoframe.py -v
+Run: python3 -m pytest tests/test_chronoframe.py -v
+  or: python3 -m unittest tests.test_chronoframe -v
 """
 
 import errno
@@ -23,6 +23,8 @@ from datetime import datetime
 from unittest.mock import patch, MagicMock
 from collections import defaultdict
 import subprocess
+
+REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, MofNCompleteColumn
@@ -65,7 +67,7 @@ class TempDirMixin:
 
 
 def load_wrapper_module():
-    wrapper_path = os.path.join(os.path.dirname(__file__), "chronoframe.py")
+    wrapper_path = os.path.join(REPO_ROOT, "chronoframe.py")
     spec = importlib.util.spec_from_file_location("chronoframe_wrapper", wrapper_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -1961,7 +1963,7 @@ class TestWrapperDependencyPreflight(unittest.TestCase):
         mock_check_call.assert_called_once()
 
     def test_main_guard_check_deps_json_outputs_status(self):
-        wrapper_path = os.path.join(os.path.dirname(__file__), "chronoframe.py")
+        wrapper_path = os.path.join(REPO_ROOT, "chronoframe.py")
 
         with patch('sys.argv', [wrapper_path, '--check-deps-json']):
             with patch('importlib.util.find_spec', return_value=object()):
@@ -1973,7 +1975,7 @@ class TestWrapperDependencyPreflight(unittest.TestCase):
         mock_print.assert_called_once()
 
     def test_main_guard_imports_backend_entrypoint_after_dependency_check(self):
-        wrapper_path = os.path.join(os.path.dirname(__file__), "chronoframe.py")
+        wrapper_path = os.path.join(REPO_ROOT, "chronoframe.py")
         fake_main = MagicMock()
         fake_module = types.SimpleNamespace(main=fake_main)
 
