@@ -13,7 +13,7 @@ Chronoframe gives you a calm, reversible way to turn that sprawl into a clean li
 
 | ![Chronoframe setup overview](docs/screenshots/ui-setup-overview.png) | ![Run preview with timeline](docs/screenshots/ui-run-preview.png) |
 | :---: | :---: |
-| Setup - choose source, destination, and layout | Run - preview, review, then transfer |
+| Organize / Setup - choose source, destination, and layout | Organize / Run - preview, review, then transfer |
 
 ## Who It Helps
 
@@ -25,9 +25,10 @@ It is also built for caution. Chronoframe does not ask you to trust a black box.
 
 | Workspace | What it does |
 | :--- | :--- |
-| **Organize** | Turn a messy folder into a clean date-based library, with a preview before anything is copied |
-| **Review** | Fix uncertain dates, name events, and understand skipped files before transfer |
-| **Health** | See what needs attention in the destination library, such as unknown dates, duplicate folders, or interrupted work |
+| **Organize / Setup** | Choose the source, destination, folder layout, and saved setup |
+| **Organize / Run** | Preview a copy plan, review issues, then transfer when the plan looks right |
+| **Organize / Health** | See what needs attention in the destination library, such as unknown dates, duplicate folders, or interrupted work |
+| **Organize / History** | Inspect reports, receipts, logs, and safe revert actions |
 | **Deduplicate** | Find exact copies and similar shots, then choose what to keep |
 | **Profiles** | Save your usual source and destination folders for repeat cleanup sessions |
 
@@ -54,12 +55,12 @@ If macOS blocks the app on first launch, right-click `Chronoframe.app`, choose *
 
 ## First Run
 
-1. Open **Organize > Setup**.
+1. Open **Organize**, then select **Setup**.
 2. Choose a source folder.
 3. Choose a destination folder.
 4. Pick a folder layout.
 5. Click **Preview**.
-6. Open **Run > Review** to inspect uncertain items, dates, event names, duplicates, and skipped items.
+6. Select **Run**, then use the Review tab to inspect uncertain items, dates, event names, duplicates, and skipped items.
 7. Click **Transfer** once the preview is current and looks right.
 
 If you edit a date or event name in Review, Chronoframe saves that correction to `.organize_cache.db` and marks the preview stale. Rebuild the preview before transfer so the approved plan and actual transfer stay identical.
@@ -123,11 +124,11 @@ Health cards cover:
 - History & Revert Safety from audit receipts.
 - Structure Drift for destination files that do not match the selected Chronoframe layout.
 
-Recommended actions can jump to Preview, Review Unknown Dates, Deduplicate, Run History, Reorganize Destination, or Refresh Destination Index.
+Recommended actions can jump to Preview, Review Unknown Dates, Deduplicate, History, Reorganize Destination, or Refresh Destination Index.
 
 ### History, Revert, And Reorganize
 
-Run History indexes reports, logs, queue databases, transfer audit receipts, and dedupe audit receipts under `.organize_logs/`.
+History indexes reports, logs, queue databases, transfer audit receipts, and dedupe audit receipts under `.organize_logs/`.
 
 Transfer receipts can be reverted from History. Revert is hash-verified and leaves edited or missing files alone. Dedupe receipts can also be restored through the Deduplicate workspace.
 
