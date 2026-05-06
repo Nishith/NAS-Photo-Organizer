@@ -98,6 +98,8 @@ struct DeduplicateView: View {
 
                 destinationCard
 
+                pausedReviewSection
+
                 deduplicateRunHistorySection
 
                 Divider()
@@ -161,6 +163,22 @@ struct DeduplicateView: View {
                 }
             }
             .accessibilityIdentifier("dedupeFolderHistorySection")
+        }
+    }
+
+    @ViewBuilder
+    private var pausedReviewSection: some View {
+        if sessionStore.hasPausedReview {
+            let canResume = canResumePausedReview
+            PausedDeduplicateReviewCard(
+                groupCount: sessionStore.clusters.count,
+                fileCount: sessionStore.pendingDeleteCount,
+                recoverableBytes: sessionStore.totalRecoverableBytes,
+                settingsChanged: !canResume,
+                resume: resumePausedReview,
+                discard: resetDeduplicate
+            )
+            .accessibilityIdentifier("dedupePausedScanSection")
         }
     }
 
@@ -366,10 +384,10 @@ struct DeduplicateView: View {
             .accessibilityHint("Abandons this review and returns to Deduplicate setup")
 
             Button(density.settingsTitle) {
-                abandonReviewAndOpenSettings()
+                pauseReviewAndOpenSettings()
             }
             .accessibilityIdentifier("dedupeReviewSettingsButton")
-            .accessibilityHint("Abandons this review and opens Deduplicate settings")
+            .accessibilityHint("Keeps this scan available and opens Deduplicate settings")
 
             if preferencesStore.dedupeAllowHardDelete {
                 Menu {
@@ -491,6 +509,17 @@ struct DeduplicateView: View {
         preferencesStore.dedupeAllowHardDelete && hardDeleteForThisCommit
     }
 
+    private var currentDeduplicateConfiguration: DeduplicateConfiguration? {
+        let destination = appState.deduplicateDestinationPath
+        guard !destination.isEmpty else { return nil }
+        return preferencesStore.makeDeduplicateConfiguration(destinationPath: destination)
+    }
+
+    private var canResumePausedReview: Bool {
+        guard let configuration = currentDeduplicateConfiguration else { return false }
+        return sessionStore.pausedReviewMatches(configuration: configuration)
+    }
+
     private func startScan() {
         hardDeleteForThisCommit = false
         didOnboardDeduplicate = true
@@ -508,9 +537,15 @@ struct DeduplicateView: View {
         resetDeduplicate()
     }
 
-    private func abandonReviewAndOpenSettings() {
-        abandonReview()
+    private func pauseReviewAndOpenSettings() {
+        sessionStore.pauseReview()
         appState.openSettingsWindow()
+    }
+
+    private func resumePausedReview() {
+        guard canResumePausedReview else { return }
+        sessionStore.resumePausedReview()
+        ensureInitialFocus()
     }
 
     private func formattedDuration(_ seconds: TimeInterval) -> String {
@@ -686,6 +721,104 @@ private struct DeduplicateDestinationCardContent: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
             }
+        }
+    }
+}
+
+private struct PausedDeduplicateReviewCard: View {
+    let groupCount: Int
+    let fileCount: Int
+    let recoverableBytes: Int64
+    let settingsChanged: Bool
+    let resume: () -> Void
+    let discard: () -> Void
+
+    private static let bytesFormatter: ByteCountFormatter = {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB, .useGB]
+        formatter.countStyle = .file
+        return formatter
+    }()
+
+    var body: some View {
+        MeridianSurfaceCard(
+            style: .inner,
+            tint: settingsChanged ? DesignTokens.ColorSystem.statusWarning : DesignTokens.ColorSystem.accentAction
+        ) {
+            ViewThatFits(in: .horizontal) {
+                horizontalLayout
+                verticalLayout
+            }
+        }
+    }
+
+    private var horizontalLayout: some View {
+        HStack(alignment: .center, spacing: 12) {
+            label
+            Spacer(minLength: 16)
+            metrics
+            actions
+        }
+    }
+
+    private var verticalLayout: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            label
+            HStack(alignment: .center, spacing: 12) {
+                metrics
+                Spacer(minLength: 8)
+                actions
+            }
+        }
+    }
+
+    private var label: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: settingsChanged ? "exclamationmark.triangle" : "rectangle.stack")
+                .foregroundStyle(settingsChanged ? DesignTokens.ColorSystem.statusWarning : DesignTokens.ColorSystem.accentAction)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Paused Scan")
+                    .font(.subheadline.weight(.semibold))
+                Text(settingsChanged ? "Settings changed since this scan." : "Ready to review.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var metrics: some View {
+        HStack(spacing: 16) {
+            metric("\(groupCount)", label: groupCount == 1 ? "group" : "groups")
+            metric("\(fileCount)", label: "selected")
+            metric(Self.bytesFormatter.string(fromByteCount: recoverableBytes), label: "recoverable")
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var actions: some View {
+        HStack(spacing: 8) {
+            Button("Discard", role: .destructive) {
+                discard()
+            }
+            Button("Return to Scan") {
+                resume()
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(settingsChanged)
+            .accessibilityIdentifier("dedupeResumePausedScanButton")
+        }
+        .fixedSize()
+    }
+
+    private func metric(_ value: String, label: String) -> some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text(value)
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 }

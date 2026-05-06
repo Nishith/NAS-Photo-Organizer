@@ -93,6 +93,18 @@ public final class DeduplicateSessionStore: ObservableObject {
         currentDeletionPlan().count
     }
 
+    public var hasPausedReview: Bool {
+        status == .idle && !clusters.isEmpty && lastScanConfiguration != nil
+    }
+
+    public var pausedReviewConfiguration: DeduplicateConfiguration? {
+        hasPausedReview ? lastScanConfiguration : nil
+    }
+
+    public func pausedReviewMatches(configuration: DeduplicateConfiguration) -> Bool {
+        pausedReviewConfiguration == configuration
+    }
+
     public func startScan(configuration: DeduplicateConfiguration) {
         cancelStream()
         clusters = []
@@ -225,6 +237,26 @@ public final class DeduplicateSessionStore: ObservableObject {
         decisions = DedupeDecisions(byPath: byPath, hardDelete: decisions.hardDelete)
     }
 
+    public func pauseReview() {
+        guard status == .readyToReview, !clusters.isEmpty else { return }
+        cancelStream()
+        status = .idle
+        currentPhase = nil
+        phaseCompleted = 0
+        phaseTotal = 0
+        activeCommitConfiguration = nil
+    }
+
+    public func resumePausedReview() {
+        guard hasPausedReview else { return }
+        status = .readyToReview
+        currentPhase = nil
+        phaseCompleted = 0
+        phaseTotal = 0
+        commitSummary = nil
+        lastErrorMessage = nil
+    }
+
     public func reset() {
         cancelStream()
         clusters = []
@@ -236,6 +268,7 @@ public final class DeduplicateSessionStore: ObservableObject {
         currentPhase = nil
         phaseCompleted = 0
         phaseTotal = 0
+        lastScanConfiguration = nil
         isHandlingRevert = false
         activeCommitConfiguration = nil
         decisions = DedupeDecisions(byPath: [:], hardDelete: decisions.hardDelete)

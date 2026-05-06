@@ -221,6 +221,80 @@ final class DeduplicateSessionStoreTests: XCTestCase {
         XCTAssertEqual(store.totalRecoverableBytes, 150)
     }
 
+    @MainActor
+    func testPauseReviewPreservesScanAndOnlyResumesForMatchingConfiguration() async throws {
+        let keeper = PhotoCandidate(
+            path: "/dest/keeper.jpg",
+            size: 500,
+            modificationTime: 0,
+            qualityScore: 0.9
+        )
+        let duplicate = PhotoCandidate(
+            path: "/dest/duplicate.jpg",
+            size: 250,
+            modificationTime: 0,
+            qualityScore: 0.4
+        )
+        let cluster = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [keeper, duplicate],
+            suggestedKeeperIDs: [keeper.path],
+            bytesIfPruned: duplicate.size
+        )
+        let store = DeduplicateSessionStore(engine: MockDeduplicateEngine(clusters: [cluster]))
+        let configuration = DeduplicateConfiguration(destinationPath: "/dest", timeWindowSeconds: 25)
+
+        store.startScan(configuration: configuration)
+        _ = await waitForCondition { store.status == .readyToReview }
+        store.setDecision(.keep, forPath: duplicate.path)
+
+        store.pauseReview()
+
+        XCTAssertEqual(store.status, .idle)
+        XCTAssertTrue(store.hasPausedReview)
+        XCTAssertEqual(store.pausedReviewConfiguration, configuration)
+        XCTAssertTrue(store.pausedReviewMatches(configuration: configuration))
+        XCTAssertFalse(store.pausedReviewMatches(configuration: DeduplicateConfiguration(
+            destinationPath: "/dest",
+            timeWindowSeconds: 60
+        )))
+        XCTAssertEqual(store.clusters, [cluster])
+        XCTAssertEqual(store.decisions.byPath[duplicate.path], .keep)
+
+        store.resumePausedReview()
+
+        XCTAssertEqual(store.status, .readyToReview)
+        XCTAssertFalse(store.hasPausedReview)
+        XCTAssertEqual(store.clusters, [cluster])
+        XCTAssertEqual(store.decisions.byPath[duplicate.path], .keep)
+    }
+
+    @MainActor
+    func testResetDiscardsPausedReview() async {
+        let cluster = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [
+                PhotoCandidate(path: "/dest/a.jpg", size: 100, modificationTime: 0, qualityScore: 0.9),
+                PhotoCandidate(path: "/dest/b.jpg", size: 100, modificationTime: 0, qualityScore: 0.4),
+            ],
+            suggestedKeeperIDs: ["/dest/a.jpg"],
+            bytesIfPruned: 100
+        )
+        let store = DeduplicateSessionStore(engine: MockDeduplicateEngine(clusters: [cluster]))
+
+        store.startScan(configuration: DeduplicateConfiguration(destinationPath: "/dest"))
+        _ = await waitForCondition { store.status == .readyToReview }
+        store.pauseReview()
+
+        XCTAssertTrue(store.hasPausedReview)
+
+        store.reset()
+
+        XCTAssertFalse(store.hasPausedReview)
+        XCTAssertNil(store.pausedReviewConfiguration)
+        XCTAssertTrue(store.clusters.isEmpty)
+    }
+
     /// The footer uses the scan-time configuration captured in
     /// `lastScanConfiguration`. Commit must use that same configuration,
     /// even if Settings changed after review began, otherwise the previewed
