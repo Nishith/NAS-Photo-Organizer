@@ -39,6 +39,7 @@ struct ClusterListPane: View {
             }
         }
         .listStyle(.sidebar)
+        .accessibilityIdentifier("dedupeReviewClusterList")
         .onChange(of: focusedClusterID) { newID in
             guard let newID, let cluster = clusters.first(where: { $0.id == newID }) else { return }
             focusedMemberPath = cluster.members.first?.path

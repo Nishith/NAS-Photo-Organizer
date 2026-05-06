@@ -70,6 +70,37 @@ final class DeduplicateStatusViewTests: XCTestCase {
         XCTAssertFalse(hardDeleteDetail.contains("recoverable"))
     }
 
+    func testDeduplicateReviewLayoutSwitchesAtConfiguredBreakpoint() {
+        XCTAssertEqual(
+            DeduplicateReviewLayout.mode(forWidth: DesignTokens.DeduplicateLayout.reviewWideBreakpoint - 1),
+            .compact
+        )
+        XCTAssertEqual(
+            DeduplicateReviewLayout.mode(forWidth: DesignTokens.DeduplicateLayout.reviewWideBreakpoint),
+            .wide
+        )
+        XCTAssertEqual(
+            DeduplicateReviewLayout.mode(forWidth: DesignTokens.DeduplicateLayout.reviewWideBreakpoint + 1),
+            .wide
+        )
+    }
+
+    func testCompactClusterListHeightClampsWithinConfiguredRange() {
+        XCTAssertEqual(
+            DeduplicateReviewLayout.compactClusterListHeight(forAvailableHeight: 300),
+            DesignTokens.DeduplicateLayout.compactClusterListMinHeight,
+            accuracy: 0.5
+        )
+        XCTAssertEqual(
+            DeduplicateReviewLayout.compactClusterListHeight(forAvailableHeight: 2_000),
+            DesignTokens.DeduplicateLayout.compactClusterListMaxHeight,
+            accuracy: 0.5
+        )
+        let middle = DeduplicateReviewLayout.compactClusterListHeight(forAvailableHeight: 700)
+        XCTAssertGreaterThan(middle, DesignTokens.DeduplicateLayout.compactClusterListMinHeight)
+        XCTAssertLessThan(middle, DesignTokens.DeduplicateLayout.compactClusterListMaxHeight)
+    }
+
     func testCompletedStatusCopyKeepsPartialFailuresVisuallySeparate() {
         let copy = DeduplicateView.completedStatusCopy(for: DeduplicateCommitSummary(
             deletedCount: 3,

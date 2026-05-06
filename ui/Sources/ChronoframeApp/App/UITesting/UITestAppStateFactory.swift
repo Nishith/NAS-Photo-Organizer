@@ -22,6 +22,7 @@ enum UITestAppStateFactory {
         let historyStore: HistoryStore
         let engine: MockOrganizerEngine
         let route: AppRoute
+        var deduplicateSessionStore: DeduplicateSessionStore? = nil
 
         switch scenario {
         case .setupReady:
@@ -63,6 +64,22 @@ enum UITestAppStateFactory {
             historyStore = HistoryStore(destinationRoot: setupStore.destinationPath)
             engine = previewReviewEngine(sourcePath: setupStore.sourcePath, destinationPath: setupStore.destinationPath)
             route = .organize(.setup)
+
+        case .deduplicateReviewWide, .deduplicateReviewCompact:
+            setupStore.destinationPath = "/Volumes/Archive/Chronoframe Library"
+            historyStore = HistoryStore(destinationRoot: setupStore.destinationPath)
+            engine = previewReviewEngine(sourcePath: "/Volumes/Card/April Session", destinationPath: setupStore.destinationPath)
+            route = .deduplicate
+            let clusters = sampleDeduplicateClusters()
+            deduplicateSessionStore = DeduplicateSessionStore(engine: MockDeduplicateEngine(
+                clusters: clusters,
+                summary: DeduplicateSummary(
+                    clusterCounts: [.burst: clusters.count],
+                    totalRecoverableBytes: clusters.reduce(Int64(0)) { $0 + $1.bytesIfPruned },
+                    totalCandidatesScanned: clusters.reduce(0) { $0 + $1.members.count },
+                    scanDuration: 4.2
+                )
+            ))
         }
 
         let runSessionStore = RunSessionStore(engine: engine, logStore: runLogStore, historyStore: historyStore)
@@ -83,6 +100,7 @@ enum UITestAppStateFactory {
             runLogStore: runLogStore,
             historyStore: historyStore,
             runSessionStore: runSessionStore,
+            deduplicateSessionStore: deduplicateSessionStore,
             folderAccessService: folderAccessService,
             finderService: finderService,
             profilesRepository: repository,
@@ -95,6 +113,11 @@ enum UITestAppStateFactory {
             Task { @MainActor in
                 await appState.startPreview()
             }
+        }
+        if let deduplicateSessionStore {
+            deduplicateSessionStore.startScan(configuration: preferencesStore.makeDeduplicateConfiguration(
+                destinationPath: setupStore.destinationPath
+            ))
         }
 
         return appState
@@ -206,6 +229,40 @@ enum UITestAppStateFactory {
                 destinationPath: "/Volumes/Archive/Studio"
             ),
         ]
+    }
+
+    private static func sampleDeduplicateClusters() -> [DuplicateCluster] {
+        var clusters: [DuplicateCluster] = []
+        for index in 0..<12 {
+            let kind: ClusterKind = index.isMultiple(of: 3) ? .nearDuplicate : .burst
+            let captureDate = Date(timeIntervalSinceReferenceDate: 763_948_800 + TimeInterval(index * 60))
+
+            var members: [PhotoCandidate] = []
+            for memberIndex in 0..<3 {
+                let sequence = index * 3 + memberIndex
+                let qualityScore = memberIndex == 0 ? 0.95 : 0.72 - Double(memberIndex) * 0.08
+                members.append(PhotoCandidate(
+                    path: "/Volumes/Archive/Chronoframe Library/2007-03-21_\(String(format: "%03d", sequence)).jpg",
+                    size: Int64(memberIndex + 1) * 1_024_000,
+                    modificationTime: 763_948_800,
+                    captureDate: captureDate,
+                    pixelWidth: 3264,
+                    pixelHeight: 2448,
+                    qualityScore: qualityScore,
+                    sharpness: memberIndex == 0 ? 0.88 : 0.62,
+                    faceScore: memberIndex == 0 ? 0.8 : 0.4
+                ))
+            }
+
+            clusters.append(DuplicateCluster(
+                id: UUID(uuidString: "00000000-0000-0000-0000-\(String(format: "%012d", index + 1))") ?? UUID(),
+                kind: kind,
+                members: members,
+                suggestedKeeperIDs: [members[0].id],
+                bytesIfPruned: members.dropFirst().reduce(Int64(0)) { $0 + $1.size }
+            ))
+        }
+        return clusters
     }
 }
 

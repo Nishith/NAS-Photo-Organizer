@@ -71,6 +71,70 @@ final class MockOrganizerEngine: OrganizerEngine {
 }
 
 @MainActor
+final class MockDeduplicateEngine: DeduplicateEngine {
+    var clustersToEmit: [DuplicateCluster]
+    var summary: DeduplicateSummary
+    var commitEvents: [DeduplicateCommitEvent]
+    var lastScanConfiguration: DeduplicateConfiguration?
+    var lastCommitDecisions: DedupeDecisions?
+    var lastCommitClusters: [DuplicateCluster] = []
+    var lastCommitConfiguration: DeduplicateConfiguration?
+
+    init(
+        clusters: [DuplicateCluster] = [],
+        summary: DeduplicateSummary = DeduplicateSummary(),
+        commitEvents: [DeduplicateCommitEvent] = []
+    ) {
+        self.clustersToEmit = clusters
+        self.summary = summary
+        self.commitEvents = commitEvents
+    }
+
+    func scan(_ configuration: DeduplicateConfiguration) throws -> AsyncThrowingStream<DeduplicateEvent, Error> {
+        lastScanConfiguration = configuration
+        let clusters = clustersToEmit
+        let summary = summary
+        return AsyncThrowingStream { continuation in
+            Task { @MainActor in
+                continuation.yield(.startup)
+                for cluster in clusters {
+                    continuation.yield(.clusterDiscovered(cluster))
+                }
+                continuation.yield(.complete(summary))
+                continuation.finish()
+            }
+        }
+    }
+
+    func cancelCurrentScan() {}
+
+    func commit(
+        decisions: DedupeDecisions,
+        clusters: [DuplicateCluster],
+        configuration: DeduplicateConfiguration
+    ) throws -> AsyncThrowingStream<DeduplicateCommitEvent, Error> {
+        lastCommitDecisions = decisions
+        lastCommitClusters = clusters
+        lastCommitConfiguration = configuration
+        let events = commitEvents
+        return AsyncThrowingStream { continuation in
+            Task { @MainActor in
+                for event in events {
+                    continuation.yield(event)
+                }
+                continuation.finish()
+            }
+        }
+    }
+
+    func revert(receiptURL: URL) throws -> AsyncThrowingStream<DeduplicateCommitEvent, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish()
+        }
+    }
+}
+
+@MainActor
 final class MockFolderAccessService: FolderAccessServicing {
     var nextChosenFolder: URL?
     var chooseFolderCalls: [(startingAt: String?, prompt: String)] = []

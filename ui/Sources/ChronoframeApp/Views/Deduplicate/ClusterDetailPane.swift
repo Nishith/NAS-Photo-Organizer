@@ -16,20 +16,23 @@ struct ClusterDetailPane: View {
     @ObservedObject var thumbnailLoader: DedupeThumbnailLoader
 
     var body: some View {
-        if let cluster {
-            VStack(spacing: 0) {
-                detailContent(for: cluster)
+        Group {
+            if let cluster {
+                VStack(spacing: 0) {
+                    detailContent(for: cluster)
+                }
+            } else {
+                VStack(spacing: 12) {
+                    Image(systemName: "rectangle.on.rectangle.angled")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.secondary)
+                    Text("Select a cluster on the left")
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        } else {
-            VStack(spacing: 12) {
-                Image(systemName: "rectangle.on.rectangle.angled")
-                    .font(.system(size: 48))
-                    .foregroundStyle(.secondary)
-                Text("Select a cluster on the left")
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .accessibilityIdentifier("dedupeReviewDetail")
     }
 
     @ViewBuilder
@@ -44,27 +47,50 @@ struct ClusterDetailPane: View {
 
             Divider()
 
-            HStack(spacing: 12) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(cluster.members) { member in
-                            memberThumb(member: member, cluster: cluster)
-                        }
-                    }
-                    .padding(.horizontal, DesignTokens.Spacing.md)
-                }
-
-                Spacer(minLength: 8)
-
-                Button("Accept Suggestion") {
-                    sessionStore.acceptSuggestionsForCluster(cluster)
-                }
-                .fixedSize()
-                .keyboardShortcut(.return, modifiers: [])
-                .padding(.trailing, DesignTokens.Spacing.md)
+            ViewThatFits(in: .horizontal) {
+                memberStripWide(cluster: cluster)
+                memberStripCompact(cluster: cluster)
             }
             .padding(.vertical, DesignTokens.Spacing.sm)
         }
+    }
+
+    private func memberStripWide(cluster: DuplicateCluster) -> some View {
+        HStack(spacing: DesignTokens.Spacing.md) {
+            memberThumbnailStrip(cluster: cluster)
+            acceptSuggestionButton(for: cluster)
+                .padding(.trailing, DesignTokens.Spacing.md)
+        }
+    }
+
+    private func memberStripCompact(cluster: DuplicateCluster) -> some View {
+        VStack(alignment: .trailing, spacing: DesignTokens.Spacing.sm) {
+            memberThumbnailStrip(cluster: cluster)
+            acceptSuggestionButton(for: cluster)
+                .padding(.trailing, DesignTokens.Spacing.md)
+        }
+    }
+
+    private func memberThumbnailStrip(cluster: DuplicateCluster) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(cluster.members) { member in
+                    memberThumb(member: member, cluster: cluster)
+                }
+            }
+            .padding(.horizontal, DesignTokens.Spacing.md)
+        }
+        .accessibilityIdentifier("dedupeMemberStrip")
+    }
+
+    private func acceptSuggestionButton(for cluster: DuplicateCluster) -> some View {
+        Button("Accept Suggestion") {
+            sessionStore.acceptSuggestionsForCluster(cluster)
+        }
+        .fixedSize()
+        .keyboardShortcut(.return, modifiers: [])
+        .accessibilityIdentifier("dedupeAcceptClusterSuggestionButton")
+        .accessibilityLabel("Accept Suggestion")
     }
 
     private func detailContentWide(focused: PhotoCandidate?, cluster: DuplicateCluster) -> some View {

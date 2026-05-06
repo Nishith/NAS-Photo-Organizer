@@ -39,6 +39,7 @@ struct ChronoframeApp: App {
         .commands {
             AppCommands(appState: appState)
         }
+        .windowResizability(.contentMinSize)
 
         Settings {
             SettingsView(appState: appState)

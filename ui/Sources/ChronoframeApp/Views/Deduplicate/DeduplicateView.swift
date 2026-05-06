@@ -181,29 +181,62 @@ struct DeduplicateView: View {
     // MARK: - Review
 
     private var reviewView: some View {
-        HSplitView {
-            ClusterListPane(
-                clusters: sessionStore.clusters,
-                decisions: sessionStore.decisions,
-                focusedClusterID: $focusedClusterID,
-                focusedMemberPath: $focusedMemberPath,
-                thumbnailLoader: thumbnailLoader
-            )
-            .frame(minWidth: 280, idealWidth: 360, maxWidth: 460)
-
-            ClusterDetailPane(
-                cluster: focusedCluster,
-                focusedMemberPath: $focusedMemberPath,
-                sessionStore: sessionStore,
-                thumbnailLoader: thumbnailLoader
-            )
-            .frame(minWidth: 480)
-        }
-        .safeAreaInset(edge: .bottom) {
-            commitFooter
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                reviewBody(for: geometry.size)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Divider()
+                commitFooter
+            }
         }
         .onAppear { ensureInitialFocus() }
         .onChange(of: sessionStore.clusters.map(\.id)) { _ in ensureInitialFocus() }
+    }
+
+    @ViewBuilder
+    private func reviewBody(for availableSize: CGSize) -> some View {
+        switch DeduplicateReviewLayout.mode(forWidth: availableSize.width) {
+        case .wide:
+            HSplitView {
+                reviewClusterList
+                    .frame(
+                        minWidth: DesignTokens.DeduplicateLayout.clusterListMinWidth,
+                        idealWidth: DesignTokens.DeduplicateLayout.clusterListIdealWidth,
+                        maxWidth: DesignTokens.DeduplicateLayout.clusterListMaxWidth
+                    )
+
+                reviewClusterDetail
+                    .frame(minWidth: DesignTokens.DeduplicateLayout.detailMinWidth)
+            }
+        case .compact:
+            VStack(spacing: 0) {
+                reviewClusterList
+                    .frame(height: DeduplicateReviewLayout.compactClusterListHeight(forAvailableHeight: availableSize.height))
+                Divider()
+                reviewClusterDetail
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minHeight: DesignTokens.DeduplicateLayout.compactPreviewMinHeight)
+            }
+        }
+    }
+
+    private var reviewClusterList: some View {
+        ClusterListPane(
+            clusters: sessionStore.clusters,
+            decisions: sessionStore.decisions,
+            focusedClusterID: $focusedClusterID,
+            focusedMemberPath: $focusedMemberPath,
+            thumbnailLoader: thumbnailLoader
+        )
+    }
+
+    private var reviewClusterDetail: some View {
+        ClusterDetailPane(
+            cluster: focusedCluster,
+            focusedMemberPath: $focusedMemberPath,
+            sessionStore: sessionStore,
+            thumbnailLoader: thumbnailLoader
+        )
     }
 
     private var commitFooter: some View {
@@ -219,10 +252,14 @@ struct DeduplicateView: View {
         let hardDelete = isHardDeleteSelected
         return ViewThatFits(in: .horizontal) {
             commitFooterWide(toDelete: toDelete, bytes: bytes, hardDelete: hardDelete)
+            commitFooterMedium(toDelete: toDelete, bytes: bytes, hardDelete: hardDelete)
             commitFooterCompact(toDelete: toDelete, bytes: bytes, hardDelete: hardDelete)
         }
         .padding(DesignTokens.Spacing.md)
+        .frame(maxWidth: .infinity)
         .background(.ultraThinMaterial)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("dedupeCommitFooter")
         .confirmationDialog(
             hardDelete
                 ? "Permanently delete \(toDelete) file\(toDelete == 1 ? "" : "s")?"
@@ -248,7 +285,17 @@ struct DeduplicateView: View {
         HStack(spacing: DesignTokens.Spacing.md) {
             commitFooterStatus(toDelete: toDelete, bytes: bytes, hardDelete: hardDelete)
             Spacer()
-            commitFooterButtons(toDelete: toDelete, hardDelete: hardDelete)
+            commitFooterButtons(toDelete: toDelete, hardDelete: hardDelete, density: .full)
+        }
+    }
+
+    private func commitFooterMedium(toDelete: Int, bytes: Int64, hardDelete: Bool) -> some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+            commitFooterStatus(toDelete: toDelete, bytes: bytes, hardDelete: hardDelete)
+            HStack {
+                Spacer(minLength: 0)
+                commitFooterButtons(toDelete: toDelete, hardDelete: hardDelete, density: .full)
+            }
         }
     }
 
@@ -256,8 +303,8 @@ struct DeduplicateView: View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
             commitFooterStatus(toDelete: toDelete, bytes: bytes, hardDelete: hardDelete)
             HStack(spacing: DesignTokens.Spacing.sm) {
-                Spacer()
-                commitFooterButtons(toDelete: toDelete, hardDelete: hardDelete)
+                Spacer(minLength: 0)
+                commitFooterButtons(toDelete: toDelete, hardDelete: hardDelete, density: .compact)
             }
         }
     }
@@ -267,40 +314,50 @@ struct DeduplicateView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(Self.commitFooterTitle(fileCount: toDelete, hardDelete: hardDelete))
                 .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
             Text(Self.commitFooterDetail(byteCount: bytes, hardDelete: hardDelete))
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(2)
         }
     }
 
-    @ViewBuilder
-    private func commitFooterButtons(toDelete: Int, hardDelete: Bool) -> some View {
-        if preferencesStore.dedupeAllowHardDelete {
-            Menu {
-                Toggle("Permanently delete (skip Trash)", isOn: $hardDeleteForThisCommit)
-            } label: {
-                Label("Options", systemImage: "ellipsis.circle")
-                    .accessibilityLabel("Commit options")
+    private func commitFooterButtons(
+        toDelete: Int,
+        hardDelete: Bool,
+        density: CommitFooterButtonDensity
+    ) -> some View {
+        HStack(spacing: DesignTokens.Spacing.sm) {
+            if preferencesStore.dedupeAllowHardDelete {
+                Menu {
+                    Toggle("Permanently delete (skip Trash)", isOn: $hardDeleteForThisCommit)
+                } label: {
+                    Label(density.optionsTitle, systemImage: "ellipsis.circle")
+                        .accessibilityLabel("Commit options")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Commit options, including whether selected files move to Trash or are permanently deleted")
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("Commit options, including whether selected files move to Trash or are permanently deleted")
+            Button(density.acceptAllTitle) {
+                sessionStore.acceptAllSuggestions()
+            }
+            .keyboardShortcut(.return, modifiers: [.command, .shift])
+            .accessibilityLabel("Accept All Suggestions")
+            .accessibilityIdentifier("dedupeAcceptAllSuggestionsButton")
+            .accessibilityHint("Marks every cluster's suggested keeper as keep and the rest as delete")
+            Button("Commit", role: .destructive) {
+                showingCommitConfirmation = true
+            }
+            .keyboardShortcut(.return, modifiers: .command)
+            .buttonStyle(.borderedProminent)
+            .disabled(toDelete == 0 || sessionStore.status == .committing)
+            .accessibilityIdentifier("dedupeCommitButton")
+            .accessibilityHint(hardDelete
+                ? "Permanently deletes the selected files after confirmation"
+                : "Moves the selected files to the Trash after confirmation")
         }
-        Button("Accept All Suggestions") {
-            sessionStore.acceptAllSuggestions()
-        }
-        .keyboardShortcut(.return, modifiers: [.command, .shift])
-        .accessibilityHint("Marks every cluster's suggested keeper as keep and the rest as delete")
-        Button("Commit", role: .destructive) {
-            showingCommitConfirmation = true
-        }
-        .keyboardShortcut(.return, modifiers: .command)
-        .buttonStyle(.borderedProminent)
-        .disabled(toDelete == 0 || sessionStore.status == .committing)
-        .accessibilityHint(hardDelete
-            ? "Permanently deletes the selected files after confirmation"
-            : "Moves the selected files to the Trash after confirmation")
     }
 
     // MARK: - Completed
@@ -465,6 +522,43 @@ extension DeduplicateView {
         formatter.allowedUnits = [.useMB, .useGB]
         formatter.countStyle = .file
         return formatter
+    }
+}
+
+enum DeduplicateReviewLayout {
+    enum Mode: Equatable {
+        case wide
+        case compact
+    }
+
+    static func mode(forWidth width: CGFloat) -> Mode {
+        width >= DesignTokens.DeduplicateLayout.reviewWideBreakpoint ? .wide : .compact
+    }
+
+    static func compactClusterListHeight(forAvailableHeight height: CGFloat) -> CGFloat {
+        min(
+            max(height * 0.32, DesignTokens.DeduplicateLayout.compactClusterListMinHeight),
+            DesignTokens.DeduplicateLayout.compactClusterListMaxHeight
+        )
+    }
+}
+
+private enum CommitFooterButtonDensity {
+    case full
+    case compact
+
+    var acceptAllTitle: String {
+        switch self {
+        case .full: return "Accept All Suggestions"
+        case .compact: return "Accept All"
+        }
+    }
+
+    var optionsTitle: String {
+        switch self {
+        case .full: return "Options"
+        case .compact: return "Options"
+        }
     }
 }
 

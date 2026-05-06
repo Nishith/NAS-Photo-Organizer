@@ -7,6 +7,8 @@ final class ChronoframeUITests: XCTestCase {
         case historyPopulated
         case profilesPopulated
         case settingsSections
+        case deduplicateReviewWide
+        case deduplicateReviewCompact
     }
 
     override func setUpWithError() throws {
@@ -72,6 +74,42 @@ final class ChronoframeUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts["Safety"].waitForExistence(timeout: 5))
             Self.selectSettingsTab(named: "Diagnostics", in: app)
             XCTAssertTrue(app.descendants(matching: .any)["diagnosticsLogBufferStepper"].waitForExistence(timeout: 5))
+        }
+    }
+
+    func testDeduplicateReviewKeepsActionsVisibleAtWideAndCompactSizes() async {
+        await MainActor.run {
+            for scenario in [Scenario.deduplicateReviewWide, .deduplicateReviewCompact] {
+                let app = Self.launchApp(scenario)
+
+                let clusterList = Self.element(identifier: "dedupeReviewClusterList", in: app)
+                XCTAssertTrue(clusterList.waitForExistence(timeout: 5), "Cluster list should render for \(scenario.rawValue)")
+
+                let footer = Self.element(identifier: "dedupeCommitFooter", in: app)
+                let memberStrip = Self.element(identifier: "dedupeMemberStrip", in: app)
+                let acceptCluster = Self.hittableElement(identifier: "dedupeAcceptClusterSuggestionButton", in: app)
+                let acceptAll = Self.hittableElement(identifier: "dedupeAcceptAllSuggestionsButton", in: app)
+                let commit = Self.hittableElement(identifier: "dedupeCommitButton", in: app)
+
+                XCTAssertTrue(footer.waitForExistence(timeout: 5), "Commit footer should render for \(scenario.rawValue)")
+                XCTAssertTrue(memberStrip.waitForExistence(timeout: 5), "Member strip should render for \(scenario.rawValue)")
+                XCTAssertTrue(acceptCluster.isHittable, "Accept Suggestion should stay hittable for \(scenario.rawValue)")
+                XCTAssertTrue(acceptAll.isHittable, "Accept All Suggestions should stay hittable for \(scenario.rawValue)")
+                XCTAssertTrue(commit.isHittable, "Commit should stay hittable for \(scenario.rawValue)")
+
+                let window = app.windows.firstMatch
+                XCTAssertTrue(window.exists)
+                for element in [clusterList, footer, acceptCluster, acceptAll, commit] {
+                    Self.assertFrame(element.frame, isInside: window.frame, scenario: scenario.rawValue)
+                }
+                XCTAssertLessThanOrEqual(
+                    memberStrip.frame.maxY,
+                    footer.frame.minY + 1,
+                    "Member strip must not overlap the commit footer for \(scenario.rawValue)"
+                )
+
+                app.terminate()
+            }
         }
     }
 
@@ -146,5 +184,36 @@ final class ChronoframeUITests: XCTestCase {
     ) -> XCUIElement {
         let predicate = NSPredicate(format: "label == %@", title)
         return app.descendants(matching: type).matching(predicate).firstMatch
+    }
+
+    @MainActor
+    private static func element(identifier: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    @MainActor
+    private static func hittableElement(identifier: String, in app: XCUIApplication) -> XCUIElement {
+        let query = app.descendants(matching: .any).matching(identifier: identifier)
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if let hittable = query.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable }) {
+                return hittable
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        return query.firstMatch
+    }
+
+    private static func assertFrame(
+        _ frame: CGRect,
+        isInside windowFrame: CGRect,
+        scenario: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertGreaterThanOrEqual(frame.minX, windowFrame.minX, "Element should not clip left in \(scenario)", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(frame.minY, windowFrame.minY, "Element should not clip above the window in \(scenario)", file: file, line: line)
+        XCTAssertLessThanOrEqual(frame.maxX, windowFrame.maxX, "Element should not clip right in \(scenario)", file: file, line: line)
+        XCTAssertLessThanOrEqual(frame.maxY, windowFrame.maxY, "Element should not clip below the window in \(scenario)", file: file, line: line)
     }
 }

@@ -7,6 +7,8 @@ enum UITestScenario: String, CaseIterable {
     case historyPopulated
     case profilesPopulated
     case settingsSections
+    case deduplicateReviewWide
+    case deduplicateReviewCompact
 
     static func current(environment: [String: String] = ProcessInfo.processInfo.environment) -> UITestScenario? {
         guard let rawValue = environment["CHRONOFRAME_UI_TEST_SCENARIO"] else { return nil }
@@ -23,6 +25,10 @@ enum UITestScenario: String, CaseIterable {
             return NSSize(width: 1360, height: 920)
         case .settingsSections:
             return NSSize(width: 1360, height: 920)
+        case .deduplicateReviewWide:
+            return NSSize(width: 1180, height: 820)
+        case .deduplicateReviewCompact:
+            return NSSize(width: 900, height: 700)
         }
     }
 
@@ -37,9 +43,7 @@ enum UITestScenario: String, CaseIterable {
         DispatchQueue.main.async {
             guard let window = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.last else { return }
             let size = isSettings ? scenario.preferredSettingsWindowSize : scenario.preferredMainWindowSize
-            var frame = window.frame
-            frame.size = size
-            window.setFrame(frame, display: true, animate: false)
+            window.setContentSize(size)
             window.center()
             NSApp.activate(ignoringOtherApps: true)
         }

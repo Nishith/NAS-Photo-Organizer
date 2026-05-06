@@ -56,6 +56,17 @@ enum DesignTokens {
         static let maxWidth: CGFloat = 304
     }
 
+    enum DeduplicateLayout {
+        static let reviewWideBreakpoint: CGFloat = 840
+        static let clusterListMinWidth: CGFloat = 260
+        static let clusterListIdealWidth: CGFloat = 340
+        static let clusterListMaxWidth: CGFloat = 420
+        static let compactClusterListMinHeight: CGFloat = 180
+        static let compactClusterListMaxHeight: CGFloat = 280
+        static let compactPreviewMinHeight: CGFloat = 160
+        static let detailMinWidth: CGFloat = 420
+    }
+
     enum Corner {
         static let hero: CGFloat = 20
         static let card: CGFloat = 14
