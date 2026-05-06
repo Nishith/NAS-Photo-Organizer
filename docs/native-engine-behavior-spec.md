@@ -163,7 +163,7 @@ fixtures.
   - `execution_missing_source_abort`
   - `execution_verify_cleanup`
   - `resume_pending_queue`
-- Contract-focused Python tests in `test_chronoframe.py` remain part of the
+- Contract-focused Python tests in `tests/test_chronoframe.py` remain part of the
   frozen reference surface for CLI flags, SQLite schema, retry behavior, abort
   thresholds, and artifact generation.
 

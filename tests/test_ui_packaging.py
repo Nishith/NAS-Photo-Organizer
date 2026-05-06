@@ -16,7 +16,7 @@ from unittest import mock
 
 
 def _load_validator_module():
-    repo_root = Path(__file__).resolve().parent
+    repo_root = Path(__file__).resolve().parents[1]
     module_path = repo_root / "ui" / "Packaging" / "validate_app_bundle.py"
     spec = importlib.util.spec_from_file_location("validate_app_bundle", module_path)
     module = importlib.util.module_from_spec(spec)

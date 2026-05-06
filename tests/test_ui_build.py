@@ -13,7 +13,7 @@ import unittest
 @unittest.skipUnless(sys.platform == "darwin", "macOS build smoke requires macOS")
 class TestUIBuildPipeline(unittest.TestCase):
     def test_build_script_stages_bundle_with_icon_and_backend(self):
-        repo_root = os.path.dirname(__file__)
+        repo_root = os.path.dirname(os.path.dirname(__file__))
         ui_dir = os.path.join(repo_root, "ui")
         project_path = os.path.join(ui_dir, "Chronoframe.xcodeproj")
 
@@ -101,7 +101,7 @@ class TestUIBuildPipeline(unittest.TestCase):
         self.assertIn("Sealed Resources version=2", signature_output)
 
     def test_build_script_failure_points_to_xcodebuild_log(self):
-        repo_root = os.path.dirname(__file__)
+        repo_root = os.path.dirname(os.path.dirname(__file__))
         ui_dir = os.path.join(repo_root, "ui")
         log_path = os.path.join(ui_dir, "build", "xcodebuild.log")
 

@@ -45,7 +45,7 @@ Legend: ⚪ not started · 🟡 in progress · 🟢 complete · 🔴 blocked
 **Verification**
 - `swift build` — ✅ clean (8s)
 - `swift test` — ✅ 123 tests pass
-- `python3 -m pytest test_ui_build.py test_ui_packaging.py` — ✅ 6 pass
+- `python3 -m pytest tests/test_ui_build.py tests/test_ui_packaging.py` — ✅ 6 pass
 
 **Notes for future phases**
 - Minimum deployment is macOS 13; `Color(light:dark:)` requires macOS 14. We use `NSColor(name:dynamicProvider:)` wrapped via `Color(nsColor:)` — works on 13+.
@@ -112,7 +112,7 @@ Legend: ⚪ not started · 🟡 in progress · 🟢 complete · 🔴 blocked
 **Verification**
 - `swift build` — ✅ clean
 - `swift test` — ✅ 123 tests pass
-- `python3 -m pytest test_ui_build.py test_ui_packaging.py` — ✅ 6 pass
+- `python3 -m pytest tests/test_ui_build.py tests/test_ui_packaging.py` — ✅ 6 pass
 
 **Notes for future phases**
 - The current three-pane vision (left form / right contact sheet) is deferred: the contact sheet is stacked into the existing vertical flow so the surrounding copy-pass/hero rework in Phase 6 can land without rewriting layout again. Treat the section as transplantable — when the final layout arrives it moves unchanged into the right pane.
@@ -145,7 +145,7 @@ Legend: ⚪ not started · 🟡 in progress · 🟢 complete · 🔴 blocked
 **Verification**
 - `swift build` — ✅ clean
 - `swift test` — ✅ 123 tests pass
-- `python3 -m pytest test_ui_build.py test_ui_packaging.py` — ✅ 6 pass
+- `python3 -m pytest tests/test_ui_build.py tests/test_ui_packaging.py` — ✅ 6 pass
 
 **Notes for future phases**
 - The plan originally called for a year-row × month-column timeline driven by per-(year,month) aggregates. The engine does not currently stream that data: `RunMetrics` carries flat counts, and per-item events don't flow to the UI. Building that pipeline requires changes inside `ChronoframeAppCore` / `RunSessionStore`, which is explicitly out of scope per §11 of the plan. The proxy dot grid delivers the same visual language (frames finding their place, developing wash on completion) against the data that exists today. When an engine-side aggregator is added, swap the `completedIndex` / `activeIndex` computations in `RunTimelineView` for a real `[(year, month, copied, planned)]` array — the view structure does not need to change.
@@ -172,7 +172,7 @@ Legend: ⚪ not started · 🟡 in progress · 🟢 complete · 🔴 blocked
 **Verification**
 - `swift build` — ✅ clean
 - `swift test` — ✅ 123 tests pass
-- `python3 -m pytest test_ui_build.py test_ui_packaging.py` — ✅ 6 pass
+- `python3 -m pytest tests/test_ui_build.py tests/test_ui_packaging.py` — ✅ 6 pass
 
 **Notes for future phases**
 - The plan's "dashed outline New Profile card" was intentionally omitted — the Save Current Paths panel already serves that role (one place to create a profile), and adding a dashed tile would mean two creation UIs. Flag for Phase 6 copy pass if the empty-state rewording calls for it.
@@ -215,7 +215,7 @@ Legend: ⚪ not started · 🟡 in progress · 🟢 complete · 🔴 blocked
 **Verification**
 - `swift build` — ✅ clean
 - `swift test` — ✅ 123 tests pass
-- `python3 -m pytest test_ui_build.py test_ui_packaging.py` — ✅ 6 pass
+- `python3 -m pytest tests/test_ui_build.py tests/test_ui_packaging.py` — ✅ 6 pass
 
 **Notes / deferred items**
 - **Dynamic Type** coverage was not adopted globally. `DesignTokens.Typography` still uses fixed-point `Font.system(size:…)` initializers. Converting to `Font.system(textStyle, design:)` requires per-call-site verification (ScrollView headers, fixed metric layout tiles, monospaced console lines) because some sizes encode fixed visual rhythm that doesn't want to scale. Flagged as the single largest remaining accessibility gap; suggest tackling as a dedicated follow-up task rather than mid-Phase 6.
@@ -232,7 +232,7 @@ Legend: ⚪ not started · 🟡 in progress · 🟢 complete · 🔴 blocked
 After each phase:
 
 1. `cd ui && swift build` — must pass.
-2. `python3 -m pytest test_ui_build.py test_ui_packaging.py` — must stay green.
+2. `python3 -m pytest tests/test_ui_build.py tests/test_ui_packaging.py` — must stay green.
 3. Launch app, spot-check: Setup populates, Preview runs against a small sample folder, Run view renders without regression.
 4. Toggle system appearance (Control Center → Appearance) — no stuck colors.
 
