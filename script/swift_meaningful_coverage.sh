@@ -27,7 +27,7 @@ fi
 # OS bridge wrappers, and other code where line coverage encourages shallow
 # instantiation tests. It focuses on deterministic domain algorithms,
 # planning, path building, hashing, indexing, and user-facing formatting.
-MEANINGFUL_REGEX='/(BLAKE2bHasher|CopyPlanBuilder|DryRunPlanner|MediaDiscovery|PlanningPathBuilder|DeduplicationPlanner|PerceptualHash|UserFacingErrorMessage|RunHistoryIndexer|RunConfiguration\+Profiles|HybridOrganizerEngine|DedupeFeatureCache|PreviewReviewModels|LibraryHealthScanner)\.swift$'
+MEANINGFUL_REGEX='/(BLAKE2bHasher|CopyPlanBuilder|DryRunPlanner|MediaDiscovery|PlanningPathBuilder|DeduplicationPlanner|PerceptualHash|UserFacingErrorMessage|RunHistoryIndexer|RunConfiguration\+Profiles|HybridOrganizerEngine|DedupeFeatureCache|PreviewReviewModels|LibraryHealthScanner|ClusterAnnotator|ClusterConfidenceScorer|DuplicateClusterer|EditVariantDetector|FingerprintIndex|ImportDuplicateChecker|PhotoQualityScorer|SafetyWarningDetector)\.swift$'
 
 summary_json="$(
     jq --arg regex "$MEANINGFUL_REGEX" '

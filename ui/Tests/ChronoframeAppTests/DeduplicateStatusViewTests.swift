@@ -174,4 +174,38 @@ final class DeduplicateStatusViewTests: XCTestCase {
         XCTAssertEqual(copy.message, "Restored 2 files · 1 MB returned to the destination")
         XCTAssertEqual(copy.warning, "3 items could not be restored — see Run History for details.")
     }
+
+    func testMatchReasonFormatterExplainsConfidenceReasonsWarningsAndKeepers() {
+        let burst = MatchReason(
+            timeDeltaSeconds: 12,
+            averageVisionDistance: 0.08,
+            minVisionDistance: 0.04,
+            averageDhashDistance: 2,
+            kind: .burst
+        )
+        let annotation = ClusterAnnotation(
+            confidence: .high,
+            matchReason: burst,
+            keeperReason: KeeperReason(factors: [
+                .betterOverallQuality(delta: 0.21),
+                .eyesOpen,
+                .largerFile(delta: 1_048_576),
+            ]),
+            warnings: [.differentFraming(cropDelta: 0.24)]
+        )
+
+        XCTAssertEqual(MatchReasonFormatter.summary(MatchReason(kind: .exactDuplicate)), "Identical file content")
+        XCTAssertEqual(MatchReasonFormatter.summary(MatchReason(kind: .editedVariant)), "Edited version of the same photo")
+        XCTAssertEqual(MatchReasonFormatter.summary(burst), "Taken 12s apart, 92% visually similar")
+        XCTAssertEqual(MatchReasonFormatter.oneLiner(annotation), "92% similar, 12s apart")
+        XCTAssertEqual(
+            MatchReasonFormatter.keeperSummary(annotation.keeperReason!),
+            "Kept: better quality (+0.21), eyes open, larger file (+1 MB)"
+        )
+        XCTAssertEqual(MatchReasonFormatter.warningSummary(annotation.warnings[0]), "Different framing (24% crop difference)")
+        XCTAssertEqual(MatchReasonFormatter.warningSummary(.largeTimeGap(seconds: 90)), "Taken 1.5 min apart")
+        XCTAssertEqual(MatchReasonFormatter.confidenceLabel(.high), "Auto")
+        XCTAssertEqual(MatchReasonFormatter.confidenceLabel(.medium), "Review")
+        XCTAssertEqual(MatchReasonFormatter.confidenceLabel(.low), "Careful")
+    }
 }

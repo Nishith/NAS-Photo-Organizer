@@ -58,7 +58,7 @@ public enum ImportDuplicateChecker {
 
                     let url = URL(fileURLWithPath: path)
                     guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-                          let size = attrs[.size] as? Int64 else {
+                          let size = Self.fileSize(from: attrs) else {
                         uniqueFiles.append(path)
                         continue
                     }
@@ -97,6 +97,13 @@ public enum ImportDuplicateChecker {
                 continuation.finish()
             }
         }
+    }
+
+    private static func fileSize(from attributes: [FileAttributeKey: Any]) -> Int64? {
+        if let size = attributes[.size] as? NSNumber {
+            return size.int64Value
+        }
+        return attributes[.size] as? Int64
     }
 }
 

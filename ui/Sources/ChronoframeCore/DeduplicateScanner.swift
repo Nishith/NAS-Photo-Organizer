@@ -53,9 +53,18 @@ public final class DeduplicateScanner: @unchecked Sendable {
                     // 1. Discovery — image files only for v1; .mov files are
                     // tracked separately for Live Photo pair linking.
                     let rootURL = URL(fileURLWithPath: configuration.destinationPath)
+                    let scanRoots = Self.scanRoots(for: configuration)
                     var allPaths: [String] = []
-                    try MediaDiscovery.enumerateMediaFiles(at: rootURL) { path in
-                        allPaths.append(path)
+                    var seenPaths = Set<String>()
+                    var folderRootByPath: [String: String] = [:]
+                    for scanRoot in scanRoots {
+                        try MediaDiscovery.enumerateMediaFiles(at: scanRoot.url) { path in
+                            let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+                            guard seenPaths.insert(standardizedPath).inserted else { return }
+                            allPaths.append(path)
+                            folderRootByPath[path] = scanRoot.path
+                            folderRootByPath[standardizedPath] = scanRoot.path
+                        }
                     }
                     if cancelFlag.get() { continuation.finish(); return }
 
@@ -116,11 +125,22 @@ public final class DeduplicateScanner: @unchecked Sendable {
                         let pairedPath = pairs[path].map { pair in
                             pair.primaryPath == path ? pair.secondaryPath : pair.primaryPath
                         }
+                        let folderRoot = folderRootByPath[path]
 
                         // Cache hit when (size, mtime) match exactly.
                         if let cached = Self.cachedFeatureRecord(for: path, in: cache),
                            cached.size == size,
                            abs(cached.modificationTime - mtime) < 0.001 {
+                            let quality = PhotoQualityScorer.expressionAwareScore(
+                                sharpness: cached.sharpness,
+                                faceScore: cached.faceScore,
+                                eyesOpenScore: cached.eyesOpenScore,
+                                smileScore: cached.smileScore,
+                                subjectMotionBlur: cached.subjectMotionBlur,
+                                sizeBytes: size,
+                                pixelWidth: cached.pixelWidth,
+                                pixelHeight: cached.pixelHeight
+                            )
                             let candidate = PhotoCandidate(
                                 path: path,
                                 size: size,
@@ -130,12 +150,17 @@ public final class DeduplicateScanner: @unchecked Sendable {
                                 pixelHeight: cached.pixelHeight,
                                 dhash: cached.dhash,
                                 featurePrintData: nil,
-                                qualityScore: Self.composite(sharpness: cached.sharpness, faceScore: cached.faceScore, size: size, width: cached.pixelWidth, height: cached.pixelHeight),
+                                qualityScore: quality.composite,
                                 sharpness: cached.sharpness,
                                 faceScore: cached.faceScore,
                                 isRaw: DeduplicatePairDetector.rawExtensions.contains(MediaLibraryRules.normalizedExtension(for: path)),
                                 isLivePhotoStill: pairs[path]?.kind == .livePhoto,
-                                pairedPath: pairedPath
+                                pairedPath: pairedPath,
+                                eyesOpenScore: cached.eyesOpenScore,
+                                smileScore: cached.smileScore,
+                                subjectSharpness: cached.subjectSharpness,
+                                subjectMotionBlur: cached.subjectMotionBlur,
+                                folderRoot: cached.folderRoot ?? folderRoot
                             )
                             candidatesByPath[path] = candidate
                             if (offset + 1) % 50 == 0 || offset == imagePaths.count - 1 {
@@ -153,7 +178,8 @@ public final class DeduplicateScanner: @unchecked Sendable {
                                 modificationTime: mtime,
                                 pairedPath: pairedPath,
                                 isRaw: DeduplicatePairDetector.rawExtensions.contains(MediaLibraryRules.normalizedExtension(for: path)),
-                                isLivePhotoStill: pairs[path]?.kind == .livePhoto
+                                isLivePhotoStill: pairs[path]?.kind == .livePhoto,
+                                folderRoot: folderRoot
                             )
                         )
                     }
@@ -185,7 +211,12 @@ public final class DeduplicateScanner: @unchecked Sendable {
                             faceScore: analysis.quality.faceScore,
                             isRaw: request.isRaw,
                             isLivePhotoStill: request.isLivePhotoStill,
-                            pairedPath: request.pairedPath
+                            pairedPath: request.pairedPath,
+                            eyesOpenScore: analysis.eyesOpenScore,
+                            smileScore: analysis.smileScore,
+                            subjectSharpness: analysis.subjectSharpness,
+                            subjectMotionBlur: analysis.subjectMotionBlur,
+                            folderRoot: request.folderRoot
                         )
                         candidatesByPath[request.path] = candidate
                         freshRecords.append(
@@ -200,7 +231,12 @@ public final class DeduplicateScanner: @unchecked Sendable {
                                 pixelWidth: analysis.pixelWidth,
                                 pixelHeight: analysis.pixelHeight,
                                 captureDate: analysis.captureDate,
-                                pairedPath: request.pairedPath
+                                pairedPath: request.pairedPath,
+                                eyesOpenScore: analysis.eyesOpenScore,
+                                smileScore: analysis.smileScore,
+                                subjectSharpness: analysis.subjectSharpness,
+                                subjectMotionBlur: analysis.subjectMotionBlur,
+                                folderRoot: request.folderRoot
                             )
                         )
 
@@ -285,23 +321,19 @@ public final class DeduplicateScanner: @unchecked Sendable {
 
     // MARK: - Helpers
 
-    private static func composite(
-        sharpness: Double,
-        faceScore: Double?,
-        size: Int64,
-        width: Int?,
-        height: Int?
-    ) -> Double {
-        let resolution = Double(max(0, (width ?? 0) * (height ?? 0)))
-        let resolutionScore = resolution > 0 ? min(1.0, log2(resolution) / 24.0) : 0.3
-        let sizeScore = size > 0 ? min(1.0, log2(Double(size)) / 26.0) : 0.3
-        var composite = 0.5 * sharpness + 0.15 * resolutionScore + 0.10 * sizeScore
-        if let faceScore {
-            composite += 0.25 * faceScore
-        } else {
-            composite += 0.25 * sharpness
+    private static func scanRoots(
+        for configuration: DeduplicateConfiguration
+    ) -> [(path: String, url: URL)] {
+        var roots: [(path: String, url: URL)] = []
+        var seen = Set<String>()
+        let rootPaths = [configuration.destinationPath] + configuration.additionalSources.map(\.path)
+        for path in rootPaths {
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            let standardizedPath = url.path
+            guard seen.insert(standardizedPath).inserted else { continue }
+            roots.append((path: standardizedPath, url: url))
         }
-        return composite
+        return roots
     }
 
     fileprivate static func imageDimensions(at url: URL) -> (width: Int, height: Int)? {
@@ -420,6 +452,10 @@ struct DedupeImageAnalysis: Sendable {
     var featurePrintData: Data?
     var featurePrintFailureMessage: String?
     var quality: PhotoQualityScore
+    var eyesOpenScore: Double? = nil
+    var smileScore: Double? = nil
+    var subjectSharpness: Double? = nil
+    var subjectMotionBlur: Double? = nil
 }
 
 protocol DedupeImageAnalyzing: Sendable {
@@ -441,6 +477,16 @@ struct DefaultDedupeImageAnalyzer: DedupeImageAnalyzing {
             ciContext: resources.ciContext,
             faceScore: vision.faceScore
         )
+        let expressionAwareQuality = PhotoQualityScorer.expressionAwareScore(
+            sharpness: quality.sharpness,
+            faceScore: vision.faceScore,
+            eyesOpenScore: vision.eyesOpenScore,
+            smileScore: vision.smileScore,
+            subjectMotionBlur: vision.subjectMotionBlur,
+            sizeBytes: size,
+            pixelWidth: metadata.pixelWidth,
+            pixelHeight: metadata.pixelHeight
+        )
         return DedupeImageAnalysis(
             captureDate: dateResolver.resolveDate(for: url.path, precomputedPhotoMetadataDate: metadata.captureDate),
             pixelWidth: metadata.pixelWidth,
@@ -448,7 +494,11 @@ struct DefaultDedupeImageAnalyzer: DedupeImageAnalyzing {
             dhash: metadata.dhash,
             featurePrintData: vision.featurePrintData,
             featurePrintFailureMessage: vision.featurePrintFailureMessage,
-            quality: quality
+            quality: expressionAwareQuality,
+            eyesOpenScore: vision.eyesOpenScore,
+            smileScore: vision.smileScore,
+            subjectSharpness: vision.subjectSharpness,
+            subjectMotionBlur: vision.subjectMotionBlur
         )
     }
 
@@ -539,10 +589,24 @@ struct DefaultDedupeImageAnalyzer: DedupeImageAnalyzing {
             featurePrintFailureMessage = "Feature print failed: no observation produced"
         }
 
+        let expression = faceRequest.results.flatMap { faces -> FaceExpressionAnalyzer.Result? in
+            guard
+                let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            else {
+                return nil
+            }
+            return FaceExpressionAnalyzer.analyze(cgImage: cgImage, faceObservations: faces)
+        }
+
         return DedupeVisionAnalysis(
             featurePrintData: featurePrintData,
             featurePrintFailureMessage: featurePrintFailureMessage,
-            faceScore: PhotoQualityScorer.faceScore(from: faceRequest.results)
+            faceScore: PhotoQualityScorer.faceScore(from: faceRequest.results),
+            eyesOpenScore: expression?.eyesOpenConfidence,
+            smileScore: expression?.smileConfidence,
+            subjectSharpness: expression?.subjectSharpness,
+            subjectMotionBlur: expression?.subjectMotionBlur
         )
     }
 }
@@ -574,6 +638,10 @@ private struct DedupeVisionAnalysis {
     var featurePrintData: Data?
     var featurePrintFailureMessage: String?
     var faceScore: Double?
+    var eyesOpenScore: Double? = nil
+    var smileScore: Double? = nil
+    var subjectSharpness: Double? = nil
+    var subjectMotionBlur: Double? = nil
 }
 
 private struct DedupeAnalysisRequest: Sendable {
@@ -585,6 +653,7 @@ private struct DedupeAnalysisRequest: Sendable {
     var pairedPath: String?
     var isRaw: Bool
     var isLivePhotoStill: Bool
+    var folderRoot: String?
 }
 
 private final class OrderedIdentityResults: @unchecked Sendable {

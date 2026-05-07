@@ -79,6 +79,100 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertLessThanOrEqual(score.composite, 1)
     }
 
+    func testPhotoQualityScorerExpressionAwareScoreRewardsOpenEyesAndPenalizesBlur() {
+        let baseline = PhotoQualityScorer.expressionAwareScore(
+            sharpness: 0.45,
+            faceScore: 0.6,
+            eyesOpenScore: nil,
+            smileScore: nil,
+            subjectMotionBlur: nil,
+            sizeBytes: 32_000,
+            pixelWidth: 1200,
+            pixelHeight: 800
+        )
+        let expressive = PhotoQualityScorer.expressionAwareScore(
+            sharpness: 0.45,
+            faceScore: 0.6,
+            eyesOpenScore: 0.95,
+            smileScore: 0.8,
+            subjectMotionBlur: 0,
+            sizeBytes: 32_000,
+            pixelWidth: 1200,
+            pixelHeight: 800
+        )
+        let blurryClosedEyes = PhotoQualityScorer.expressionAwareScore(
+            sharpness: 0.45,
+            faceScore: 0.6,
+            eyesOpenScore: 0.1,
+            smileScore: 0.1,
+            subjectMotionBlur: 0.8,
+            sizeBytes: 32_000,
+            pixelWidth: 1200,
+            pixelHeight: 800
+        )
+
+        XCTAssertGreaterThan(expressive.composite, baseline.composite)
+        XCTAssertLessThan(blurryClosedEyes.composite, expressive.composite)
+        XCTAssertEqual(expressive.sharpness, 0.45)
+        XCTAssertEqual(expressive.faceScore, 0.6)
+    }
+
+    func testFaceExpressionAnalyzerGeometryAndSharpnessHelpers() {
+        let openEye = FaceExpressionAnalyzer.eyeOpenness(points: [
+            CGPoint(x: 0.0, y: 0.1),
+            CGPoint(x: 0.2, y: 0.0),
+            CGPoint(x: 0.4, y: 0.1),
+            CGPoint(x: 0.4, y: 0.4),
+            CGPoint(x: 0.2, y: 0.5),
+            CGPoint(x: 0.0, y: 0.4),
+        ])
+        let closedEye = FaceExpressionAnalyzer.eyeOpenness(points: [
+            CGPoint(x: 0.0, y: 0.10),
+            CGPoint(x: 0.2, y: 0.09),
+            CGPoint(x: 0.4, y: 0.10),
+            CGPoint(x: 0.4, y: 0.12),
+            CGPoint(x: 0.2, y: 0.13),
+            CGPoint(x: 0.0, y: 0.12),
+        ])
+
+        XCTAssertGreaterThan(openEye, closedEye)
+        XCTAssertEqual(FaceExpressionAnalyzer.eyeOpenness(points: []), 0.5)
+
+        let flatPixels = [UInt8](repeating: 128, count: 25)
+        let checkerPixels: [UInt8] = [
+            0, 255, 0, 255, 0,
+            255, 0, 255, 0, 255,
+            0, 255, 0, 255, 0,
+            255, 0, 255, 0, 255,
+            0, 255, 0, 255, 0,
+        ]
+        XCTAssertEqual(
+            FaceExpressionAnalyzer.laplacianVarianceFromGray(pixels: flatPixels, width: 5, height: 5),
+            0
+        )
+        XCTAssertGreaterThan(
+            FaceExpressionAnalyzer.laplacianVarianceFromGray(pixels: checkerPixels, width: 5, height: 5),
+            0
+        )
+
+        let image = makeCheckerboardImage()
+        XCTAssertGreaterThan(FaceExpressionAnalyzer.globalImageSharpness(cgImage: image), 0)
+        XCTAssertGreaterThan(
+            FaceExpressionAnalyzer.regionSharpness(
+                cgImage: image,
+                normalizedRect: CGRect(x: 0.2, y: 0.2, width: 0.5, height: 0.5)
+            ),
+            0
+        )
+        XCTAssertEqual(
+            FaceExpressionAnalyzer.regionSharpness(
+                cgImage: image,
+                normalizedRect: CGRect(x: 2.0, y: 2.0, width: 0.01, height: 0.01)
+            ),
+            0
+        )
+    }
+
     // MARK: - DuplicateClusterer
 
     func testClustersBurstWithinTimeWindow() {
@@ -404,6 +498,275 @@ final class DeduplicateTests: XCTestCase {
 
         XCTAssertEqual(clusters.first?.suggestedKeeperIDs, ["/dest/a.jpg"])
         XCTAssertEqual(clusters.first?.bytesIfPruned, 120)
+    }
+
+    func testKeeperRankingUsesExpressionTieBreakers() {
+        XCTAssertEqual(
+            DuplicateClusterer.suggestKeeperIDs(for: [
+                candidate(path: "/dest/closed-eyes.jpg", qualityScore: 0.8, sharpness: 0.7, size: 10_000, pixelWidth: 1000, pixelHeight: 1000, faceScore: 0.8, eyesOpenScore: 0.2, smileScore: 0.9),
+                candidate(path: "/dest/open-eyes.jpg", qualityScore: 0.8, sharpness: 0.7, size: 10_000, pixelWidth: 1000, pixelHeight: 1000, faceScore: 0.8, eyesOpenScore: 0.9, smileScore: 0.1),
+            ]),
+            ["/dest/open-eyes.jpg"]
+        )
+
+        XCTAssertEqual(
+            DuplicateClusterer.suggestKeeperIDs(for: [
+                candidate(path: "/dest/neutral.jpg", qualityScore: 0.8, sharpness: 0.7, size: 10_000, pixelWidth: 1000, pixelHeight: 1000, faceScore: 0.8, eyesOpenScore: 0.9, smileScore: 0.2),
+                candidate(path: "/dest/smile.jpg", qualityScore: 0.8, sharpness: 0.7, size: 10_000, pixelWidth: 1000, pixelHeight: 1000, faceScore: 0.8, eyesOpenScore: 0.9, smileScore: 0.8),
+            ]),
+            ["/dest/smile.jpg"]
+        )
+    }
+
+    func testClusterAnnotatorBuildsConfidenceMatchAndKeeperReasoning() throws {
+        let baseDate = Date(timeIntervalSinceReferenceDate: 0)
+        let keeper = candidate(
+            path: "/dest/keeper.cr3",
+            captureDate: baseDate,
+            qualityScore: 0.9,
+            sharpness: 0.8,
+            size: 420_000,
+            pixelWidth: 2400,
+            pixelHeight: 1800,
+            faceScore: 0.7,
+            isRaw: true,
+            eyesOpenScore: 0.9,
+            smileScore: 0.8
+        )
+        let runnerUp = candidate(
+            path: "/dest/runner.jpg",
+            captureDate: baseDate.addingTimeInterval(2),
+            qualityScore: 0.6,
+            sharpness: 0.5,
+            size: 110_000,
+            pixelWidth: 2000,
+            pixelHeight: 1500,
+            faceScore: 0.6,
+            eyesOpenScore: 0.2,
+            smileScore: 0.3
+        )
+        let cluster = DuplicateCluster(
+            kind: .burst,
+            members: [keeper, runnerUp],
+            suggestedKeeperIDs: [keeper.path],
+            bytesIfPruned: runnerUp.size
+        )
+
+        let annotation = ClusterAnnotator.annotate(
+            cluster: cluster,
+            pairwiseMatches: [
+                PairwiseMatch(
+                    lhsPath: keeper.path,
+                    rhsPath: runnerUp.path,
+                    visionDistance: 0.08,
+                    dhashDistance: 2,
+                    timeDeltaSeconds: 2
+                ),
+            ],
+            configuration: DeduplicateConfiguration(destinationPath: "/dest")
+        )
+
+        XCTAssertEqual(annotation.confidence, .high)
+        XCTAssertEqual(annotation.matchReason.kind, .burst)
+        XCTAssertEqual(try XCTUnwrap(annotation.matchReason.timeDeltaSeconds), 2, accuracy: 0.0001)
+        XCTAssertEqual(annotation.matchReason.averageVisionDistance, 0.08)
+        XCTAssertEqual(annotation.matchReason.minVisionDistance, 0.08)
+        XCTAssertEqual(annotation.matchReason.averageDhashDistance, 2)
+        XCTAssertTrue(annotation.warnings.isEmpty)
+
+        let factors = try XCTUnwrap(annotation.keeperReason?.factors)
+        XCTAssertTrue(factors.contains(.eyesOpen))
+        XCTAssertTrue(factors.contains(.isRaw))
+        XCTAssertTrue(factors.contains { factor in
+            if case .betterOverallQuality(let delta) = factor { return delta > 0.29 }
+            return false
+        })
+        XCTAssertTrue(factors.contains { factor in
+            if case .betterSharpness(let delta) = factor { return delta > 0.29 }
+            return false
+        })
+        XCTAssertTrue(factors.contains { factor in
+            if case .sharperFaces(let delta) = factor { return delta > 0.09 }
+            return false
+        })
+        XCTAssertTrue(factors.contains { factor in
+            if case .betterExpression(let delta) = factor { return delta > 0.49 }
+            return false
+        })
+        XCTAssertTrue(factors.contains { factor in
+            if case .higherResolution(let scale) = factor { return scale > 1.4 }
+            return false
+        })
+        XCTAssertTrue(factors.contains { factor in
+            if case .largerFile(let delta) = factor { return delta == 310_000 }
+            return false
+        })
+    }
+
+    func testClusterConfidenceScorerCoversThresholdsWarningsAndEditedVariants() {
+        let exactCluster = DuplicateCluster(kind: .exactDuplicate, members: [], suggestedKeeperIDs: [], bytesIfPruned: 0)
+        XCTAssertEqual(
+            ClusterConfidenceScorer.score(
+                cluster: exactCluster,
+                matchReason: MatchReason(kind: .exactDuplicate),
+                warnings: []
+            ),
+            .high
+        )
+
+        let nearCluster = DuplicateCluster(kind: .nearDuplicate, members: [], suggestedKeeperIDs: [], bytesIfPruned: 0)
+        XCTAssertEqual(
+            ClusterConfidenceScorer.score(
+                cluster: nearCluster,
+                matchReason: MatchReason(timeDeltaSeconds: 2, averageVisionDistance: 0.05, kind: .nearDuplicate),
+                warnings: []
+            ),
+            .high
+        )
+        XCTAssertEqual(
+            ClusterConfidenceScorer.score(
+                cluster: nearCluster,
+                matchReason: MatchReason(averageVisionDistance: 0.31, kind: .nearDuplicate),
+                warnings: []
+            ),
+            .low
+        )
+        XCTAssertEqual(
+            ClusterConfidenceScorer.score(
+                cluster: nearCluster,
+                matchReason: MatchReason(timeDeltaSeconds: 20, averageVisionDistance: 0.2, kind: .nearDuplicate),
+                warnings: []
+            ),
+            .medium
+        )
+        XCTAssertEqual(
+            ClusterConfidenceScorer.score(
+                cluster: nearCluster,
+                matchReason: MatchReason(timeDeltaSeconds: 2, averageVisionDistance: 0.05, kind: .nearDuplicate),
+                warnings: [.textOverlayDetected]
+            ),
+            .low
+        )
+
+        let editedCluster = DuplicateCluster(kind: .editedVariant, members: [], suggestedKeeperIDs: [], bytesIfPruned: 0)
+        XCTAssertEqual(
+            ClusterConfidenceScorer.score(
+                cluster: editedCluster,
+                matchReason: MatchReason(timeDeltaSeconds: 2, averageVisionDistance: 0.2, kind: .editedVariant),
+                warnings: []
+            ),
+            .low
+        )
+    }
+
+    func testSafetyWarningDetectorFlagsRiskyNonExactClusters() {
+        let baseDate = Date(timeIntervalSinceReferenceDate: 0)
+        let cluster = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [
+                candidate(
+                    path: "/dest/a.jpg",
+                    captureDate: baseDate,
+                    qualityScore: 0.8,
+                    sharpness: 0.8,
+                    pixelWidth: 4000,
+                    pixelHeight: 3000,
+                    faceScore: 0.9
+                ),
+                candidate(
+                    path: "/dest/b.jpg",
+                    captureDate: baseDate.addingTimeInterval(600),
+                    qualityScore: 0.7,
+                    sharpness: 0.2,
+                    pixelWidth: 3000,
+                    pixelHeight: 4000,
+                    faceScore: 0.1
+                ),
+            ],
+            suggestedKeeperIDs: ["/dest/a.jpg"],
+            bytesIfPruned: 100
+        )
+
+        let warnings = SafetyWarningDetector.detect(cluster: cluster, pairwiseMatches: [])
+        XCTAssertTrue(warnings.contains { warning in
+            if case .differentPeople(let delta) = warning { return delta == 2 }
+            return false
+        })
+        XCTAssertTrue(warnings.contains { warning in
+            if case .differentFraming(let delta) = warning { return delta > 0.1 }
+            return false
+        })
+        XCTAssertTrue(warnings.contains { warning in
+            if case .largeTimeGap(let seconds) = warning { return seconds == 600 }
+            return false
+        })
+        XCTAssertTrue(warnings.contains(.significantExposureDifference))
+
+        let exact = DuplicateCluster(
+            kind: .exactDuplicate,
+            members: cluster.members,
+            suggestedKeeperIDs: cluster.suggestedKeeperIDs,
+            bytesIfPruned: cluster.bytesIfPruned
+        )
+        XCTAssertTrue(SafetyWarningDetector.detect(cluster: exact, pairwiseMatches: []).isEmpty)
+    }
+
+    func testEditVariantDetectorDetectsSignalsExifAndReclassification() throws {
+        let original = candidate(
+            path: "/dest/original.jpg",
+            qualityScore: 0.8,
+            sharpness: 0.8,
+            size: 4_000_000,
+            pixelWidth: 4000,
+            pixelHeight: 3000
+        )
+        let edited = candidate(
+            path: "/dest/edited.jpg",
+            qualityScore: 0.7,
+            sharpness: 0.4,
+            size: 1_500_000,
+            pixelWidth: 2600,
+            pixelHeight: 2600
+        )
+
+        let signals = EditVariantDetector.detect(lhs: original, rhs: edited)
+        XCTAssertTrue(signals.contains { $0.kind == .crop && $0.confidence > 0.7 })
+        XCTAssertTrue(signals.contains { $0.kind == .exposureAdjustment && $0.confidence > 0.3 })
+
+        let cluster = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [original, edited],
+            suggestedKeeperIDs: [original.path],
+            bytesIfPruned: edited.size
+        )
+        XCTAssertTrue(EditVariantDetector.shouldReclassify(cluster: cluster, visionDistance: 0.2))
+        XCTAssertFalse(EditVariantDetector.shouldReclassify(cluster: cluster, visionDistance: nil))
+        XCTAssertFalse(EditVariantDetector.shouldReclassify(
+            cluster: DuplicateCluster(kind: .exactDuplicate, members: [original, edited], suggestedKeeperIDs: [original.path], bytesIfPruned: edited.size),
+            visionDistance: 0.2
+        ))
+
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("EditVariantEXIF-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+        let untouchedURL = temporaryDirectory.appendingPathComponent("untouched.png")
+        let editedURL = temporaryDirectory.appendingPathComponent("edited.tiff")
+        try writePNG(makeGradientImage(reversed: false), to: untouchedURL)
+        try writePNG(
+            makeGradientImage(reversed: true),
+            to: editedURL,
+            typeIdentifier: UTType.tiff.identifier,
+            properties: [
+                kCGImagePropertyTIFFDictionary: [
+                    kCGImagePropertyTIFFSoftware: "Adobe Photoshop",
+                ],
+            ]
+        )
+
+        XCTAssertEqual(EditVariantDetector.editingSoftware(at: editedURL), "Adobe Photoshop")
+        let exifSignals = EditVariantDetector.detect(lhs: original, rhs: edited, lhsURL: untouchedURL, rhsURL: editedURL)
+        XCTAssertTrue(exifSignals.contains { $0.kind == .exposureAdjustment && $0.confidence == 0.85 })
     }
 
     // MARK: - DeduplicationPlanner
@@ -1087,6 +1450,104 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertEqual(logsContents.count, 2, "Logs directory must contain exactly two dedupe receipts")
     }
 
+    // MARK: - Fingerprint index and import duplicate checks
+
+    func testFingerprintIndexRoundTripLookupDigestsAndRemoval() throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("FingerprintIndex-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let db = try OrganizerDatabase(url: temporaryDirectory.appendingPathComponent(".organize_cache.db"))
+        defer { db.close() }
+        try db.ensureFingerprintIndexSchema()
+
+        let first = FingerprintIndexRecord(
+            digest: "digest-a",
+            size: 12,
+            path: temporaryDirectory.appendingPathComponent("a.jpg").path,
+            folderRoot: "/library/A",
+            modificationTime: 10
+        )
+        let second = FingerprintIndexRecord(
+            digest: "digest-b",
+            size: 34,
+            path: temporaryDirectory.appendingPathComponent("b.jpg").path,
+            folderRoot: "/library/B",
+            modificationTime: 20
+        )
+        try db.saveFingerprintIndexRecords([first, second])
+
+        XCTAssertEqual(try db.fingerprintLookup(digest: "digest-a", size: 12), [first])
+        XCTAssertEqual(try db.allFingerprintDigests(forFolder: "/library/A"), ["digest-a"])
+        XCTAssertEqual(try db.allFingerprintDigests(forFolder: "/library/B"), ["digest-b"])
+
+        try db.removeFingerprintIndexRecords(forFolder: "/library/A")
+        XCTAssertTrue(try db.fingerprintLookup(digest: "digest-a", size: 12).isEmpty)
+        XCTAssertEqual(try db.fingerprintLookup(digest: "digest-b", size: 34), [second])
+    }
+
+    func testImportDuplicateCheckerClassifiesDuplicatesAndUniques() async throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ImportDuplicateChecker-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let existingURL = temporaryDirectory.appendingPathComponent("existing.jpg")
+        let duplicateURL = temporaryDirectory.appendingPathComponent("incoming-copy.jpg")
+        let uniqueURL = temporaryDirectory.appendingPathComponent("unique.jpg")
+        let missingURL = temporaryDirectory.appendingPathComponent("missing.jpg")
+        try Data("same-content".utf8).write(to: existingURL)
+        try Data("same-content".utf8).write(to: duplicateURL)
+        try Data("different".utf8).write(to: uniqueURL)
+
+        let db = try OrganizerDatabase(url: temporaryDirectory.appendingPathComponent(".organize_cache.db"))
+        defer { db.close() }
+        try db.ensureFingerprintIndexSchema()
+        let hasher = FileIdentityHasher()
+        let existingIdentity = try hasher.hashIdentity(at: existingURL, knownSize: Int64(Data("same-content".utf8).count))
+        try db.saveFingerprintIndexRecords([
+            FingerprintIndexRecord(
+                digest: existingIdentity.digest,
+                size: existingIdentity.size,
+                path: existingURL.path,
+                folderRoot: temporaryDirectory.path,
+                modificationTime: 1
+            ),
+        ])
+
+        var progress: [(Int, Int)] = []
+        var result: ImportDuplicateChecker.CheckResult?
+        let stream = ImportDuplicateChecker.check(
+            sourcePaths: [duplicateURL.path, uniqueURL.path, missingURL.path],
+            database: db,
+            hasher: hasher,
+            workerCount: 1
+        )
+        for try await event in stream {
+            switch event {
+            case let .progress(checked, total):
+                progress.append((checked, total))
+            case let .complete(checkResult):
+                result = checkResult
+            }
+        }
+
+        XCTAssertEqual(progress.last?.0, 3)
+        XCTAssertEqual(progress.last?.1, 3)
+        let checkResult = try XCTUnwrap(result)
+        XCTAssertEqual(checkResult.totalFiles, 3)
+        XCTAssertEqual(checkResult.duplicates, [
+            ImportDuplicateChecker.DuplicateEntry(
+                sourcePath: duplicateURL.path,
+                existingPath: existingURL.path,
+                sizeBytes: existingIdentity.size
+            ),
+        ])
+        XCTAssertEqual(Set(checkResult.uniqueFiles), [uniqueURL.path, missingURL.path])
+        XCTAssertEqual(checkResult.duplicateBytes, existingIdentity.size)
+    }
+
     // MARK: - DedupeFeatureCache round-trip
 
     func testDedupeFeatureCacheRoundTrip() throws {
@@ -1112,7 +1573,12 @@ final class DeduplicateTests: XCTestCase {
             pixelWidth: 4032,
             pixelHeight: 3024,
             captureDate: Date(timeIntervalSince1970: 1_700_000_000),
-            pairedPath: "/dest/a.cr2"
+            pairedPath: "/dest/a.cr2",
+            eyesOpenScore: 0.92,
+            smileScore: 0.74,
+            subjectSharpness: 0.66,
+            subjectMotionBlur: 0.12,
+            folderRoot: temporaryDirectory.path
         )
         try db.saveDedupeFeatureRecords([record])
 
@@ -1128,11 +1594,21 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertEqual(restored.pixelHeight, 3024)
         XCTAssertEqual(try XCTUnwrap(restored.captureDate?.timeIntervalSince1970), 1_700_000_000, accuracy: 0.0001)
         XCTAssertEqual(restored.pairedPath, "/dest/a.cr2")
+        XCTAssertEqual(restored.eyesOpenScore, 0.92)
+        XCTAssertEqual(restored.smileScore, 0.74)
+        XCTAssertEqual(restored.subjectSharpness, 0.66)
+        XCTAssertEqual(restored.subjectMotionBlur, 0.12)
+        XCTAssertEqual(restored.folderRoot, temporaryDirectory.path)
 
         let metadataOnly = try db.loadDedupeFeatureMetadataRecords()
         let metadataRecord = try XCTUnwrap(metadataOnly[fixturePath])
         XCTAssertNil(metadataRecord.featurePrintData)
         XCTAssertEqual(metadataRecord.dhash, 0xDEADBEEFCAFEBABE)
+        XCTAssertEqual(metadataRecord.eyesOpenScore, 0.92)
+        XCTAssertEqual(metadataRecord.smileScore, 0.74)
+        XCTAssertEqual(metadataRecord.subjectSharpness, 0.66)
+        XCTAssertEqual(metadataRecord.subjectMotionBlur, 0.12)
+        XCTAssertEqual(metadataRecord.folderRoot, temporaryDirectory.path)
         XCTAssertEqual(
             try db.loadDedupeFeaturePrintData(for: [fixturePath, "/missing.jpg"])[fixturePath],
             Data([1, 2, 3, 4])
@@ -1212,7 +1688,12 @@ final class DeduplicateTests: XCTestCase {
         faceScore: Double? = nil,
         pairedPath: String? = nil,
         isRaw: Bool = false,
-        isLivePhotoStill: Bool = false
+        isLivePhotoStill: Bool = false,
+        eyesOpenScore: Double? = nil,
+        smileScore: Double? = nil,
+        subjectSharpness: Double? = nil,
+        subjectMotionBlur: Double? = nil,
+        folderRoot: String? = nil
     ) -> PhotoCandidate {
         PhotoCandidate(
             path: path,
@@ -1228,7 +1709,12 @@ final class DeduplicateTests: XCTestCase {
             faceScore: faceScore,
             isRaw: isRaw,
             isLivePhotoStill: isLivePhotoStill,
-            pairedPath: pairedPath
+            pairedPath: pairedPath,
+            eyesOpenScore: eyesOpenScore,
+            smileScore: smileScore,
+            subjectSharpness: subjectSharpness,
+            subjectMotionBlur: subjectMotionBlur,
+            folderRoot: folderRoot
         )
     }
 
@@ -1280,16 +1766,21 @@ final class DeduplicateTests: XCTestCase {
         )!
     }
 
-    private func writePNG(_ image: CGImage, to url: URL) throws {
+    private func writePNG(
+        _ image: CGImage,
+        to url: URL,
+        typeIdentifier: String = UTType.png.identifier,
+        properties: [CFString: Any]? = nil
+    ) throws {
         guard let destination = CGImageDestinationCreateWithURL(
             url as CFURL,
-            UTType.png.identifier as CFString,
+            typeIdentifier as CFString,
             1,
             nil
         ) else {
             throw TestFailure.expectedFailure("Could not create image destination")
         }
-        CGImageDestinationAddImage(destination, image, nil)
+        CGImageDestinationAddImage(destination, image, properties as CFDictionary?)
         XCTAssertTrue(CGImageDestinationFinalize(destination))
     }
 }

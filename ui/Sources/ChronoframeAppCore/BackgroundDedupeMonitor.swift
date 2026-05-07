@@ -1,5 +1,7 @@
 import Combine
+#if canImport(ChronoframeCore)
 import ChronoframeCore
+#endif
 import Foundation
 
 /// Watches monitored folders for new/changed media files and runs

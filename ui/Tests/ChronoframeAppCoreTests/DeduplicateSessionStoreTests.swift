@@ -222,6 +222,84 @@ final class DeduplicateSessionStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testTriageBucketsGroupAnnotatedClustersAndDefaultMissingToMedium() async throws {
+        let high = DuplicateCluster(
+            kind: .exactDuplicate,
+            members: [
+                PhotoCandidate(path: "/dest/high-a.jpg", size: 100, modificationTime: 0, qualityScore: 0.9),
+                PhotoCandidate(path: "/dest/high-b.jpg", size: 100, modificationTime: 0, qualityScore: 0.4),
+            ],
+            suggestedKeeperIDs: ["/dest/high-a.jpg"],
+            bytesIfPruned: 100,
+            annotation: ClusterAnnotation(confidence: .high, matchReason: MatchReason(kind: .exactDuplicate))
+        )
+        let low = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [
+                PhotoCandidate(path: "/dest/low-a.jpg", size: 100, modificationTime: 0, qualityScore: 0.9),
+                PhotoCandidate(path: "/dest/low-b.jpg", size: 100, modificationTime: 0, qualityScore: 0.4),
+            ],
+            suggestedKeeperIDs: ["/dest/low-a.jpg"],
+            bytesIfPruned: 100,
+            annotation: ClusterAnnotation(confidence: .low, matchReason: MatchReason(kind: .nearDuplicate))
+        )
+        let unannotated = DuplicateCluster(
+            kind: .burst,
+            members: [
+                PhotoCandidate(path: "/dest/mid-a.jpg", size: 100, modificationTime: 0, qualityScore: 0.9),
+                PhotoCandidate(path: "/dest/mid-b.jpg", size: 100, modificationTime: 0, qualityScore: 0.4),
+            ],
+            suggestedKeeperIDs: ["/dest/mid-a.jpg"],
+            bytesIfPruned: 100
+        )
+        let store = DeduplicateSessionStore(engine: MockDeduplicateEngine(clusters: [high, low, unannotated]))
+
+        store.startScan(configuration: DeduplicateConfiguration(destinationPath: "/dest"))
+        _ = await waitForCondition { store.status == .readyToReview }
+
+        XCTAssertEqual(store.triageBuckets[.high]?.map(\.id), [high.id])
+        XCTAssertEqual(store.triageBuckets[.low]?.map(\.id), [low.id])
+        XCTAssertEqual(store.triageBuckets[.medium]?.map(\.id), [unannotated.id])
+    }
+
+    @MainActor
+    func testAcceptAllHighConfidenceOnlyAppliesHighBucketSuggestions() async throws {
+        let high = DuplicateCluster(
+            kind: .exactDuplicate,
+            members: [
+                PhotoCandidate(path: "/dest/high-a.jpg", size: 100, modificationTime: 0, qualityScore: 0.9),
+                PhotoCandidate(path: "/dest/high-b.jpg", size: 100, modificationTime: 0, qualityScore: 0.4),
+            ],
+            suggestedKeeperIDs: ["/dest/high-a.jpg"],
+            bytesIfPruned: 100,
+            annotation: ClusterAnnotation(confidence: .high, matchReason: MatchReason(kind: .exactDuplicate))
+        )
+        let medium = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [
+                PhotoCandidate(path: "/dest/medium-a.jpg", size: 100, modificationTime: 0, qualityScore: 0.9),
+                PhotoCandidate(path: "/dest/medium-b.jpg", size: 100, modificationTime: 0, qualityScore: 0.4),
+            ],
+            suggestedKeeperIDs: ["/dest/medium-a.jpg"],
+            bytesIfPruned: 100,
+            annotation: ClusterAnnotation(confidence: .medium, matchReason: MatchReason(kind: .nearDuplicate))
+        )
+        let store = DeduplicateSessionStore(engine: MockDeduplicateEngine(clusters: [high, medium]))
+
+        store.startScan(configuration: DeduplicateConfiguration(destinationPath: "/dest"))
+        _ = await waitForCondition { store.status == .readyToReview }
+        store.setDecision(.keep, forPath: "/dest/high-b.jpg")
+        store.setDecision(.keep, forPath: "/dest/medium-b.jpg")
+
+        store.acceptAllHighConfidence()
+
+        XCTAssertEqual(store.decisions.byPath["/dest/high-a.jpg"], .keep)
+        XCTAssertEqual(store.decisions.byPath["/dest/high-b.jpg"], .delete)
+        XCTAssertEqual(store.decisions.byPath["/dest/medium-a.jpg"], .keep)
+        XCTAssertEqual(store.decisions.byPath["/dest/medium-b.jpg"], .keep)
+    }
+
+    @MainActor
     func testPauseReviewPreservesScanAndOnlyResumesForMatchingConfiguration() async throws {
         let keeper = PhotoCandidate(
             path: "/dest/keeper.jpg",
