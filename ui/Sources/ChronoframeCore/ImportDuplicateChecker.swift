@@ -42,10 +42,10 @@ public enum ImportDuplicateChecker {
         hasher: FileIdentityHasher,
         workerCount: Int = 4
     ) -> AsyncThrowingStream<ImportCheckEvent, Error> {
-        nonisolated(unsafe) let db = database
+        let databaseReference = SendableDatabaseReference(database)
         return AsyncThrowingStream { continuation in
             Task.detached {
-                let database = db
+                let database = databaseReference.database
                 let total = sourcePaths.count
                 var duplicates: [DuplicateEntry] = []
                 var uniqueFiles: [String] = []
@@ -104,6 +104,14 @@ public enum ImportDuplicateChecker {
             return size.int64Value
         }
         return attributes[.size] as? Int64
+    }
+
+    private struct SendableDatabaseReference: @unchecked Sendable {
+        let database: OrganizerDatabase
+
+        init(_ database: OrganizerDatabase) {
+            self.database = database
+        }
     }
 }
 
