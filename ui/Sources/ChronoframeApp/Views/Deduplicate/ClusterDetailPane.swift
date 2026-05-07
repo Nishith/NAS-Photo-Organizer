@@ -16,6 +16,8 @@ struct ClusterDetailPane: View {
     @ObservedObject var thumbnailLoader: DedupeThumbnailLoader
     @State private var thumbnailStripHeight = DeduplicateDetailPreviewLayout.defaultThumbnailStripHeight
     @State private var dragStartThumbnailStripHeight: CGFloat?
+    @State private var showingReasonDetail = false
+    @State private var showingComparisonOverlay = false
 
     var body: some View {
         Group {
@@ -51,9 +53,12 @@ struct ClusterDetailPane: View {
                 geometry.size.height - stripHeight - DeduplicateDetailPreviewLayout.resizeHandleHeight
             )
             VStack(spacing: 0) {
-                ViewThatFits(in: .horizontal) {
-                    detailContentWide(focused: focused, cluster: cluster)
-                    detailContentCompact(focused: focused, cluster: cluster)
+                VStack(spacing: 0) {
+                    warningBanner(for: cluster)
+                    ViewThatFits(in: .horizontal) {
+                        detailContentWide(focused: focused, cluster: cluster)
+                        detailContentCompact(focused: focused, cluster: cluster)
+                    }
                 }
                 .frame(height: previewHeight)
 
@@ -199,6 +204,11 @@ struct ClusterDetailPane: View {
             Divider().padding(.vertical, 2)
 
             decisionControls(for: member, cluster: cluster)
+
+            if let annotation = cluster.annotation {
+                Divider().padding(.vertical, 2)
+                reasoningSection(annotation: annotation, cluster: cluster)
+            }
         }
         .padding(DesignTokens.Spacing.md)
         .background(DesignTokens.ColorSystem.panel)
@@ -259,6 +269,107 @@ struct ClusterDetailPane: View {
             Button("Delete", role: .destructive) { sessionStore.setDecision(.delete, forPath: member.path) }
         }
         .help(URL(fileURLWithPath: member.path).lastPathComponent)
+    }
+
+    // MARK: - Warning Banner
+
+    @ViewBuilder
+    private func warningBanner(for cluster: DuplicateCluster) -> some View {
+        if let annotation = cluster.annotation, !annotation.warnings.isEmpty {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("These photos may be intentionally different")
+                        .font(.caption.weight(.semibold))
+                    ForEach(Array(annotation.warnings.enumerated()), id: \.offset) { _, warning in
+                        Text(MatchReasonFormatter.warningSummary(warning))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+            }
+            .padding(8)
+            .background(Color.orange.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .padding(.horizontal, DesignTokens.Spacing.lg)
+            .padding(.top, DesignTokens.Spacing.sm)
+        }
+    }
+
+    // MARK: - Reasoning Section
+
+    @ViewBuilder
+    private func reasoningSection(annotation: ClusterAnnotation, cluster: DuplicateCluster) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showingReasonDetail.toggle()
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: showingReasonDetail ? "chevron.down" : "chevron.right")
+                        .font(.caption2)
+                    Text("Why matched")
+                        .font(.caption.weight(.medium))
+                    Spacer()
+                    confidenceBadge(annotation.confidence)
+                }
+                .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if showingReasonDetail {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(MatchReasonFormatter.summary(annotation.matchReason))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let keeperReason = annotation.keeperReason {
+                        Text(MatchReasonFormatter.keeperSummary(keeperReason))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+
+        if cluster.members.count >= 2 {
+            Button {
+                showingComparisonOverlay = true
+            } label: {
+                Label("Compare", systemImage: "rectangle.on.rectangle")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .keyboardShortcut("c", modifiers: [])
+            .sheet(isPresented: $showingComparisonOverlay) {
+                if let keeper = cluster.members.first(where: { isSuggestedKeeper($0, in: cluster) }),
+                   let other = cluster.members.first(where: { !isSuggestedKeeper($0, in: cluster) }) {
+                    ComparisonOverlayView(leftPath: keeper.path, rightPath: other.path)
+                }
+            }
+        }
+    }
+
+    private func confidenceBadge(_ level: ConfidenceLevel) -> some View {
+        Text(MatchReasonFormatter.confidenceLabel(level))
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(confidenceColor(level).opacity(0.15))
+            .foregroundStyle(confidenceColor(level))
+            .clipShape(Capsule())
+    }
+
+    private func confidenceColor(_ level: ConfidenceLevel) -> Color {
+        switch level {
+        case .high: return .green
+        case .medium: return .yellow
+        case .low: return .orange
+        }
     }
 
     private func focusedMember(in cluster: DuplicateCluster) -> PhotoCandidate? {

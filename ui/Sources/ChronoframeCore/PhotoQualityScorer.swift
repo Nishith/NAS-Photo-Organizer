@@ -79,6 +79,52 @@ public enum PhotoQualityScorer {
         return PhotoQualityScore(composite: composite, sharpness: sharpness, faceScore: faceScore)
     }
 
+    /// Expression-aware composite that incorporates eyes-open and smile
+    /// scores when available. Used for burst clusters where expression
+    /// quality matters more than global sharpness alone.
+    public static func expressionAwareScore(
+        sharpness: Double,
+        faceScore: Double?,
+        eyesOpenScore: Double?,
+        smileScore: Double?,
+        subjectMotionBlur: Double?,
+        sizeBytes: Int64,
+        pixelWidth: Int?,
+        pixelHeight: Int?
+    ) -> PhotoQualityScore {
+        guard let eyesOpen = eyesOpenScore else {
+            return score(
+                sharpness: sharpness,
+                faceScore: faceScore,
+                sizeBytes: sizeBytes,
+                pixelWidth: pixelWidth,
+                pixelHeight: pixelHeight
+            )
+        }
+
+        let resolution = Double(max(0, (pixelWidth ?? 0) * (pixelHeight ?? 0)))
+        let resolutionScore = resolution > 0 ? min(1.0, log2(resolution) / 24.0) : 0.3
+        let sizeScore = sizeBytes > 0 ? min(1.0, log2(Double(sizeBytes)) / 26.0) : 0.3
+        let smile = smileScore ?? 0.0
+
+        var composite = 0.35 * sharpness
+            + 0.30 * eyesOpen
+            + 0.10 * smile
+            + 0.10 * resolutionScore
+            + 0.10 * sizeScore
+        if let faceScore {
+            composite += 0.05 * faceScore
+        } else {
+            composite += 0.05 * sharpness
+        }
+
+        if let blur = subjectMotionBlur, blur > 0.1 {
+            composite *= (1.0 - 0.3 * blur)
+        }
+
+        return PhotoQualityScore(composite: composite, sharpness: sharpness, faceScore: faceScore)
+    }
+
     /// Variance of a Laplacian-filtered grayscale downscale, normalized into
     /// 0…1. Higher = sharper. Uses a short-side downscale to bound work for
     /// very large RAWs.

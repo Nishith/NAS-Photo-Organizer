@@ -14,33 +14,81 @@ struct ClusterListPane: View {
     @Binding var focusedClusterID: UUID?
     @Binding var focusedMemberPath: String?
     @ObservedObject var thumbnailLoader: DedupeThumbnailLoader
+    @State private var confidenceFilter: ConfidenceFilter = .all
+
+    private enum ConfidenceFilter: String, CaseIterable {
+        case all
+        case high
+        case medium
+        case low
+
+        var label: String {
+            switch self {
+            case .all: return "All"
+            case .high: return "Auto"
+            case .medium: return "Review"
+            case .low: return "Careful"
+            }
+        }
+    }
+
+    private var filteredClusters: [DuplicateCluster] {
+        switch confidenceFilter {
+        case .all: return clusters
+        case .high: return clusters.filter { ($0.annotation?.confidence ?? .medium) == .high }
+        case .medium: return clusters.filter { ($0.annotation?.confidence ?? .medium) == .medium }
+        case .low: return clusters.filter { ($0.annotation?.confidence ?? .medium) == .low }
+        }
+    }
 
     private var grouped: [(ClusterKind, [DuplicateCluster])] {
-        let order: [ClusterKind] = [.exactDuplicate, .burst, .nearDuplicate]
+        let order: [ClusterKind] = [.exactDuplicate, .burst, .nearDuplicate, .editedVariant]
         return order.compactMap { kind in
-            let matching = clusters.filter { $0.kind == kind }
+            let matching = filteredClusters.filter { $0.kind == kind }
             return matching.isEmpty ? nil : (kind, matching)
         }
     }
 
+    private func bucketCount(_ filter: ConfidenceFilter) -> Int {
+        switch filter {
+        case .all: return clusters.count
+        case .high: return clusters.filter { ($0.annotation?.confidence ?? .medium) == .high }.count
+        case .medium: return clusters.filter { ($0.annotation?.confidence ?? .medium) == .medium }.count
+        case .low: return clusters.filter { ($0.annotation?.confidence ?? .medium) == .low }.count
+        }
+    }
+
     var body: some View {
-        List(selection: $focusedClusterID) {
-            ForEach(grouped, id: \.0) { kind, list in
-                Section(header: Text("\(kind.title) (\(list.count))")) {
-                    ForEach(list) { cluster in
-                        ClusterRow(
-                            cluster: cluster,
-                            decisions: decisions,
-                            recoverableBytes: recoverableBytes(for: cluster),
-                            thumbnailLoader: thumbnailLoader
-                        )
-                        .tag(cluster.id)
-                        .contentShape(Rectangle())
+        VStack(spacing: 0) {
+            Picker("Filter", selection: $confidenceFilter) {
+                ForEach(ConfidenceFilter.allCases, id: \.self) { filter in
+                    Text("\(filter.label) (\(bucketCount(filter)))")
+                        .tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, DesignTokens.Spacing.sm)
+            .padding(.vertical, DesignTokens.Spacing.xs)
+
+            List(selection: $focusedClusterID) {
+                ForEach(grouped, id: \.0) { kind, list in
+                    Section(header: Text("\(kind.title) (\(list.count))")) {
+                        ForEach(list) { cluster in
+                            ClusterRow(
+                                cluster: cluster,
+                                decisions: decisions,
+                                recoverableBytes: recoverableBytes(for: cluster),
+                                thumbnailLoader: thumbnailLoader
+                            )
+                            .tag(cluster.id)
+                            .contentShape(Rectangle())
+                        }
                     }
                 }
             }
+            .listStyle(.sidebar)
         }
-        .listStyle(.sidebar)
         .accessibilityIdentifier("dedupeReviewClusterList")
         .onChange(of: focusedClusterID) { newID in
             guard let newID, let cluster = clusters.first(where: { $0.id == newID }) else { return }
@@ -100,6 +148,7 @@ private struct ClusterRow: View {
                 }
             }
             HStack(spacing: 4) {
+                confidenceDot
                 Text("\(cluster.members.count) photos")
                     .font(.caption)
                 Text("·")
@@ -107,12 +156,23 @@ private struct ClusterRow: View {
                 Text(Self.formatter.string(fromByteCount: recoverableBytes))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if hasWarnings {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.orange)
+                }
                 Spacer()
                 if isFullyReviewed {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.caption)
                         .foregroundStyle(DesignTokens.ColorSystem.statusSuccess)
                 }
+            }
+            if let annotation = cluster.annotation {
+                Text(MatchReasonFormatter.oneLiner(annotation))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
         }
         .padding(.vertical, 4)
@@ -124,6 +184,27 @@ private struct ClusterRow: View {
 
     private var isFullyReviewed: Bool {
         cluster.members.allSatisfy { decisions.byPath[$0.path] != nil }
+    }
+
+    private var hasWarnings: Bool {
+        guard let annotation = cluster.annotation else { return false }
+        return !annotation.warnings.isEmpty
+    }
+
+    @ViewBuilder
+    private var confidenceDot: some View {
+        let level = cluster.annotation?.confidence ?? .medium
+        Circle()
+            .fill(confidenceColor(level))
+            .frame(width: 6, height: 6)
+    }
+
+    private func confidenceColor(_ level: ConfidenceLevel) -> Color {
+        switch level {
+        case .high: return .green
+        case .medium: return .yellow
+        case .low: return .orange
+        }
     }
 
     private func isSuggestedKeeper(_ member: PhotoCandidate) -> Bool {

@@ -38,21 +38,28 @@ public enum DuplicateClusterer {
         let defaultDistanceCache = VisionFeaturePrintDistanceCache()
         let featurePrintCache = FeaturePrintDataCache(provider: featurePrintDataProvider)
 
+        // Capture pairwise distances for annotation (Feature 7).
+        var pairwiseMatches: [PairwiseMatch] = []
+
         for i in 0..<sorted.count {
             let lhs = sorted[i]
             guard let lhsHash = lhs.dhash else { continue }
             if burstMode, lhs.captureDate == nil { continue }
             for j in (i + 1)..<sorted.count {
                 let rhs = sorted[j]
-                if burstMode,
-                   let lhsDate = lhs.captureDate,
-                   let rhsDate = rhs.captureDate,
-                   rhsDate.timeIntervalSince(lhsDate) > timeWindow {
+
+                var timeDelta: TimeInterval?
+                if let lhsDate = lhs.captureDate, let rhsDate = rhs.captureDate {
+                    timeDelta = rhsDate.timeIntervalSince(lhsDate)
+                }
+
+                if burstMode, let td = timeDelta, td > timeWindow {
                     break
                 }
                 guard let rhsHash = rhs.dhash else { continue }
 
-                if PerceptualHash.hammingDistance(lhsHash, rhsHash) > configuration.dhashHammingThreshold {
+                let hammingDist = PerceptualHash.hammingDistance(lhsHash, rhsHash)
+                if hammingDist > configuration.dhashHammingThreshold {
                     continue
                 }
 
@@ -64,6 +71,10 @@ public enum DuplicateClusterer {
                     // tests run without exercising Vision and gives a sane
                     // fallback if a feature print failed to compute.
                     unionFind.union(i, j)
+                    pairwiseMatches.append(PairwiseMatch(
+                        lhsPath: lhs.path, rhsPath: rhs.path,
+                        dhashDistance: hammingDist, timeDeltaSeconds: timeDelta
+                    ))
                     continue
                 }
                 let distance = featurePrintDistance?(lhsPrint, rhsPrint)
@@ -76,6 +87,11 @@ public enum DuplicateClusterer {
                 guard let distance else { continue }
                 if distance <= configuration.similarityThreshold {
                     unionFind.union(i, j)
+                    pairwiseMatches.append(PairwiseMatch(
+                        lhsPath: lhs.path, rhsPath: rhs.path,
+                        visionDistance: distance, dhashDistance: hammingDist,
+                        timeDeltaSeconds: timeDelta
+                    ))
                 }
             }
         }
@@ -100,14 +116,18 @@ public enum DuplicateClusterer {
             let kind = clusterKind(for: members, burstWindowSeconds: burstWindowSeconds)
             let suggested = suggestKeeperIDs(for: members)
             let bytes = bytesIfPruned(members: members, keeperIDs: Set(suggested))
-            clusters.append(
-                DuplicateCluster(
-                    kind: kind,
-                    members: members.sorted { ($0.captureDate ?? .distantPast) < ($1.captureDate ?? .distantPast) },
-                    suggestedKeeperIDs: suggested,
-                    bytesIfPruned: bytes
-                )
+            var cluster = DuplicateCluster(
+                kind: kind,
+                members: members.sorted { ($0.captureDate ?? .distantPast) < ($1.captureDate ?? .distantPast) },
+                suggestedKeeperIDs: suggested,
+                bytesIfPruned: bytes
             )
+            cluster.annotation = ClusterAnnotator.annotate(
+                cluster: cluster,
+                pairwiseMatches: pairwiseMatches,
+                configuration: configuration
+            )
+            clusters.append(cluster)
         }
 
         return clusters.sorted { ($0.members.first?.captureDate ?? .distantPast) < ($1.members.first?.captureDate ?? .distantPast) }
@@ -122,12 +142,18 @@ public enum DuplicateClusterer {
         candidatesByIdentity.values.compactMap { members -> DuplicateCluster? in
             guard members.count > 1 else { return nil }
             let suggested = suggestKeeperIDs(for: members)
-            return DuplicateCluster(
+            var cluster = DuplicateCluster(
                 kind: .exactDuplicate,
                 members: members.sorted { $0.path < $1.path },
                 suggestedKeeperIDs: suggested,
                 bytesIfPruned: bytesIfPruned(members: members, keeperIDs: Set(suggested))
             )
+            cluster.annotation = ClusterAnnotation(
+                confidence: .high,
+                matchReason: MatchReason(kind: .exactDuplicate),
+                keeperReason: ClusterAnnotator.buildKeeperReason(cluster: cluster)
+            )
+            return cluster
         }
     }
 
@@ -153,6 +179,13 @@ public enum DuplicateClusterer {
         if lhs.size != rhs.size { return lhs.size > rhs.size }
         if lhsArea != rhsArea { return lhsArea > rhsArea }
         if lhsFace != rhsFace { return lhsFace > rhsFace }
+        // Expression tiebreakers (Feature 2)
+        let lhsEyes = lhs.eyesOpenScore ?? 0
+        let rhsEyes = rhs.eyesOpenScore ?? 0
+        if lhsEyes != rhsEyes { return lhsEyes > rhsEyes }
+        let lhsSmile = lhs.smileScore ?? 0
+        let rhsSmile = rhs.smileScore ?? 0
+        if lhsSmile != rhsSmile { return lhsSmile > rhsSmile }
         if lhs.isRaw != rhs.isRaw { return lhs.isRaw }
         return lhs.path < rhs.path
     }

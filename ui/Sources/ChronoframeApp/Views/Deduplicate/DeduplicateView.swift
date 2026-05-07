@@ -15,6 +15,7 @@ struct DeduplicateView: View {
     @State private var focusedClusterID: UUID?
     @State private var focusedMemberPath: String?
     @State private var showingCommitConfirmation = false
+    @State private var showingRapidTriage = false
     @State private var hardDeleteForThisCommit = false
     @AppStorage("didOnboardDeduplicate") private var didOnboardDeduplicate = false
 
@@ -400,6 +401,32 @@ struct DeduplicateView: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help("Commit options, including whether selected files move to Trash or are permanently deleted")
+            }
+            Button("Rapid Triage") {
+                showingRapidTriage = true
+            }
+            .accessibilityIdentifier("dedupeRapidTriageButton")
+            .sheet(isPresented: $showingRapidTriage) {
+                let reviewClusters = sessionStore.clusters.filter {
+                    let level = $0.annotation?.confidence ?? .medium
+                    return level == .medium || level == .low
+                }
+                RapidTriageView(
+                    sessionStore: sessionStore,
+                    thumbnailLoader: thumbnailLoader,
+                    clustersToReview: reviewClusters
+                )
+            }
+
+            let highCount = sessionStore.triageBuckets[.high]?.count ?? 0
+            if highCount > 0 {
+                Button("Accept Auto (\(highCount))") {
+                    sessionStore.acceptAllHighConfidence()
+                }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+                .accessibilityLabel("Accept High-Confidence Clusters")
+                .accessibilityIdentifier("dedupeAcceptHighConfidenceButton")
+                .accessibilityHint("Accepts suggestions for all high-confidence clusters")
             }
             Button(density.acceptAllTitle) {
                 sessionStore.acceptAllSuggestions()

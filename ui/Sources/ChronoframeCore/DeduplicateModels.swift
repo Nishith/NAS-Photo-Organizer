@@ -46,6 +46,23 @@ public enum DedupeSimilarityPreset: String, CaseIterable, Sendable, Codable, Ide
 
 // MARK: - Configuration
 
+// MARK: - Cross-folder source (Feature 5)
+
+public struct CrossFolderSource: Sendable, Equatable, Identifiable, Codable {
+    public var id: String { path }
+    public var path: String
+    /// Lower number = higher priority. Files in higher-priority folders are
+    /// preferred as keepers when quality is otherwise equal.
+    public var priority: Int
+    public var label: String?
+
+    public init(path: String, priority: Int = 0, label: String? = nil) {
+        self.path = path
+        self.priority = priority
+        self.label = label
+    }
+}
+
 /// Settings that drive a single dedupe scan + commit cycle.
 public struct DeduplicateConfiguration: Equatable, Sendable {
     public var destinationPath: String
@@ -70,6 +87,17 @@ public struct DeduplicateConfiguration: Equatable, Sendable {
     public var enableExactDuplicateGroup: Bool
     public var workerCount: Int
 
+    // MARK: Feature flags (Phase 2+)
+
+    /// Automatically accept high-confidence clusters without manual review.
+    public var autoAcceptHighConfidence: Bool
+    /// Run edit-variant detection on near-duplicate clusters to distinguish
+    /// intentional edits (crops, exposure adjustments) from true duplicates.
+    public var detectEditVariants: Bool
+    /// Additional folders to scan alongside the destination (cross-folder
+    /// dedup). Empty by default for single-folder behavior.
+    public var additionalSources: [CrossFolderSource]
+
     public init(
         destinationPath: String,
         timeWindowSeconds: Int = 30,
@@ -79,7 +107,10 @@ public struct DeduplicateConfiguration: Equatable, Sendable {
         treatRawJpegPairsAsUnit: Bool = true,
         treatLivePhotoPairsAsUnit: Bool = true,
         enableExactDuplicateGroup: Bool = true,
-        workerCount: Int = 4
+        workerCount: Int = 4,
+        autoAcceptHighConfidence: Bool = false,
+        detectEditVariants: Bool = true,
+        additionalSources: [CrossFolderSource] = []
     ) {
         self.destinationPath = destinationPath
         self.timeWindowSeconds = timeWindowSeconds
@@ -90,6 +121,9 @@ public struct DeduplicateConfiguration: Equatable, Sendable {
         self.treatLivePhotoPairsAsUnit = treatLivePhotoPairsAsUnit
         self.enableExactDuplicateGroup = enableExactDuplicateGroup
         self.workerCount = workerCount
+        self.autoAcceptHighConfidence = autoAcceptHighConfidence
+        self.detectEditVariants = detectEditVariants
+        self.additionalSources = additionalSources
     }
 }
 
@@ -120,12 +154,16 @@ public enum ClusterKind: String, Sendable, Codable {
     /// Visually similar shots taken within ~10s of each other — likely a
     /// burst sequence.
     case burst
+    /// Photos that are intentional edits of each other (crops, exposure
+    /// adjustments, filters) rather than accidental duplicates.
+    case editedVariant
 
     public var title: String {
         switch self {
         case .exactDuplicate: return "Exact duplicates"
         case .nearDuplicate: return "Near duplicates"
         case .burst: return "Bursts"
+        case .editedVariant: return "Edited variants"
         }
     }
 }
@@ -156,6 +194,22 @@ public struct PhotoCandidate: Sendable, Identifiable, Equatable {
     /// keep/delete decisions are committed.
     public var pairedPath: String?
 
+    // MARK: Expression analysis (Phase 1 — Feature 2)
+
+    /// Confidence that all detected faces have open eyes (0-1).
+    public var eyesOpenScore: Double?
+    /// Confidence that detected faces are smiling (0-1).
+    public var smileScore: Double?
+    /// Laplacian sharpness within the face bounding box (subject-focused).
+    public var subjectSharpness: Double?
+    /// Motion blur on the subject (0=sharp, 1=heavy blur).
+    public var subjectMotionBlur: Double?
+
+    // MARK: Cross-folder (Phase 3 — Feature 5)
+
+    /// Root folder this candidate was discovered in, for cross-folder dedup.
+    public var folderRoot: String?
+
     public init(
         path: String,
         size: Int64,
@@ -170,7 +224,12 @@ public struct PhotoCandidate: Sendable, Identifiable, Equatable {
         faceScore: Double? = nil,
         isRaw: Bool = false,
         isLivePhotoStill: Bool = false,
-        pairedPath: String? = nil
+        pairedPath: String? = nil,
+        eyesOpenScore: Double? = nil,
+        smileScore: Double? = nil,
+        subjectSharpness: Double? = nil,
+        subjectMotionBlur: Double? = nil,
+        folderRoot: String? = nil
     ) {
         self.path = path
         self.size = size
@@ -186,6 +245,11 @@ public struct PhotoCandidate: Sendable, Identifiable, Equatable {
         self.isRaw = isRaw
         self.isLivePhotoStill = isLivePhotoStill
         self.pairedPath = pairedPath
+        self.eyesOpenScore = eyesOpenScore
+        self.smileScore = smileScore
+        self.subjectSharpness = subjectSharpness
+        self.subjectMotionBlur = subjectMotionBlur
+        self.folderRoot = folderRoot
     }
 }
 
@@ -202,19 +266,24 @@ public struct DuplicateCluster: Sendable, Identifiable, Equatable {
     /// Bytes that would be reclaimed if the user accepts the suggestion
     /// (sum of non-keeper sizes including paired partners).
     public var bytesIfPruned: Int64
+    /// Confidence, match reasoning, keeper reasoning, and safety warnings.
+    /// `nil` for clusters produced by older scan sessions (backwards-compat).
+    public var annotation: ClusterAnnotation?
 
     public init(
         id: UUID = UUID(),
         kind: ClusterKind,
         members: [PhotoCandidate],
         suggestedKeeperIDs: [String],
-        bytesIfPruned: Int64
+        bytesIfPruned: Int64,
+        annotation: ClusterAnnotation? = nil
     ) {
         self.id = id
         self.kind = kind
         self.members = members
         self.suggestedKeeperIDs = suggestedKeeperIDs
         self.bytesIfPruned = bytesIfPruned
+        self.annotation = annotation
     }
 }
 

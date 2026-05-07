@@ -17,6 +17,11 @@ public struct DedupeFeatureRecord: Equatable, Sendable {
     public var pixelHeight: Int?
     public var captureDate: Date?
     public var pairedPath: String?
+    public var eyesOpenScore: Double?
+    public var smileScore: Double?
+    public var subjectSharpness: Double?
+    public var subjectMotionBlur: Double?
+    public var folderRoot: String?
 
     public init(
         path: String,
@@ -29,7 +34,12 @@ public struct DedupeFeatureRecord: Equatable, Sendable {
         pixelWidth: Int? = nil,
         pixelHeight: Int? = nil,
         captureDate: Date? = nil,
-        pairedPath: String? = nil
+        pairedPath: String? = nil,
+        eyesOpenScore: Double? = nil,
+        smileScore: Double? = nil,
+        subjectSharpness: Double? = nil,
+        subjectMotionBlur: Double? = nil,
+        folderRoot: String? = nil
     ) {
         self.path = path
         self.size = size
@@ -42,6 +52,11 @@ public struct DedupeFeatureRecord: Equatable, Sendable {
         self.pixelHeight = pixelHeight
         self.captureDate = captureDate
         self.pairedPath = pairedPath
+        self.eyesOpenScore = eyesOpenScore
+        self.smileScore = smileScore
+        self.subjectSharpness = subjectSharpness
+        self.subjectMotionBlur = subjectMotionBlur
+        self.folderRoot = folderRoot
     }
 }
 
@@ -67,12 +82,27 @@ extension OrganizerDatabase {
             );
             """
         )
+        // Additive migrations for expression analysis and cross-folder support.
+        // Each column is NULLable; existing rows remain valid without recompute.
+        for column in [
+            ("eyes_open_score", "REAL"),
+            ("smile_score", "REAL"),
+            ("subject_sharpness", "REAL"),
+            ("subject_blur", "REAL"),
+            ("folder_root", "TEXT"),
+        ] {
+            try? execute("ALTER TABLE DedupeFeatures ADD COLUMN \(column.0) \(column.1);")
+        }
     }
 
     public func loadDedupeFeatureRecords() throws -> [String: DedupeFeatureRecord] {
         var rows: [String: DedupeFeatureRecord] = [:]
         let statement = try prepare(
-            "SELECT path, size, mtime, dhash, feature_print, sharpness, face_score, pixel_width, pixel_height, capture_date, paired_path FROM DedupeFeatures"
+            """
+            SELECT path, size, mtime, dhash, feature_print, sharpness, face_score, pixel_width, pixel_height, capture_date, paired_path,
+                   eyes_open_score, smile_score, subject_sharpness, subject_blur, folder_root
+            FROM DedupeFeatures
+            """
         )
         defer { sqlite3_finalize(statement) }
 
@@ -105,6 +135,11 @@ extension OrganizerDatabase {
             let pixelHeight: Int? = sqlite3_column_type(statement, 8) == SQLITE_NULL ? nil : Int(sqlite3_column_int64(statement, 8))
             let captureDate: Date? = sqlite3_column_type(statement, 9) == SQLITE_NULL ? nil : Date(timeIntervalSince1970: sqlite3_column_double(statement, 9))
             let pairedPath: String? = OrganizerDatabase.sqliteString(statement, column: 10)
+            let eyesOpenScore: Double? = sqlite3_column_type(statement, 11) == SQLITE_NULL ? nil : sqlite3_column_double(statement, 11)
+            let smileScore: Double? = sqlite3_column_type(statement, 12) == SQLITE_NULL ? nil : sqlite3_column_double(statement, 12)
+            let subjectSharpness: Double? = sqlite3_column_type(statement, 13) == SQLITE_NULL ? nil : sqlite3_column_double(statement, 13)
+            let subjectMotionBlur: Double? = sqlite3_column_type(statement, 14) == SQLITE_NULL ? nil : sqlite3_column_double(statement, 14)
+            let folderRoot: String? = OrganizerDatabase.sqliteString(statement, column: 15)
 
             rows[path] = DedupeFeatureRecord(
                 path: path,
@@ -117,7 +152,12 @@ extension OrganizerDatabase {
                 pixelWidth: pixelWidth,
                 pixelHeight: pixelHeight,
                 captureDate: captureDate,
-                pairedPath: pairedPath
+                pairedPath: pairedPath,
+                eyesOpenScore: eyesOpenScore,
+                smileScore: smileScore,
+                subjectSharpness: subjectSharpness,
+                subjectMotionBlur: subjectMotionBlur,
+                folderRoot: folderRoot
             )
         }
         return rows
@@ -129,7 +169,11 @@ extension OrganizerDatabase {
     public func loadDedupeFeatureMetadataRecords() throws -> [String: DedupeFeatureRecord] {
         var rows: [String: DedupeFeatureRecord] = [:]
         let statement = try prepare(
-            "SELECT path, size, mtime, dhash, sharpness, face_score, pixel_width, pixel_height, capture_date, paired_path FROM DedupeFeatures"
+            """
+            SELECT path, size, mtime, dhash, sharpness, face_score, pixel_width, pixel_height, capture_date, paired_path,
+                   eyes_open_score, smile_score, subject_sharpness, subject_blur, folder_root
+            FROM DedupeFeatures
+            """
         )
         defer { sqlite3_finalize(statement) }
 
@@ -155,6 +199,11 @@ extension OrganizerDatabase {
             let pixelHeight: Int? = sqlite3_column_type(statement, 7) == SQLITE_NULL ? nil : Int(sqlite3_column_int64(statement, 7))
             let captureDate: Date? = sqlite3_column_type(statement, 8) == SQLITE_NULL ? nil : Date(timeIntervalSince1970: sqlite3_column_double(statement, 8))
             let pairedPath: String? = OrganizerDatabase.sqliteString(statement, column: 9)
+            let eyesOpenScore: Double? = sqlite3_column_type(statement, 10) == SQLITE_NULL ? nil : sqlite3_column_double(statement, 10)
+            let smileScore: Double? = sqlite3_column_type(statement, 11) == SQLITE_NULL ? nil : sqlite3_column_double(statement, 11)
+            let subjectSharpness: Double? = sqlite3_column_type(statement, 12) == SQLITE_NULL ? nil : sqlite3_column_double(statement, 12)
+            let subjectMotionBlur: Double? = sqlite3_column_type(statement, 13) == SQLITE_NULL ? nil : sqlite3_column_double(statement, 13)
+            let folderRoot: String? = OrganizerDatabase.sqliteString(statement, column: 14)
 
             rows[path] = DedupeFeatureRecord(
                 path: path,
@@ -167,7 +216,12 @@ extension OrganizerDatabase {
                 pixelWidth: pixelWidth,
                 pixelHeight: pixelHeight,
                 captureDate: captureDate,
-                pairedPath: pairedPath
+                pairedPath: pairedPath,
+                eyesOpenScore: eyesOpenScore,
+                smileScore: smileScore,
+                subjectSharpness: subjectSharpness,
+                subjectMotionBlur: subjectMotionBlur,
+                folderRoot: folderRoot
             )
         }
         return rows
@@ -211,8 +265,9 @@ extension OrganizerDatabase {
         let statement = try prepare(
             """
             REPLACE INTO DedupeFeatures
-            (path, size, mtime, dhash, feature_print, sharpness, face_score, pixel_width, pixel_height, capture_date, paired_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (path, size, mtime, dhash, feature_print, sharpness, face_score, pixel_width, pixel_height, capture_date, paired_path,
+             eyes_open_score, smile_score, subject_sharpness, subject_blur, folder_root)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
         )
         defer { sqlite3_finalize(statement) }
@@ -266,6 +321,31 @@ extension OrganizerDatabase {
                     sqlite3_bind_text(statement, 11, pairedPath, -1, OrganizerDatabase.sqliteTransient)
                 } else {
                     sqlite3_bind_null(statement, 11)
+                }
+                if let eyesOpen = record.eyesOpenScore {
+                    sqlite3_bind_double(statement, 12, eyesOpen)
+                } else {
+                    sqlite3_bind_null(statement, 12)
+                }
+                if let smile = record.smileScore {
+                    sqlite3_bind_double(statement, 13, smile)
+                } else {
+                    sqlite3_bind_null(statement, 13)
+                }
+                if let subjectSharpness = record.subjectSharpness {
+                    sqlite3_bind_double(statement, 14, subjectSharpness)
+                } else {
+                    sqlite3_bind_null(statement, 14)
+                }
+                if let subjectBlur = record.subjectMotionBlur {
+                    sqlite3_bind_double(statement, 15, subjectBlur)
+                } else {
+                    sqlite3_bind_null(statement, 15)
+                }
+                if let folderRoot = record.folderRoot {
+                    sqlite3_bind_text(statement, 16, folderRoot, -1, OrganizerDatabase.sqliteTransient)
+                } else {
+                    sqlite3_bind_null(statement, 16)
                 }
                 guard sqlite3_step(statement) == SQLITE_DONE else {
                     throw OrganizerDatabaseError.stepFailed(lastErrorMessage())

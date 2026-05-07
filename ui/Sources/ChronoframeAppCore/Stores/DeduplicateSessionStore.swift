@@ -237,6 +237,29 @@ public final class DeduplicateSessionStore: ObservableObject {
         decisions = DedupeDecisions(byPath: byPath, hardDelete: decisions.hardDelete)
     }
 
+    // MARK: - Confidence Triage
+
+    public var triageBuckets: [ConfidenceLevel: [DuplicateCluster]] {
+        var buckets: [ConfidenceLevel: [DuplicateCluster]] = [
+            .high: [], .medium: [], .low: [],
+        ]
+        for cluster in clusters {
+            let level = cluster.annotation?.confidence ?? .medium
+            buckets[level, default: []].append(cluster)
+        }
+        return buckets
+    }
+
+    public func acceptAllHighConfidence() {
+        let highClusters = triageBuckets[.high] ?? []
+        guard !highClusters.isEmpty else { return }
+        var byPath = decisions.byPath
+        for (path, decision) in suggestedDecisions(for: highClusters).byPath {
+            byPath[path] = decision
+        }
+        decisions = DedupeDecisions(byPath: byPath, hardDelete: decisions.hardDelete)
+    }
+
     public func pauseReview() {
         guard status == .readyToReview, !clusters.isEmpty else { return }
         cancelStream()
