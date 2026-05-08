@@ -38,57 +38,85 @@ public enum DuplicateClusterer {
         let defaultDistanceCache = VisionFeaturePrintDistanceCache()
         let featurePrintCache = FeaturePrintDataCache(provider: featurePrintDataProvider)
 
-        // Capture pairwise distances for annotation (Feature 7).
-        var pairwiseMatches: [PairwiseMatch] = []
-
+        // Build dHash prefix buckets to avoid O(N^2) full comparison.
+        let prefixBits = 8
+        var dhashBuckets: [UInt8: [Int]] = [:]
         for i in 0..<sorted.count {
-            let lhs = sorted[i]
-            guard let lhsHash = lhs.dhash else { continue }
-            if burstMode, lhs.captureDate == nil { continue }
-            for j in (i + 1)..<sorted.count {
-                let rhs = sorted[j]
+            guard let dhash = sorted[i].dhash else { continue }
+            if burstMode, sorted[i].captureDate == nil { continue }
+            let prefix = UInt8(truncatingIfNeeded: dhash >> (64 - prefixBits))
+            dhashBuckets[prefix, default: []].append(i)
+        }
 
-                var timeDelta: TimeInterval?
-                if let lhsDate = lhs.captureDate, let rhsDate = rhs.captureDate {
-                    timeDelta = rhsDate.timeIntervalSince(lhsDate)
-                }
+        // Capture pairwise distances keyed by index for post-hoc grouping.
+        var rawMatches: [(i: Int, j: Int, match: PairwiseMatch)] = []
 
-                if burstMode, let td = timeDelta, td > timeWindow {
-                    break
-                }
-                guard let rhsHash = rhs.dhash else { continue }
+        let bucketKeys = Array(dhashBuckets.keys)
+        for bi in 0..<bucketKeys.count {
+            let keyA = bucketKeys[bi]
+            let groupA = dhashBuckets[keyA]!
+            for bj in bi..<bucketKeys.count {
+                let keyB = bucketKeys[bj]
+                let prefixDist = (keyA ^ keyB).nonzeroBitCount
+                if prefixDist > configuration.dhashHammingThreshold { continue }
+                let groupB = dhashBuckets[keyB]!
+                for idxA in groupA {
+                    let lhs = sorted[idxA]
+                    guard let lhsHash = lhs.dhash else { continue }
+                    for idxB in groupB {
+                        guard bi != bj || idxB > idxA else { continue }
+                        let rhs = sorted[idxB]
 
-                let hammingDist = PerceptualHash.hammingDistance(lhsHash, rhsHash)
-                if hammingDist > configuration.dhashHammingThreshold {
-                    continue
-                }
+                        var timeDelta: TimeInterval?
+                        if let lhsDate = lhs.captureDate, let rhsDate = rhs.captureDate {
+                            timeDelta = abs(rhsDate.timeIntervalSince(lhsDate))
+                        }
 
-                guard
-                    let lhsPrint = featurePrintData(for: lhs, cache: featurePrintCache),
-                    let rhsPrint = featurePrintData(for: rhs, cache: featurePrintCache)
-                else {
-                    // dHash is only a cheap candidate filter. If Vision data
-                    // is unavailable, do not create a mutable duplicate
-                    // cluster from dHash alone.
-                    continue
-                }
-                let distance = featurePrintDistance?(lhsPrint, rhsPrint)
-                    ?? defaultDistanceCache.distance(
-                        lhsPath: lhs.path,
-                        lhsData: lhsPrint,
-                        rhsPath: rhs.path,
-                        rhsData: rhsPrint
-                    )
-                guard let distance else { continue }
-                if distance <= configuration.similarityThreshold {
-                    unionFind.union(i, j)
-                    pairwiseMatches.append(PairwiseMatch(
-                        lhsPath: lhs.path, rhsPath: rhs.path,
-                        visionDistance: distance, dhashDistance: hammingDist,
-                        timeDeltaSeconds: timeDelta
-                    ))
+                        if burstMode, let td = timeDelta, td > timeWindow {
+                            continue
+                        }
+                        guard let rhsHash = rhs.dhash else { continue }
+
+                        let hammingDist = PerceptualHash.hammingDistance(lhsHash, rhsHash)
+                        if hammingDist > configuration.dhashHammingThreshold {
+                            continue
+                        }
+
+                        guard
+                            let lhsPrint = featurePrintData(for: lhs, cache: featurePrintCache),
+                            let rhsPrint = featurePrintData(for: rhs, cache: featurePrintCache)
+                        else {
+                            continue
+                        }
+                        let distance = featurePrintDistance?(lhsPrint, rhsPrint)
+                            ?? defaultDistanceCache.distance(
+                                lhsPath: lhs.path,
+                                lhsData: lhsPrint,
+                                rhsPath: rhs.path,
+                                rhsData: rhsPrint
+                            )
+                        guard let distance else { continue }
+                        if distance <= configuration.similarityThreshold {
+                            unionFind.union(idxA, idxB)
+                            rawMatches.append((
+                                i: idxA, j: idxB,
+                                match: PairwiseMatch(
+                                    lhsPath: lhs.path, rhsPath: rhs.path,
+                                    visionDistance: distance, dhashDistance: hammingDist,
+                                    timeDeltaSeconds: timeDelta
+                                )
+                            ))
+                        }
+                    }
                 }
             }
+        }
+
+        // Group pairwise matches by final union-find component root.
+        var pairwiseMatchesByRoot: [Int: [PairwiseMatch]] = [:]
+        for (i, _, match) in rawMatches {
+            let root = unionFind.find(i)
+            pairwiseMatchesByRoot[root, default: []].append(match)
         }
 
         // Group by component root.
@@ -99,7 +127,7 @@ public enum DuplicateClusterer {
         }
 
         var clusters: [DuplicateCluster] = []
-        for (_, indices) in componentMembers where indices.count > 1 {
+        for (root, indices) in componentMembers where indices.count > 1 {
             var members: [PhotoCandidate] = []
             for index in indices {
                 let primary = sorted[index]
@@ -119,7 +147,7 @@ public enum DuplicateClusterer {
             )
             cluster.annotation = ClusterAnnotator.annotate(
                 cluster: cluster,
-                pairwiseMatches: pairwiseMatches,
+                pairwiseMatches: pairwiseMatchesByRoot[root] ?? [],
                 configuration: configuration
             )
             clusters.append(cluster)
