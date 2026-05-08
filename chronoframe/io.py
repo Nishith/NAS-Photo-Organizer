@@ -10,7 +10,10 @@ MAX_COLLISIONS = 9999
 
 def fast_hash(path, known_size=None):
     """Stream a full-file blake2b hash prefixed with size for collision-resistant identity."""
-    size = known_size if known_size is not None else os.path.getsize(path)
+    st = os.lstat(path)
+    if os.path.islink(path) or not os.path.isfile(path):
+        raise OSError(errno.EINVAL, f"Refusing to hash non-regular file: {path}")
+    size = known_size if known_size is not None else st.st_size
     h = hashlib.blake2b()
     h.update(str(size).encode())
     with open(path, 'rb') as f:
@@ -131,7 +134,9 @@ def safe_copy_atomic(src, dst):
 def process_single_file(path, cached_data):
     """Hash a single file, using cache if size+mtime unchanged."""
     try:
-        st = os.stat(path)
+        st = os.lstat(path)
+        if os.path.islink(path) or not os.path.isfile(path):
+            return None, 0, 0, False
         size = st.st_size
         mtime = st.st_mtime
         if cached_data and cached_data["size"] == size and abs(cached_data["mtime"] - mtime) < 0.001:

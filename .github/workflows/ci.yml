@@ -78,8 +78,25 @@ jobs:
             -configuration Debug \
             -derivedDataPath "$RUNNER_TEMP/ChronoframeDerivedData" \
             -destination "generic/platform=macOS" \
+              CODE_SIGNING_ALLOWED=NO \
+              build
+
+  xcode-ui-tests:
+    name: Xcode UI tests
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run Chronoframe UI tests
+        run: |
+          xcodebuild \
+            -project ui/Chronoframe.xcodeproj \
+            -scheme Chronoframe \
+            -configuration Debug \
+            -derivedDataPath "$RUNNER_TEMP/ChronoframeUITestDerivedData" \
+            -destination "platform=macOS" \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            test
 
   release-archive-smoke:
     name: Release archive smoke
@@ -90,7 +107,7 @@ jobs:
       - name: Build release archive
         run: |
           cd ui
-          ./archive.sh
+          ./archive.sh --local
       - name: Check release archive
         run: |
           test -f ui/build/Chronoframe-release.zip

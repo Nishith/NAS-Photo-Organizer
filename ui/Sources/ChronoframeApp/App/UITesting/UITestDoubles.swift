@@ -171,6 +171,10 @@ final class MockFolderAccessService: FolderAccessServicing {
         return resolvedBookmarks[bookmark.key] ?? ResolvedFolderBookmark(url: URL(fileURLWithPath: bookmark.path))
     }
 
+    func scopedAccess(for bookmarks: [FolderBookmark]) -> SecurityScopedFolderAccess {
+        SecurityScopedFolderAccess()
+    }
+
     func validateFolder(_ url: URL, role: FolderRole) throws {
         if let error = validationFailures[url.path] {
             throw error

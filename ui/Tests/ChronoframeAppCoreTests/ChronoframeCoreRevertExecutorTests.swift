@@ -85,6 +85,30 @@ final class ChronoframeCoreRevertExecutorTests: XCTestCase {
         }
     }
 
+    func testLoadReceiptThrowsInvalidReceiptWhenPathIsDirectory() throws {
+        let directoryURL = temporaryDirectoryURL.appendingPathComponent("receipt-directory", isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        XCTAssertThrowsError(try RevertExecutor().loadReceipt(at: directoryURL)) { error in
+            guard case let RevertExecutorError.invalidReceipt(reason) = error else {
+                XCTFail("Expected invalidReceipt, got \(error)")
+                return
+            }
+            XCTAssertTrue(reason.contains("Could not read receipt"))
+        }
+    }
+
+    func testErrorDescriptionsAreUserFacing() {
+        XCTAssertTrue(
+            RevertExecutorError.receiptNotFound(path: "/missing").errorDescription?
+                .contains("could not be found") == true
+        )
+        XCTAssertTrue(
+            RevertExecutorError.invalidReceipt(reason: "bad json").errorDescription?
+                .contains("could not read this revert receipt") == true
+        )
+    }
+
     // MARK: - Revert behavior
 
     func testRevertDeletesFilesWhoseHashStillMatches() throws {
@@ -131,6 +155,30 @@ final class ChronoframeCoreRevertExecutorTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: dstURL.path), "Modified file must be preserved")
         XCTAssertEqual(issues.count, 1)
         XCTAssertTrue(issues.values[0].message.contains("Preserved"))
+    }
+
+    func testRevertSkipsWhenDestinationCannotBeHashed() throws {
+        let directoryURL = temporaryDirectoryURL.appendingPathComponent("directory.jpg", isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let receipt = RevertReceipt(
+            transfers: [
+                RevertReceiptTransfer(
+                    source: "/src/directory.jpg",
+                    dest: directoryURL.path,
+                    hash: "10_anyhash"
+                ),
+            ]
+        )
+        let issues = Recorder<RunIssue>()
+
+        let result = RevertExecutor().revert(
+            receipt: receipt,
+            observer: RevertExecutionObserver(onIssue: { issues.append($0) })
+        )
+
+        XCTAssertEqual(result.skippedCount, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directoryURL.path))
+        XCTAssertTrue(issues.values.first?.message.contains("Could not re-hash") == true)
     }
 
     func testRevertCountsMissingFilesSeparatelyButDoesNotFail() throws {

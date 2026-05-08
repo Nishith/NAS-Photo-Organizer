@@ -28,20 +28,6 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "AA0000000000000000000302"
-               BuildableName = "ChronoframeAppTests.xctest"
-               BlueprintName = "ChronoframeAppTests"
-               ReferencedContainer = "container:Chronoframe.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "NO"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
                BlueprintIdentifier = "AA0000000000000000000303"
                BuildableName = "ChronoframeUITests.xctest"
                BlueprintName = "ChronoframeUITests"
@@ -65,16 +51,6 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
-         <TestableReference
-            skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "AA0000000000000000000302"
-               BuildableName = "ChronoframeAppTests.xctest"
-               BlueprintName = "ChronoframeAppTests"
-               ReferencedContainer = "container:Chronoframe.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
          <TestableReference
             skipped = "NO">
             <BuildableReference

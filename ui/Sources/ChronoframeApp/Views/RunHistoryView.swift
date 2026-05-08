@@ -36,6 +36,7 @@ private enum HistoryFilter: String, CaseIterable, Identifiable {
         case .receipts:
             return entry.kind == .auditReceipt
                 || entry.kind == .dedupeAuditReceipt
+                || entry.kind == .reorganizeAuditReceipt
                 || entry.kind == .jsonArtifact
         case .logs:
             return entry.kind == .runLog || entry.kind == .queueDatabase
@@ -53,6 +54,7 @@ private enum HistoryFilter: String, CaseIterable, Identifiable {
         case .receipts:
             return entry.kind == .auditReceipt
                 || entry.kind == .dedupeAuditReceipt
+                || entry.kind == .reorganizeAuditReceipt
                 || entry.kind == .jsonArtifact
         case .logs:
             return entry.kind == .runLog || entry.kind == .queueDatabase
@@ -136,6 +138,7 @@ struct RunHistoryView: View {
     static func confirmationTitle(for entry: RunHistoryEntry?) -> String {
         switch entry?.kind {
         case .dedupeAuditReceipt: return "Restore deduplicated files?"
+        case .reorganizeAuditReceipt: return "Undo this reorganize?"
         default: return "Revert this transfer?"
         }
     }
@@ -143,13 +146,14 @@ struct RunHistoryView: View {
     static func confirmationActionLabel(for entry: RunHistoryEntry) -> String {
         switch entry.kind {
         case .dedupeAuditReceipt: return "Restore"
+        case .reorganizeAuditReceipt: return "Undo"
         default: return "Revert"
         }
     }
 
     static func confirmationActionRole(for entry: RunHistoryEntry) -> ButtonRole? {
         switch entry.kind {
-        case .dedupeAuditReceipt: return nil
+        case .dedupeAuditReceipt, .reorganizeAuditReceipt: return nil
         default: return .destructive
         }
     }
@@ -158,6 +162,8 @@ struct RunHistoryView: View {
         switch entry.kind {
         case .dedupeAuditReceipt:
             return "Chronoframe will move the files this dedupe run sent to the Trash back to their original locations. Files that have since been emptied from the Trash cannot be restored.\n\nReceipt: \(entry.relativePath)"
+        case .reorganizeAuditReceipt:
+            return "Chronoframe will move the files this reorganize run changed back to their previous locations, but only if their contents still match the receipt.\n\nReceipt: \(entry.relativePath)"
         default:
             return "Chronoframe will remove the files this receipt copied, but only if their contents still match the original transfer. Files modified after the original copy will be preserved.\n\nReceipt: \(entry.relativePath)"
         }
@@ -424,7 +430,7 @@ struct RunHistoryView: View {
                     appState.revealHistoryEntry(entry)
                 }
                 .accessibilityIdentifier("revealArtifact_\(entry.id)")
-                if entry.kind == .auditReceipt || entry.kind == .dedupeAuditReceipt {
+                if entry.kind == .auditReceipt || entry.kind == .dedupeAuditReceipt || entry.kind == .reorganizeAuditReceipt {
                     Divider()
                     Button("Revert this run…") {
                         pendingRevertEntry = entry
@@ -485,7 +491,7 @@ struct RunHistoryView: View {
             return DesignTokens.ColorSystem.accentAction
         case .auditReceipt, .jsonArtifact:
             return DesignTokens.ColorSystem.statusSuccess
-        case .dedupeAuditReceipt:
+        case .dedupeAuditReceipt, .reorganizeAuditReceipt:
             return DesignTokens.ColorSystem.accentWaypoint
         case .runLog:
             return DesignTokens.ColorSystem.accentWaypoint

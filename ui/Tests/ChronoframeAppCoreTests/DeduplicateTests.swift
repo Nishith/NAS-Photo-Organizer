@@ -1,7 +1,9 @@
 import Foundation
 import CoreGraphics
+import CoreImage
 import ImageIO
 import UniformTypeIdentifiers
+import Vision
 import XCTest
 @testable import ChronoframeCore
 
@@ -79,6 +81,50 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertLessThanOrEqual(score.composite, 1)
     }
 
+    func testPhotoQualityScorerScoresNoFaceAndInjectedFaceCases() throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("QualityNoFace-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+        let imageURL = temporaryDirectory.appendingPathComponent("checker.png")
+        try writePNG(makeCheckerboardImage(), to: imageURL)
+        let context = CIContext(options: [.useSoftwareRenderer: true])
+
+        let noFace = PhotoQualityScorer.score(
+            at: imageURL,
+            sizeBytes: 16_384,
+            pixelWidth: 32,
+            pixelHeight: 32,
+            ciContext: context,
+            faceScore: nil
+        )
+        let withFace = PhotoQualityScorer.score(
+            at: imageURL,
+            sizeBytes: 16_384,
+            pixelWidth: 32,
+            pixelHeight: 32,
+            ciContext: context,
+            faceScore: 1.0
+        )
+
+        XCTAssertNil(noFace.faceScore)
+        XCTAssertEqual(withFace.faceScore, 1.0)
+        XCTAssertGreaterThan(withFace.composite, noFace.composite)
+        XCTAssertNil(PhotoQualityScorer.detectFaceScore(at: imageURL))
+    }
+
+    func testPhotoQualityScorerFaceScoreHandlesEmptyAndDetectedFaces() throws {
+        XCTAssertNil(PhotoQualityScorer.faceScore(from: nil))
+        XCTAssertNil(PhotoQualityScorer.faceScore(from: []))
+
+        let face = VNFaceObservation(boundingBox: CGRect(x: 0, y: 0, width: 0.5, height: 0.5))
+        let score = PhotoQualityScorer.faceScore(from: [face])
+
+        XCTAssertNotNil(score)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(score), 0)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(score), 1)
+    }
+
     func testPhotoQualityScorerExpressionAwareScoreRewardsOpenEyesAndPenalizesBlur() {
         let baseline = PhotoQualityScorer.expressionAwareScore(
             sharpness: 0.45,
@@ -115,6 +161,19 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertLessThan(blurryClosedEyes.composite, expressive.composite)
         XCTAssertEqual(expressive.sharpness, 0.45)
         XCTAssertEqual(expressive.faceScore, 0.6)
+
+        let noFaceExpression = PhotoQualityScorer.expressionAwareScore(
+            sharpness: 0.8,
+            faceScore: nil,
+            eyesOpenScore: 0.8,
+            smileScore: nil,
+            subjectMotionBlur: nil,
+            sizeBytes: 0,
+            pixelWidth: nil,
+            pixelHeight: nil
+        )
+        XCTAssertNil(noFaceExpression.faceScore)
+        XCTAssertGreaterThan(noFaceExpression.composite, 0.5)
     }
 
     func testFaceExpressionAnalyzerGeometryAndSharpnessHelpers() {
@@ -213,8 +272,8 @@ final class DeduplicateTests: XCTestCase {
     func testClustersNearDuplicateWhenOutsideBurstWindow() {
         let baseDate = Date(timeIntervalSinceReferenceDate: 0)
         let candidates = [
-            candidate(path: "/dest/a.jpg", captureDate: baseDate, dhash: 0xAAAA, qualityScore: 0.5),
-            candidate(path: "/dest/b.jpg", captureDate: baseDate.addingTimeInterval(25), dhash: 0xAAAA, qualityScore: 0.4),
+            candidate(path: "/dest/a.jpg", captureDate: baseDate, dhash: 0xAAAA, featurePrintData: Data([1]), qualityScore: 0.5),
+            candidate(path: "/dest/b.jpg", captureDate: baseDate.addingTimeInterval(25), dhash: 0xAAAA, featurePrintData: Data([2]), qualityScore: 0.4),
         ]
         let config = DeduplicateConfiguration(destinationPath: "/dest", timeWindowSeconds: 30, dhashHammingThreshold: 5)
 
@@ -222,10 +281,27 @@ final class DeduplicateTests: XCTestCase {
             candidates: candidates,
             configuration: config,
             burstWindowSeconds: 10,
-            featurePrintDistance: { _, _ in nil }
+            featurePrintDistance: { _, _ in 0.1 }
         )
 
         XCTAssertEqual(clusters.first?.kind, .nearDuplicate)
+    }
+
+    func testClustererDoesNotCreateMutableClusterFromDhashOnlyMatch() {
+        let baseDate = Date(timeIntervalSinceReferenceDate: 0)
+        let candidates = [
+            candidate(path: "/dest/a.jpg", captureDate: baseDate, dhash: 0xAAAA, qualityScore: 0.5),
+            candidate(path: "/dest/b.jpg", captureDate: baseDate.addingTimeInterval(2), dhash: 0xAAAA, qualityScore: 0.4),
+        ]
+        let config = DeduplicateConfiguration(destinationPath: "/dest", timeWindowSeconds: 30, dhashHammingThreshold: 5)
+
+        let clusters = DuplicateClusterer.cluster(
+            candidates: candidates,
+            configuration: config,
+            featurePrintDistance: { _, _ in 0.0 }
+        )
+
+        XCTAssertTrue(clusters.isEmpty, "dHash-only matches must stay review-safe and never become auto-mutable clusters")
     }
 
     func testRejectsPairsThatExceedDhashThreshold() {
@@ -361,8 +437,20 @@ final class DeduplicateTests: XCTestCase {
     func testBurstModeOffIncludesUndatedCandidates() {
         let baseDate = Date(timeIntervalSinceReferenceDate: 0)
         let candidates = [
-            candidate(path: "/dest/undated.jpg", captureDate: nil, dhash: 0xAAAA, qualityScore: 0.6),
-            candidate(path: "/dest/dated.jpg", captureDate: baseDate, dhash: 0xAAAA, qualityScore: 0.5),
+            candidate(
+                path: "/dest/undated.jpg",
+                captureDate: nil,
+                dhash: 0xAAAA,
+                featurePrintData: Data("undated".utf8),
+                qualityScore: 0.6
+            ),
+            candidate(
+                path: "/dest/dated.jpg",
+                captureDate: baseDate,
+                dhash: 0xAAAA,
+                featurePrintData: Data("dated".utf8),
+                qualityScore: 0.5
+            ),
         ]
         let config = DeduplicateConfiguration(
             destinationPath: "/dest",
@@ -374,7 +462,7 @@ final class DeduplicateTests: XCTestCase {
         let clusters = DuplicateClusterer.cluster(
             candidates: candidates,
             configuration: config,
-            featurePrintDistance: { _, _ in nil }
+            featurePrintDistance: { _, _ in 0.0 }
         )
         XCTAssertEqual(clusters.count, 1, "Undated candidates must participate in burst-off scans")
         XCTAssertEqual(Set(clusters.first?.members.map(\.path) ?? []), ["/dest/undated.jpg", "/dest/dated.jpg"])
@@ -769,6 +857,74 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertTrue(exifSignals.contains { $0.kind == .exposureAdjustment && $0.confidence == 0.85 })
     }
 
+    func testEditVariantDetectorCoversSameAspectCropInvalidDimensionsAndReverseExif() throws {
+        let fullSize = candidate(
+            path: "/dest/full.jpg",
+            qualityScore: 0.9,
+            size: 4_000_000,
+            pixelWidth: 4000,
+            pixelHeight: 3000
+        )
+        let sameAspectCrop = candidate(
+            path: "/dest/crop.jpg",
+            qualityScore: 0.8,
+            size: 1_000_000,
+            pixelWidth: 1600,
+            pixelHeight: 1200
+        )
+        let invalid = candidate(
+            path: "/dest/invalid.jpg",
+            pixelWidth: 0,
+            pixelHeight: 1200
+        )
+
+        XCTAssertEqual(EditVariantDetector.detectCrop(lhs: invalid, rhs: fullSize), nil)
+        let cropSignal = try XCTUnwrap(EditVariantDetector.detectCrop(lhs: fullSize, rhs: sameAspectCrop))
+        XCTAssertEqual(cropSignal.kind, .crop)
+        XCTAssertGreaterThan(cropSignal.confidence, 0.7)
+
+        let oneMemberCluster = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [fullSize],
+            suggestedKeeperIDs: [fullSize.path],
+            bytesIfPruned: 0
+        )
+        XCTAssertFalse(EditVariantDetector.shouldReclassify(cluster: oneMemberCluster, visionDistance: 0.2))
+        let reclassifiableCluster = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [fullSize, sameAspectCrop],
+            suggestedKeeperIDs: [fullSize.path],
+            bytesIfPruned: sameAspectCrop.size
+        )
+        XCTAssertTrue(EditVariantDetector.shouldReclassify(cluster: reclassifiableCluster, visionDistance: 0.2))
+
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("EditVariantReverseEXIF-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+        let editedURL = temporaryDirectory.appendingPathComponent("edited.tiff")
+        let untouchedURL = temporaryDirectory.appendingPathComponent("untouched.png")
+        try writePNG(makeGradientImage(reversed: true), to: untouchedURL)
+        try writePNG(
+            makeGradientImage(reversed: false),
+            to: editedURL,
+            typeIdentifier: UTType.tiff.identifier,
+            properties: [
+                kCGImagePropertyTIFFDictionary: [
+                    kCGImagePropertyTIFFSoftware: "Darktable",
+                ],
+            ]
+        )
+
+        let reverseExifSignals = EditVariantDetector.detect(
+            lhs: fullSize,
+            rhs: sameAspectCrop,
+            lhsURL: editedURL,
+            rhsURL: untouchedURL
+        )
+        XCTAssertTrue(reverseExifSignals.contains { $0.kind == .exposureAdjustment && $0.confidence == 0.85 })
+    }
+
     // MARK: - DeduplicationPlanner
 
     func testPlannerExpandsRawJpegPairWhenToggleEnabled() {
@@ -1116,7 +1272,7 @@ final class DeduplicateTests: XCTestCase {
         let stream = executor.commit(
             plan: plan,
             destinationRoot: temporaryDirectory.path,
-            hardDelete: true
+            hardDelete: false
         )
 
         var sawError = false
@@ -1234,9 +1390,9 @@ final class DeduplicateTests: XCTestCase {
         trashed.clear()
     }
 
-    func testCommitHardDeleteWritesReceiptAndRevertReportsNonRestorableItem() async throws {
+    func testCommitIgnoresHardDeleteRequestAndUsesTrashReceipt() async throws {
         let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("DedupeHardDelete-\(UUID().uuidString)")
+            .appendingPathComponent("DedupeTrashOnly-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
 
@@ -1252,7 +1408,8 @@ final class DeduplicateTests: XCTestCase {
             ),
         ])
 
-        let executor = DeduplicateExecutor()
+        let fakeTrashRoot = temporaryDirectory.appendingPathComponent("FakeTrash", isDirectory: true)
+        let executor = DeduplicateExecutor(fileOperations: MockDeduplicateFileOperations(trashRoot: fakeTrashRoot))
         var commitSummary: DeduplicateCommitSummary?
         for try await event in executor.commit(plan: plan, destinationRoot: temporaryDirectory.path, hardDelete: true) {
             if case let .complete(summary) = event {
@@ -1263,14 +1420,15 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
         XCTAssertEqual(commitSummary?.deletedCount, 1)
         XCTAssertEqual(commitSummary?.failedCount, 0)
+        XCTAssertEqual(commitSummary?.hardDelete, false)
         let receiptURL = URL(fileURLWithPath: try XCTUnwrap(commitSummary?.receiptPath))
+        let receipt = try JSONDecoder.dedupe.decode(DeduplicateAuditReceipt.self, from: Data(contentsOf: receiptURL))
+        XCTAssertEqual(receipt.items.first?.method, .trash)
+        XCTAssertNotNil(receipt.items.first?.trashURL)
 
-        var failures: [String] = []
         var revertSummary: DeduplicateCommitSummary?
         for try await event in executor.revert(receiptURL: receiptURL) {
             switch event {
-            case let .itemFailed(_, message):
-                failures.append(message)
             case let .complete(summary):
                 revertSummary = summary
             default:
@@ -1278,13 +1436,112 @@ final class DeduplicateTests: XCTestCase {
             }
         }
 
-        XCTAssertEqual(failures, ["Hard-deleted items cannot be restored."])
-        XCTAssertEqual(revertSummary?.deletedCount, 0)
-        XCTAssertEqual(revertSummary?.failedCount, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
+        XCTAssertEqual(revertSummary?.deletedCount, 1)
+        XCTAssertEqual(revertSummary?.failedCount, 0)
         XCTAssertEqual(revertSummary?.receiptPath, receiptURL.path)
     }
 
-    func testCommitContinuesAfterHardDeleteFailureAndReportsFailedItem() async throws {
+    func testCommitCancellationWritesAbortedReceiptAndLeavesRemainingFile() async throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("DedupeCancel-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let firstURL = temporaryDirectory.appendingPathComponent("first.jpg")
+        let secondURL = temporaryDirectory.appendingPathComponent("second.jpg")
+        try Data([0x01]).write(to: firstURL)
+        try Data([0x02]).write(to: secondURL)
+
+        let executorBox = DeduplicateExecutorBox()
+        let fileOperations = MockDeduplicateFileOperations(
+            trashRoot: temporaryDirectory.appendingPathComponent("FakeTrash", isDirectory: true),
+            afterTrash: { _ in executorBox.cancel() }
+        )
+        let executor = DeduplicateExecutor(fileOperations: fileOperations)
+        executorBox.set(executor)
+        let plan = DeduplicationPlan(items: [
+            DeduplicationPlan.Item(
+                path: firstURL.path,
+                sizeBytes: 1,
+                owningClusterID: UUID(),
+                owningClusterKind: .exactDuplicate,
+                pairOrigin: nil
+            ),
+            DeduplicationPlan.Item(
+                path: secondURL.path,
+                sizeBytes: 1,
+                owningClusterID: UUID(),
+                owningClusterKind: .exactDuplicate,
+                pairOrigin: nil
+            ),
+        ])
+
+        var summary: DeduplicateCommitSummary?
+        for try await event in executor.commit(plan: plan, destinationRoot: temporaryDirectory.path, hardDelete: false) {
+            if case let .complete(commitSummary) = event {
+                summary = commitSummary
+            }
+        }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: firstURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: secondURL.path))
+        let receiptURL = URL(fileURLWithPath: try XCTUnwrap(summary?.receiptPath))
+        let receipt = try JSONDecoder.dedupe.decode(DeduplicateAuditReceipt.self, from: Data(contentsOf: receiptURL))
+        XCTAssertEqual(receipt.status, "ABORTED")
+        XCTAssertNotNil(receipt.abortReason)
+        XCTAssertEqual(receipt.bytesReclaimed, 1)
+        XCTAssertEqual(receipt.items.compactMap(\.trashURL).count, 1)
+    }
+
+    func testConvenienceCommitBuildsPlanAndUsesTrashOnly() async throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("DedupeConvenienceCommit-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let deleteURL = temporaryDirectory.appendingPathComponent("delete.jpg")
+        let keepURL = temporaryDirectory.appendingPathComponent("keep.jpg")
+        try Data([0xDD]).write(to: deleteURL)
+        try Data([0xAA]).write(to: keepURL)
+        let cluster = DuplicateCluster(
+            kind: .exactDuplicate,
+            members: [
+                candidate(path: deleteURL.path, size: 1),
+                candidate(path: keepURL.path, size: 1),
+            ],
+            suggestedKeeperIDs: [keepURL.path],
+            bytesIfPruned: 1
+        )
+        let decisions = DedupeDecisions(
+            byPath: [
+                deleteURL.path: .delete,
+                keepURL.path: .keep,
+            ],
+            hardDelete: true
+        )
+        let executor = DeduplicateExecutor(fileOperations: MockDeduplicateFileOperations(
+            trashRoot: temporaryDirectory.appendingPathComponent("FakeTrash", isDirectory: true)
+        ))
+
+        var summary: DeduplicateCommitSummary?
+        for try await event in executor.commit(
+            decisions: decisions,
+            clusters: [cluster],
+            configuration: DeduplicateConfiguration(destinationPath: temporaryDirectory.path)
+        ) {
+            if case let .complete(commitSummary) = event {
+                summary = commitSummary
+            }
+        }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: deleteURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: keepURL.path))
+        XCTAssertEqual(summary?.deletedCount, 1)
+        XCTAssertEqual(summary?.hardDelete, false)
+    }
+
+    func testCommitContinuesAfterTrashFailureAndReportsFailedItem() async throws {
         let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("DedupePartialFailure-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
@@ -1296,7 +1553,7 @@ final class DeduplicateTests: XCTestCase {
         try Data([0x02, 0x03]).write(to: okURL)
 
         let fileOperations = MockDeduplicateFileOperations(
-            removeErrors: [failingURL.path: TestDedupeFileError("permission denied")]
+            trashErrors: [failingURL.path: TestDedupeFileError("permission denied")]
         )
         let executor = DeduplicateExecutor(fileOperations: fileOperations)
         let plan = DeduplicationPlan(items: [
@@ -1402,6 +1659,51 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: fakeTrashURL.path))
     }
 
+    func testRevertReportsHardDeletedItemsCannotBeRestored() async throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("DedupeHardDeleteReceipt-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let originalURL = temporaryDirectory.appendingPathComponent("gone.jpg")
+        let receipt = DeduplicateAuditReceipt(
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            destinationRoot: temporaryDirectory.path,
+            items: [
+                DeduplicateAuditReceipt.Item(
+                    originalPath: originalURL.path,
+                    sizeBytes: 4,
+                    trashURL: nil,
+                    method: .hardDelete,
+                    clusterID: UUID(),
+                    clusterKind: .exactDuplicate
+                ),
+            ],
+            bytesReclaimed: 4
+        )
+        let receiptURL = temporaryDirectory.appendingPathComponent("hard-delete-receipt.json")
+        try JSONEncoder.dedupe.encode(receipt).write(to: receiptURL)
+
+        var failures: [String] = []
+        var summary: DeduplicateCommitSummary?
+        for try await event in DeduplicateExecutor(
+            fileOperations: MockDeduplicateFileOperations()
+        ).revert(receiptURL: receiptURL) {
+            switch event {
+            case let .itemFailed(path, message):
+                failures.append("\(URL(fileURLWithPath: path).lastPathComponent): \(message)")
+            case let .complete(revertSummary):
+                summary = revertSummary
+            default:
+                break
+            }
+        }
+
+        XCTAssertEqual(failures, ["gone.jpg: Hard-deleted items cannot be restored."])
+        XCTAssertEqual(summary?.deletedCount, 0)
+        XCTAssertEqual(summary?.failedCount, 1)
+    }
+
     /// Regression for review rec #5: receipt filenames used only
     /// second-precision timestamps, so two commits within the same
     /// second produced identical paths. With `data.write(.atomic)`
@@ -1421,20 +1723,32 @@ final class DeduplicateTests: XCTestCase {
             originalPath: temporaryDirectory.appendingPathComponent("a.jpg").path,
             sizeBytes: 1,
             trashURL: nil,
-            method: .hardDelete,
+            method: .trash,
             clusterID: UUID(),
             clusterKind: .burst
         )
 
         var paths: [String] = []
+        let createdAt = Date()
         for _ in 0..<2 {
-            let receiptPath = try DeduplicateExecutor.writeReceipt(
+            let runID = UUID()
+            let receiptURL = try DeduplicateExecutor.makeReceiptURL(
                 logsDirectory: logsDirectory,
+                runID: runID,
+                createdAt: createdAt
+            )
+            try DeduplicateExecutor.writeReceipt(
+                receiptURL: receiptURL,
+                runID: runID,
+                status: "COMPLETED",
+                createdAt: createdAt,
+                finishedAt: createdAt,
                 destinationRoot: temporaryDirectory.path,
                 items: [item],
-                bytesReclaimed: 1
+                bytesReclaimed: 1,
+                abortReason: nil
             )
-            paths.append(receiptPath)
+            paths.append(receiptURL.path)
         }
 
         XCTAssertEqual(Set(paths).count, 2, "Two same-second writes must produce distinct receipt filenames")
@@ -1808,6 +2122,24 @@ private final class TrashedURLBag: @unchecked Sendable {
     }
 }
 
+private final class DeduplicateExecutorBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var executor: DeduplicateExecutor?
+
+    func set(_ executor: DeduplicateExecutor) {
+        lock.lock()
+        defer { lock.unlock() }
+        self.executor = executor
+    }
+
+    func cancel() {
+        lock.lock()
+        let executor = self.executor
+        lock.unlock()
+        executor?.cancel()
+    }
+}
+
 private struct TestDedupeFileError: Error, LocalizedError, Equatable {
     let message: String
 
@@ -1846,16 +2178,22 @@ private final class FeaturePrintRequestLog: @unchecked Sendable {
 private final class MockDeduplicateFileOperations: DeduplicateFileOperations, @unchecked Sendable {
     private let trashRoot: URL?
     private let removeErrors: [String: TestDedupeFileError]
+    private let trashErrors: [String: TestDedupeFileError]
     private let moveErrors: [String: TestDedupeFileError]
+    private let afterTrash: @Sendable (URL) -> Void
 
     init(
         trashRoot: URL? = nil,
         removeErrors: [String: TestDedupeFileError] = [:],
-        moveErrors: [String: TestDedupeFileError] = [:]
+        trashErrors: [String: TestDedupeFileError] = [:],
+        moveErrors: [String: TestDedupeFileError] = [:],
+        afterTrash: @escaping @Sendable (URL) -> Void = { _ in }
     ) {
         self.trashRoot = trashRoot
         self.removeErrors = removeErrors
+        self.trashErrors = trashErrors
         self.moveErrors = moveErrors
+        self.afterTrash = afterTrash
     }
 
     func removeItem(at url: URL) throws {
@@ -1866,11 +2204,15 @@ private final class MockDeduplicateFileOperations: DeduplicateFileOperations, @u
     }
 
     func trashItem(at url: URL) throws -> URL? {
+        if let error = trashErrors[url.path] {
+            throw error
+        }
         let root = trashRoot ?? URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("MockDedupeTrash-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let trashURL = root.appendingPathComponent("\(UUID().uuidString)-\(url.lastPathComponent)")
         try FileManager.default.moveItem(at: url, to: trashURL)
+        afterTrash(url)
         return trashURL
     }
 

@@ -294,13 +294,14 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
         let fileURL = sourceURL.appendingPathComponent("incoming/photo.jpg")
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("resume-data".utf8).write(to: fileURL)
+        let identity = try FileIdentityHasher().hashIdentity(at: fileURL)
 
         let database = try OrganizerDatabase(url: destinationURL.appendingPathComponent(".organize_cache.db"))
         try database.enqueueQueuedJobs([
             QueuedCopyJob(
                 sourcePath: fileURL.path,
                 destinationPath: destinationURL.appendingPathComponent("2023/06/15/2023-06-15_001.jpg").path,
-                hash: "h1",
+                hash: identity.rawValue,
                 status: .pending
             ),
         ])
@@ -363,7 +364,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
         let resumedHashes = try Self.withDatabaseWhenReady(at: destinationURL.appendingPathComponent(".organize_cache.db")) { database in
             try database.loadRawCacheRecords(namespace: .destination).map(\.hash)
         }
-        XCTAssertEqual(resumedHashes, ["h1"])
+        XCTAssertEqual(resumedHashes, [identity.rawValue])
 
         let logContents = try String(
             contentsOfFile: try XCTUnwrap(summary.artifacts.logFilePath),

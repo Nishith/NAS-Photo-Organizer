@@ -67,14 +67,9 @@ public enum DuplicateClusterer {
                     let lhsPrint = featurePrintData(for: lhs, cache: featurePrintCache),
                     let rhsPrint = featurePrintData(for: rhs, cache: featurePrintCache)
                 else {
-                    // Without Vision data we keep the dHash match; this lets
-                    // tests run without exercising Vision and gives a sane
-                    // fallback if a feature print failed to compute.
-                    unionFind.union(i, j)
-                    pairwiseMatches.append(PairwiseMatch(
-                        lhsPath: lhs.path, rhsPath: rhs.path,
-                        dhashDistance: hammingDist, timeDeltaSeconds: timeDelta
-                    ))
+                    // dHash is only a cheap candidate filter. If Vision data
+                    // is unavailable, do not create a mutable duplicate
+                    // cluster from dHash alone.
                     continue
                 }
                 let distance = featurePrintDistance?(lhsPrint, rhsPrint)

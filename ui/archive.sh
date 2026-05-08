@@ -16,6 +16,20 @@ ENTITLEMENTS_PATH="${PACKAGING_DIR}/Chronoframe.entitlements"
 VALIDATOR_PATH="${PACKAGING_DIR}/validate_app_bundle.py"
 TMP_DIR="${TMPDIR:-/tmp}/chronoframe-ui-archive"
 MODULE_CACHE_DIR="${TMP_DIR}/module-cache"
+LOCAL_ARCHIVE=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --local)
+      LOCAL_ARCHIVE=1
+      ;;
+    *)
+      echo "error: unknown argument: $arg" >&2
+      echo "usage: $0 [--local]" >&2
+      exit 64
+      ;;
+  esac
+done
 
 mkdir -p "$BUILD_DIR" "$EXPORT_DIR" "$MODULE_CACHE_DIR"
 rm -rf "$ARCHIVE_PATH"
@@ -38,6 +52,22 @@ if [ ! -f "$VALIDATOR_PATH" ]; then
   exit 1
 fi
 
+if [ "$LOCAL_ARCHIVE" -eq 0 ]; then
+  missing=()
+  [ -n "${CHRONOFRAME_CODESIGN_IDENTITY:-}" ] || missing+=("CHRONOFRAME_CODESIGN_IDENTITY")
+  [ -n "${CHRONOFRAME_DEVELOPMENT_TEAM:-}" ] || missing+=("CHRONOFRAME_DEVELOPMENT_TEAM")
+  if [ -z "${CHRONOFRAME_NOTARY_PROFILE:-}" ]; then
+    [ -n "${CHRONOFRAME_NOTARY_APPLE_ID:-}" ] || missing+=("CHRONOFRAME_NOTARY_PROFILE or CHRONOFRAME_NOTARY_APPLE_ID")
+    [ -n "${CHRONOFRAME_NOTARY_PASSWORD:-}" ] || missing+=("CHRONOFRAME_NOTARY_PROFILE or CHRONOFRAME_NOTARY_PASSWORD")
+  fi
+  if [ "${#missing[@]}" -gt 0 ]; then
+    echo "error: distribution archives require Developer ID signing and notarization settings." >&2
+    printf 'missing: %s\n' "${missing[@]}" >&2
+    echo "For local ad hoc validation only, rerun with: ./archive.sh --local" >&2
+    exit 2
+  fi
+fi
+
 echo "📦 Archiving Release build..."
 XCODEBUILD_ARGS=(
   xcodebuild
@@ -49,18 +79,15 @@ XCODEBUILD_ARGS=(
   -destination "generic/platform=macOS"
   CLANG_MODULE_CACHE_PATH="$MODULE_CACHE_DIR"
   SWIFT_MODULECACHE_PATH="$MODULE_CACHE_DIR"
+  ENABLE_HARDENED_RUNTIME=YES
 )
 
-if [ -n "${CHRONOFRAME_CODESIGN_IDENTITY:-}" ]; then
+if [ "$LOCAL_ARCHIVE" -eq 0 ]; then
   XCODEBUILD_ARGS+=(
     CODE_SIGN_STYLE=Manual
     CODE_SIGN_IDENTITY="${CHRONOFRAME_CODESIGN_IDENTITY}"
+    DEVELOPMENT_TEAM="${CHRONOFRAME_DEVELOPMENT_TEAM}"
   )
-  if [ -n "${CHRONOFRAME_DEVELOPMENT_TEAM:-}" ]; then
-    XCODEBUILD_ARGS+=(
-      DEVELOPMENT_TEAM="${CHRONOFRAME_DEVELOPMENT_TEAM}"
-    )
-  fi
 else
   XCODEBUILD_ARGS+=(
     CODE_SIGNING_ALLOWED=NO
@@ -79,7 +106,7 @@ echo "🧾 Staging archived app..."
 ditto "$ARCHIVED_APP_PATH" "$APP_DIR"
 
 VALIDATOR_ARGS=()
-if [ -n "${CHRONOFRAME_CODESIGN_IDENTITY:-}" ]; then
+if [ "$LOCAL_ARCHIVE" -eq 0 ]; then
   echo "🔐 Verifying Developer ID signature..."
   codesign --verify --deep --strict "$APP_DIR"
   VALIDATOR_ARGS+=(--require-distribution-signing)
@@ -96,6 +123,30 @@ fi
 
 echo "🗜️ Creating release zip archive..."
 ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$ZIP_PATH"
+
+if [ "$LOCAL_ARCHIVE" -eq 0 ]; then
+  echo "📨 Submitting zip for notarization..."
+  NOTARY_ARGS=(xcrun notarytool submit "$ZIP_PATH" --wait)
+  if [ -n "${CHRONOFRAME_NOTARY_PROFILE:-}" ]; then
+    NOTARY_ARGS+=(--keychain-profile "$CHRONOFRAME_NOTARY_PROFILE")
+  else
+    NOTARY_ARGS+=(
+      --apple-id "$CHRONOFRAME_NOTARY_APPLE_ID"
+      --password "$CHRONOFRAME_NOTARY_PASSWORD"
+      --team-id "$CHRONOFRAME_DEVELOPMENT_TEAM"
+    )
+  fi
+  "${NOTARY_ARGS[@]}"
+
+  echo "📎 Stapling notarization ticket..."
+  xcrun stapler staple "$APP_DIR"
+  xcrun stapler validate "$APP_DIR"
+  spctl -a -vv "$APP_DIR"
+
+  echo "🗜️ Recreating zip with stapled app..."
+  rm -f "$ZIP_PATH"
+  ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$ZIP_PATH"
+fi
 
 echo "✅ Archive complete!"
 echo "➡️  Archive bundle: ${ARCHIVE_PATH}"

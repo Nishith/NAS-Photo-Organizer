@@ -89,7 +89,10 @@ public enum MediaDiscovery {
                 continue
             }
 
-            let resourceValues = try child.resourceValues(forKeys: [.isDirectoryKey])
+            let resourceValues = try child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey])
+            if resourceValues.isSymbolicLink == true || resourceValues.isPackage == true {
+                continue
+            }
             let isDirectory = resourceValues.isDirectory == true
             entries.append(MediaDiscoveryEntry(path: child.path, isDirectory: isDirectory))
 
@@ -110,7 +113,7 @@ public enum MediaDiscovery {
         do {
             children = try FileManager.default.contentsOfDirectory(
                 at: directoryURL,
-                includingPropertiesForKeys: [.isDirectoryKey],
+                includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey],
                 options: []
             )
         } catch {
@@ -128,7 +131,10 @@ public enum MediaDiscovery {
 
             let isDirectory: Bool
             do {
-                let resourceValues = try child.resourceValues(forKeys: [.isDirectoryKey])
+                let resourceValues = try child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey])
+                if resourceValues.isSymbolicLink == true || resourceValues.isPackage == true {
+                    continue
+                }
                 isDirectory = resourceValues.isDirectory == true
             } catch {
                 continue

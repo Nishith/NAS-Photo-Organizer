@@ -470,13 +470,17 @@ class TestGetDateFromFilename(unittest.TestCase):
         dt = get_date_from_filename("/photos/IMG_20210132_120000.jpg")
         self.assertIsNone(dt)
 
-    def test_year_before_2000(self):
-        dt = get_date_from_filename("/photos/IMG_19990101_120000.jpg")
+    def test_year_before_archival_range(self):
+        dt = get_date_from_filename("/photos/IMG_18990101_120000.jpg")
         self.assertIsNone(dt)
 
-    def test_year_after_2030(self):
-        dt = get_date_from_filename("/photos/IMG_20310101_120000.jpg")
+    def test_year_after_archival_range(self):
+        dt = get_date_from_filename("/photos/IMG_21010101_120000.jpg")
         self.assertIsNone(dt)
+
+    def test_archival_year_range(self):
+        self.assertEqual(get_date_from_filename("/photos/scan_19700101_001.jpg"), datetime(1970, 1, 1))
+        self.assertEqual(get_date_from_filename("/photos/export_20310101_001.jpg"), datetime(2031, 1, 1))
 
     def test_no_date_in_filename(self):
         dt = get_date_from_filename("/photos/family_photo.jpg")
@@ -517,12 +521,12 @@ class TestGetFileDate(TempDirMixin, unittest.TestCase):
         self.assertGreater(dt.year, 2020)
 
     @patch('chronoframe.metadata.get_date_mdls', return_value=datetime(1970, 1, 1))
-    def test_mdls_1970_rejected(self, mock_mdls):
-        """Dates ≤ 1971 from mdls are rejected; fallback to mtime."""
+    def test_mdls_1970_accepted(self, mock_mdls):
+        """Archival-range mdls dates are accepted."""
         p = self._mkfile("nodate.jpg", b"data")
         with patch('chronoframe.metadata.HAS_EXIFREAD', False):
             dt = get_file_date(p)
-        self.assertGreater(dt.year, 1971)
+        self.assertEqual(dt, datetime(1970, 1, 1))
 
 
 class TestMDLSParsing(unittest.TestCase):
@@ -1168,9 +1172,9 @@ class TestResumeQueue(TempDirMixin, unittest.TestCase):
 class TestUnknownDate(TempDirMixin, unittest.TestCase):
 
     def test_unknown_date_path(self):
-        """Files with date ≤ 1971 should be classified as Unknown_Date."""
-        dt = datetime(1970, 1, 1)
-        date_str = dt.strftime('%Y-%m-%d') if dt.year > 1971 else "Unknown_Date"
+        """Files before the archival range should be classified as Unknown_Date."""
+        dt = datetime(1899, 12, 31)
+        date_str = dt.strftime('%Y-%m-%d') if 1900 <= dt.year <= 2100 else "Unknown_Date"
         self.assertEqual(date_str, "Unknown_Date")
 
         seq = 1
@@ -1180,7 +1184,7 @@ class TestUnknownDate(TempDirMixin, unittest.TestCase):
 
     def test_valid_date_not_unknown(self):
         dt = datetime(2023, 6, 15)
-        date_str = dt.strftime('%Y-%m-%d') if dt.year > 1971 else "Unknown_Date"
+        date_str = dt.strftime('%Y-%m-%d') if 1900 <= dt.year <= 2100 else "Unknown_Date"
         self.assertEqual(date_str, "2023-06-15")
 
 
@@ -1612,10 +1616,11 @@ class TestMainResume(TempDirMixin, unittest.TestCase):
         src_file = os.path.join(src, "photo.jpg")
         with open(src_file, 'wb') as f:
             f.write(b"resume_data")
+        identity = fast_hash(src_file)
 
         dst_path = os.path.join(dst, "2023", "06", "15", "2023-06-15_001.jpg")
         db = CacheDB(os.path.join(dst, ".organize_cache.db"))
-        db.enqueue_jobs([(src_file, dst_path, "h1", "PENDING")])
+        db.enqueue_jobs([(src_file, dst_path, identity, "PENDING")])
         db.close()
 
         with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '-y']):
@@ -1633,10 +1638,11 @@ class TestMainResume(TempDirMixin, unittest.TestCase):
         src_file = os.path.join(src, "photo.jpg")
         with open(src_file, 'wb') as f:
             f.write(b"resume_prompt_data")
+        identity = fast_hash(src_file)
 
         dst_path = os.path.join(dst, "2023", "06", "15", "2023-06-15_001.jpg")
         db = CacheDB(os.path.join(dst, ".organize_cache.db"))
-        db.enqueue_jobs([(src_file, dst_path, "h1", "PENDING")])
+        db.enqueue_jobs([(src_file, dst_path, identity, "PENDING")])
         db.close()
 
         with patch('sys.argv', ['prog', '--source', src, '--dest', dst]):
@@ -2947,8 +2953,8 @@ class TestUnknownDatePath(TempDirMixin, unittest.TestCase):
         with open(os.path.join(src, "nondescript.jpg"), 'wb') as f:
             f.write(b"data")
 
-        # Return a 1970 datetime so date_str becomes "Unknown_Date"
-        with patch('chronoframe.core.get_file_date', return_value=datetime(1970, 1, 1)):
+        # Return a pre-archival datetime so date_str becomes "Unknown_Date"
+        with patch('chronoframe.core.get_file_date', return_value=datetime(1899, 12, 31)):
             with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
                 main()
 
@@ -2974,8 +2980,8 @@ class TestUnknownDatePath(TempDirMixin, unittest.TestCase):
             with open(os.path.join(src, name), 'wb') as f:
                 f.write(b"identical content here")
 
-        # Return 1970 for all date queries → Unknown_Date for both copy plan and dups
-        with patch('chronoframe.core.get_file_date', return_value=datetime(1970, 1, 1)):
+        # Return a pre-archival date for all date queries → Unknown_Date for both copy plan and dups
+        with patch('chronoframe.core.get_file_date', return_value=datetime(1899, 12, 31)):
             with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
                 main()
 

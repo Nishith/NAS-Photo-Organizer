@@ -1,7 +1,7 @@
 import Foundation
 
-/// Applies a `DeduplicationPlan` to disk: each item is moved to Trash or
-/// hard-deleted, then a `dedupe_audit_receipt_<timestamp>.json` is written
+/// Applies a `DeduplicationPlan` to disk: each item is moved to Trash, while
+/// a `dedupe_audit_receipt_<timestamp>_<runID>.json` is kept durable
 /// next to the existing organize artifacts so the receipt surfaces in the
 /// Run History tab and can be reverted.
 ///
@@ -42,7 +42,7 @@ public final class DeduplicateExecutor: @unchecked Sendable {
         return commit(
             plan: plan,
             destinationRoot: configuration.destinationPath,
-            hardDelete: decisions.hardDelete
+            hardDelete: false
         )
     }
 
@@ -73,83 +73,92 @@ public final class DeduplicateExecutor: @unchecked Sendable {
 
                 continuation.yield(.started(totalToDelete: plan.items.count))
 
-                var receiptItems: [DeduplicateAuditReceipt.Item] = []
+                let runID = UUID()
+                let startedAt = Date()
+                let receiptURL: URL
+                var receiptItems = plan.items.map { planItem in
+                    DeduplicateAuditReceipt.Item(
+                        originalPath: planItem.path,
+                        sizeBytes: planItem.sizeBytes,
+                        trashURL: nil,
+                        method: .trash,
+                        clusterID: planItem.owningClusterID,
+                        clusterKind: planItem.owningClusterKind
+                    )
+                }
+                do {
+                    receiptURL = try Self.makeReceiptURL(logsDirectory: logsDirectory, runID: runID, createdAt: startedAt)
+                    try Self.writeReceipt(
+                        receiptURL: receiptURL,
+                        runID: runID,
+                        status: "PENDING",
+                        createdAt: startedAt,
+                        finishedAt: nil,
+                        destinationRoot: destinationRoot,
+                        items: receiptItems,
+                        bytesReclaimed: 0,
+                        abortReason: nil
+                    )
+                } catch {
+                    continuation.finish(throwing: ReceiptPreflightError(underlying: error))
+                    return
+                }
+
                 var deletedCount = 0
                 var failedCount = 0
                 var bytesReclaimed: Int64 = 0
+                var abortReason: String?
 
-                for planItem in plan.items {
-                    if cancelFlag.get() { break }
+                for (index, planItem) in plan.items.enumerated() {
+                    if cancelFlag.get() {
+                        abortReason = "Deduplicate was cancelled before all selected files moved to Trash."
+                        break
+                    }
                     let url = URL(fileURLWithPath: planItem.path)
 
-                    if hardDelete {
-                        do {
-                            try fileOperations.removeItem(at: url)
-                            deletedCount += 1
-                            bytesReclaimed += planItem.sizeBytes
-                            continuation.yield(.itemTrashed(originalPath: planItem.path, trashURL: nil, sizeBytes: planItem.sizeBytes))
-                            receiptItems.append(
-                                DeduplicateAuditReceipt.Item(
-                                    originalPath: planItem.path,
-                                    sizeBytes: planItem.sizeBytes,
-                                    trashURL: nil,
-                                    method: .hardDelete,
-                                    clusterID: planItem.owningClusterID,
-                                    clusterKind: planItem.owningClusterKind
-                                )
-                            )
-                        } catch {
-                            failedCount += 1
-                            continuation.yield(.itemFailed(originalPath: planItem.path, errorMessage: error.localizedDescription))
-                        }
-                    } else {
-                        do {
-                            let trashURL = try fileOperations.trashItem(at: url)
-                            deletedCount += 1
-                            bytesReclaimed += planItem.sizeBytes
-                            continuation.yield(.itemTrashed(originalPath: planItem.path, trashURL: trashURL, sizeBytes: planItem.sizeBytes))
-                            receiptItems.append(
-                                DeduplicateAuditReceipt.Item(
-                                    originalPath: planItem.path,
-                                    sizeBytes: planItem.sizeBytes,
-                                    trashURL: trashURL?.absoluteString,
-                                    method: .trash,
-                                    clusterID: planItem.owningClusterID,
-                                    clusterKind: planItem.owningClusterKind
-                                )
-                            )
-                        } catch {
-                            failedCount += 1
-                            continuation.yield(.itemFailed(originalPath: planItem.path, errorMessage: error.localizedDescription))
-                        }
+                    do {
+                        let trashURL = try fileOperations.trashItem(at: url)
+                        deletedCount += 1
+                        bytesReclaimed += planItem.sizeBytes
+                        continuation.yield(.itemTrashed(originalPath: planItem.path, trashURL: trashURL, sizeBytes: planItem.sizeBytes))
+                        receiptItems[index].trashURL = trashURL?.absoluteString
+                        try Self.writeReceipt(
+                            receiptURL: receiptURL,
+                            runID: runID,
+                            status: "PENDING",
+                            createdAt: startedAt,
+                            finishedAt: nil,
+                            destinationRoot: destinationRoot,
+                            items: receiptItems,
+                            bytesReclaimed: bytesReclaimed,
+                            abortReason: nil
+                        )
+                    } catch {
+                        failedCount += 1
+                        continuation.yield(.itemFailed(originalPath: planItem.path, errorMessage: error.localizedDescription))
                     }
                 }
 
-                // Write the receipt. Files are already mutated by this
-                // point, so a failure here is a critical issue: we lose
-                // the app-level revert trail (and, for hard-delete, the
-                // audit record itself). Surface it loudly and tag the
-                // summary so the UI can warn the user.
-                var receiptPath: String?
                 var receiptError: Error?
-                if !receiptItems.isEmpty {
-                    do {
-                        receiptPath = try Self.writeReceipt(
-                            logsDirectory: logsDirectory,
-                            destinationRoot: destinationRoot,
-                            items: receiptItems,
-                            bytesReclaimed: bytesReclaimed
-                        )
-                    } catch {
-                        receiptError = error
-                        let prefix = hardDelete
-                            ? "Critical: dedupe audit receipt could not be written. Files were already deleted and cannot be revert-restored."
-                            : "Critical: dedupe audit receipt could not be written. Files are in the Trash but Run History will not show this run for revert."
-                        continuation.yield(.itemFailed(
-                            originalPath: "",
-                            errorMessage: "\(prefix) Details: \(error.localizedDescription)"
-                        ))
-                    }
+                let finalStatus = abortReason == nil ? "COMPLETED" : "ABORTED"
+                do {
+                    try Self.writeReceipt(
+                        receiptURL: receiptURL,
+                        runID: runID,
+                        status: finalStatus,
+                        createdAt: startedAt,
+                        finishedAt: Date(),
+                        destinationRoot: destinationRoot,
+                        items: receiptItems,
+                        bytesReclaimed: bytesReclaimed,
+                        abortReason: abortReason
+                    )
+                } catch {
+                    receiptError = error
+                    continuation.yield(.itemFailed(
+                        originalPath: "",
+                        errorMessage: "Critical: dedupe audit receipt could not be finalized. The last pending receipt remains in Run History. Details: \(error.localizedDescription)"
+                    ))
                 }
 
                 continuation.yield(.complete(
@@ -157,8 +166,8 @@ public final class DeduplicateExecutor: @unchecked Sendable {
                         deletedCount: deletedCount,
                         failedCount: failedCount + (receiptError == nil ? 0 : 1),
                         bytesReclaimed: bytesReclaimed,
-                        receiptPath: receiptPath,
-                        hardDelete: hardDelete
+                        receiptPath: receiptURL.path,
+                        hardDelete: false
                     )
                 ))
                 continuation.finish()
@@ -240,32 +249,42 @@ public final class DeduplicateExecutor: @unchecked Sendable {
         return logsDirectory
     }
 
-    static func writeReceipt(
+    static func makeReceiptURL(
         logsDirectory: URL,
-        destinationRoot: String,
-        items: [DeduplicateAuditReceipt.Item],
-        bytesReclaimed: Int64
-    ) throws -> String {
+        runID: UUID,
+        createdAt: Date
+    ) throws -> URL {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let timestamp = formatter.string(from: Date())
-        // Plain second-precision timestamps collide when two commits
-        // land in the same second, and `data.write(.atomic)` would
-        // silently replace the prior receipt. Append a short UUID so
-        // back-to-back commits each get their own audit trail.
-        let suffix = UUID().uuidString.prefix(8)
-        let receiptURL = logsDirectory.appendingPathComponent("dedupe_audit_receipt_\(timestamp)_\(suffix).json")
+        let timestamp = formatter.string(from: createdAt)
+        return logsDirectory.appendingPathComponent("dedupe_audit_receipt_\(timestamp)_\(runID.uuidString).json")
+    }
+
+    static func writeReceipt(
+        receiptURL: URL,
+        runID: UUID,
+        status: String,
+        createdAt: Date,
+        finishedAt: Date?,
+        destinationRoot: String,
+        items: [DeduplicateAuditReceipt.Item],
+        bytesReclaimed: Int64,
+        abortReason: String?
+    ) throws {
         let receipt = DeduplicateAuditReceipt(
-            createdAt: Date(),
+            runID: runID,
+            status: status,
+            createdAt: createdAt,
+            finishedAt: finishedAt,
             destinationRoot: destinationRoot,
             items: items,
-            bytesReclaimed: bytesReclaimed
+            bytesReclaimed: bytesReclaimed,
+            abortReason: abortReason
         )
         let data = try JSONEncoder.dedupe.encode(receipt)
         try data.write(to: receiptURL, options: .atomic)
-        return receiptURL.path
     }
 }
 

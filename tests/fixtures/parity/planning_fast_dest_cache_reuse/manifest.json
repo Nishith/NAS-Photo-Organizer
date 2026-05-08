@@ -11,6 +11,18 @@
       "root": "source",
       "path": "batch/IMG_20240214_080100.jpg",
       "content_text": "needs-plan"
+    },
+    {
+      "root": "dest",
+      "path": "2024/02/14/2024-02-14_001.jpg",
+      "content_text": "cached-hit",
+      "mtime_epoch": 1700000000
+    },
+    {
+      "root": "dest",
+      "path": "2024/02/14/2024-02-14_002.jpg",
+      "content_text": "existing-002",
+      "mtime_epoch": 1700000001
     }
   ],
   "seed_destination_cache": [

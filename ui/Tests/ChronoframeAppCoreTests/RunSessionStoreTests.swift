@@ -80,6 +80,66 @@ final class RunSessionStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testSecurityScopeClosesAfterRunCompletionAndPromptDismissal() async throws {
+        let configuration = RunConfiguration(mode: .preview, sourcePath: "/tmp/source", destinationPath: tempDestinationURL.path)
+        let preflight = RunPreflight(
+            configuration: configuration,
+            resolvedSourcePath: configuration.sourcePath,
+            resolvedDestinationPath: configuration.destinationPath
+        )
+        let summary = RunSummary(
+            status: .dryRunFinished,
+            title: "Preview complete",
+            metrics: RunMetrics(),
+            artifacts: RunArtifactPaths(destinationRoot: tempDestinationURL.path)
+        )
+        let completionTracker = SecurityScopeCloseTracker()
+        let completingStore = RunSessionStore(
+            engine: MockOrganizerEngine(
+                preflightResult: .success(preflight),
+                startMode: .events([.complete(summary)])
+            ),
+            logStore: logStore,
+            historyStore: historyStore
+        )
+
+        await completingStore.requestRun(
+            mode: .preview,
+            configuration: configuration,
+            securityScope: completionTracker.makeScope()
+        )
+        let completed = await waitForCondition { completingStore.summary != nil }
+        XCTAssertTrue(completed)
+        XCTAssertEqual(completionTracker.closeCount, 1)
+        completingStore.cancelCurrentRun()
+        XCTAssertEqual(completionTracker.closeCount, 1, "Closing the session again must not double-close the security scope")
+
+        let promptTracker = SecurityScopeCloseTracker()
+        let promptStore = RunSessionStore(
+            engine: MockOrganizerEngine(
+                preflightResult: .success(RunPreflight(
+                    configuration: configuration,
+                    resolvedSourcePath: configuration.sourcePath,
+                    resolvedDestinationPath: configuration.destinationPath,
+                    missingDependencies: ["helper"]
+                ))
+            ),
+            logStore: RunLogStore(capacity: 10),
+            historyStore: HistoryStore()
+        )
+
+        await promptStore.requestRun(
+            mode: .preview,
+            configuration: configuration,
+            securityScope: promptTracker.makeScope()
+        )
+        XCTAssertEqual(promptStore.status, .preflighting)
+        XCTAssertEqual(promptTracker.closeCount, 0)
+        promptStore.dismissPrompt()
+        XCTAssertEqual(promptTracker.closeCount, 1)
+    }
+
+    @MainActor
     func testTransferRunShowsResumePromptAndConfirmUsesResumeStream() async throws {
         let configuration = RunConfiguration(mode: .transfer, sourcePath: "/tmp/source", destinationPath: tempDestinationURL.path)
         let preflight = RunPreflight(

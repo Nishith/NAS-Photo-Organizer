@@ -34,6 +34,7 @@ public enum RunHistoryEntryKind: String, Codable, CaseIterable, Sendable {
     case dryRunReport
     case auditReceipt
     case dedupeAuditReceipt
+    case reorganizeAuditReceipt
     case runLog
     case queueDatabase
     case csvArtifact
@@ -47,6 +48,8 @@ public enum RunHistoryEntryKind: String, Codable, CaseIterable, Sendable {
             return "Audit Receipt"
         case .dedupeAuditReceipt:
             return "Dedupe Receipt"
+        case .reorganizeAuditReceipt:
+            return "Reorganize Receipt"
         case .runLog:
             return "Run Log"
         case .queueDatabase:
@@ -66,6 +69,8 @@ public enum RunHistoryEntryKind: String, Codable, CaseIterable, Sendable {
             return "checklist"
         case .dedupeAuditReceipt:
             return "rectangle.on.rectangle.angled"
+        case .reorganizeAuditReceipt:
+            return "arrow.triangle.swap"
         case .runLog:
             return "text.append"
         case .queueDatabase:

@@ -293,7 +293,7 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
         destinationPath: String = "",
         profileName: String? = nil,
         useFastDestinationScan: Bool = false,
-        verifyCopies: Bool = false,
+        verifyCopies: Bool = true,
         parallelTransferEnabled: Bool = false,
         workerCount: Int = 8,
         folderStructure: FolderStructure = .yyyyMMDD,
@@ -322,7 +322,7 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
         self.destinationPath = try container.decodeIfPresent(String.self, forKey: .destinationPath) ?? ""
         self.profileName = try container.decodeIfPresent(String.self, forKey: .profileName)
         self.useFastDestinationScan = try container.decodeIfPresent(Bool.self, forKey: .useFastDestinationScan) ?? false
-        self.verifyCopies = try container.decodeIfPresent(Bool.self, forKey: .verifyCopies) ?? false
+        self.verifyCopies = try container.decodeIfPresent(Bool.self, forKey: .verifyCopies) ?? true
         self.parallelTransferEnabled = try container.decodeIfPresent(Bool.self, forKey: .parallelTransferEnabled) ?? false
         self.workerCount = try container.decodeIfPresent(Int.self, forKey: .workerCount) ?? 8
         self.folderStructure = try container.decodeIfPresent(FolderStructure.self, forKey: .folderStructure) ?? .yyyyMMDD

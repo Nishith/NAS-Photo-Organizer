@@ -337,6 +337,18 @@ public final class OrganizerDatabase {
         try saveRawCacheRecords(records.map(RawFileCacheRecord.init(cacheRecord:)))
     }
 
+    public func deleteCacheRecord(namespace: CacheNamespace, path: String) throws {
+        let statement = try prepare("DELETE FROM FileCache WHERE id = ? AND path = ?")
+        defer { sqlite3_finalize(statement) }
+
+        sqlite3_bind_int(statement, 1, Int32(namespace.rawValue))
+        sqlite3_bind_text(statement, 2, path, -1, Self.sqliteTransient)
+
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw OrganizerDatabaseError.stepFailed(lastErrorMessage())
+        }
+    }
+
     public func enqueueQueuedJobs(_ jobs: [QueuedCopyJob]) throws {
         try enqueueQueuedJobs(jobs[...])
     }

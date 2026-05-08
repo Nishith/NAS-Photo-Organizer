@@ -52,12 +52,19 @@ public enum FilenameDateParser {
                 continue
             }
 
-            guard
-                let range = Range(match.range(at: 1), in: filename),
-                let date = parseYYYYMMDD(String(filename[range]))
-            else {
-                continue
+            let rawDate: String?
+            if match.numberOfRanges > 3,
+               let yearRange = Range(match.range(at: 1), in: filename),
+               let monthRange = Range(match.range(at: 2), in: filename),
+               let dayRange = Range(match.range(at: 3), in: filename) {
+                rawDate = "\(filename[yearRange])\(filename[monthRange])\(filename[dayRange])"
+            } else if let range = Range(match.range(at: 1), in: filename) {
+                rawDate = String(filename[range])
+            } else {
+                rawDate = nil
             }
+
+            guard let rawDate, let date = parseYYYYMMDD(rawDate) else { continue }
 
             return date
         }
@@ -72,7 +79,7 @@ public enum FilenameDateParser {
             let year = Int(rawValue.prefix(4)),
             let month = Int(rawValue.dropFirst(4).prefix(2)),
             let day = Int(rawValue.suffix(2)),
-            (2000...2030).contains(year)
+            (1900...2100).contains(year)
         else {
             return nil
         }
@@ -102,8 +109,10 @@ public enum FilenameDateParser {
     private static let calendar = Calendar(identifier: .gregorian)
 
     private static let patterns: [NSRegularExpression] = [
-        try! NSRegularExpression(pattern: #"(?:IMG|VID|PANO|BURST|MVIMG)_(\d{8})_\d{6}"#),
-        try! NSRegularExpression(pattern: #"^(\d{8})_\d{6}"#),
+        try! NSRegularExpression(pattern: #"(?:IMG|VID|PANO|BURST|MVIMG|PXL)_(\d{8})[_-]\d{6}"#),
+        try! NSRegularExpression(pattern: #"^(?:IMG|VID)-(\d{8})-WA\d+"#),
+        try! NSRegularExpression(pattern: #"^(\d{8})[_-]\d{6}"#),
+        try! NSRegularExpression(pattern: #"(\d{4})-(\d{2})-(\d{2})"#),
         try! NSRegularExpression(pattern: #"_(\d{8})_"#),
     ]
 }
@@ -111,7 +120,7 @@ public enum FilenameDateParser {
 public enum DateClassification {
     public static func isUnknown(_ date: Date) -> Bool {
         let year = Calendar(identifier: .gregorian).component(.year, from: date)
-        return year <= 1971
+        return year < 1900
     }
 
     public static func bucket(
@@ -158,7 +167,10 @@ public struct NativeMediaMetadataDateReader: MediaMetadataDateReading {
         if
             let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any],
             let rawValue = exif[kCGImagePropertyExifDateTimeOriginal] as? String,
-            let parsed = Self.parseImagePropertyDate(rawValue)
+            let parsed = Self.parseImagePropertyDate(
+                rawValue,
+                offset: exif[kCGImagePropertyExifOffsetTimeOriginal] as? String
+            )
         {
             return parsed
         }
@@ -182,7 +194,14 @@ public struct NativeMediaMetadataDateReader: MediaMetadataDateReading {
         try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
     }
 
-    static func parseImagePropertyDate(_ rawValue: String) -> Date? {
+    static func parseImagePropertyDate(_ rawValue: String, offset: String? = nil) -> Date? {
+        if let offset, !offset.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            for formatter in offsetDateFormatters {
+                if let date = formatter.date(from: "\(rawValue) \(offset)") {
+                    return date
+                }
+            }
+        }
         for formatter in dateFormatters {
             if let date = formatter.date(from: rawValue) {
                 return date
@@ -195,6 +214,13 @@ public struct NativeMediaMetadataDateReader: MediaMetadataDateReading {
         [
             Self.exifFormatter,
             Self.isoLikeFormatter,
+        ]
+    }
+
+    private static var offsetDateFormatters: [DateFormatter] {
+        [
+            Self.exifOffsetFormatter,
+            Self.isoLikeOffsetFormatter,
         ]
     }
 
@@ -213,6 +239,22 @@ public struct NativeMediaMetadataDateReader: MediaMetadataDateReading {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
+
+    private static let exifOffsetFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy:MM:dd HH:mm:ss XXX"
+        return formatter
+    }()
+
+    private static let isoLikeOffsetFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss XXX"
         return formatter
     }()
 }

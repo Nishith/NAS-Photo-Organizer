@@ -57,6 +57,9 @@ final class AppState: ObservableObject {
         },
         canStartRun: { [weak self] in
             self?.canStartRun ?? false
+        },
+        makeSecurityScope: { [weak self] _ in
+            self?.organizeSecurityScope()
         }
     )
     private lazy var historyCoordinator = HistoryCoordinator(
@@ -68,6 +71,9 @@ final class AppState: ObservableObject {
         finderService: finderService,
         navigate: { [weak self] route in
             self?.navigate(to: route)
+        },
+        makeSecurityScopeForDestination: { [weak self] destinationRoot in
+            self?.destinationSecurityScope(destinationRoot: destinationRoot)
         }
     )
 
@@ -342,21 +348,23 @@ final class AppState: ObservableObject {
             return
         }
         let configuration = preferencesStore.makeDeduplicateConfiguration(destinationPath: destination)
-        deduplicateSessionStore.startScan(configuration: configuration)
+        deduplicateSessionStore.startScan(
+            configuration: configuration,
+            securityScope: deduplicateSecurityScope(destination: destination)
+        )
     }
 
     func commitDeduplicateDecisions() {
         let destination = deduplicateDestinationPath
         guard !destination.isEmpty else { return }
         let configuration = preferencesStore.makeDeduplicateConfiguration(destinationPath: destination)
-        // Honor the per-run hard-delete decision the user toggled in the
-        // commit footer (which itself is gated on the global Settings
-        // toggle being true).
         deduplicateSessionStore.decisions = DedupeDecisions(
-            byPath: deduplicateSessionStore.decisions.byPath,
-            hardDelete: deduplicateSessionStore.decisions.hardDelete && preferencesStore.dedupeAllowHardDelete
+            byPath: deduplicateSessionStore.decisions.byPath
         )
-        deduplicateSessionStore.commit(configuration: configuration)
+        deduplicateSessionStore.commit(
+            configuration: configuration,
+            securityScope: deduplicateSecurityScope(destination: destination)
+        )
     }
 
     func resetDeduplicate() {
@@ -467,8 +475,62 @@ final class AppState: ObservableObject {
         navigate(to: .organize(.run))
         runSessionStore.requestReorganize(
             destinationRoot: destination,
-            targetStructure: targetStructure
+            targetStructure: targetStructure,
+            securityScope: destinationSecurityScope(destinationRoot: destination)
         )
+    }
+
+    private func organizeSecurityScope() -> SecurityScopedFolderAccess? {
+        scopedAccess(forKeys: activeOrganizeBookmarkKeys())
+    }
+
+    private func deduplicateSecurityScope(destination: String) -> SecurityScopedFolderAccess? {
+        if hasDedicatedDeduplicateDestinationPath {
+            return scopedAccess(forKeys: [Self.deduplicateDestinationBookmarkKey])
+        }
+        return destinationSecurityScope(destinationRoot: destination)
+    }
+
+    private func destinationSecurityScope(destinationRoot: String) -> SecurityScopedFolderAccess? {
+        let keys = activeDestinationBookmarkKeys()
+        let matchingKeys = keys.filter { key in
+            guard let bookmark = preferencesStore.bookmark(for: key) else { return false }
+            return pathsOverlap(bookmark.path, destinationRoot)
+        }
+        return scopedAccess(forKeys: matchingKeys.isEmpty ? keys : matchingKeys)
+    }
+
+    private func activeOrganizeBookmarkKeys() -> [String] {
+        activeSourceBookmarkKeys() + activeDestinationBookmarkKeys()
+    }
+
+    private func activeSourceBookmarkKeys() -> [String] {
+        var keys = [bookmarkPathResolver.bookmarkKey(for: .source, profileName: nil)]
+        if setupStore.usingProfile, !setupStore.selectedProfileName.isEmpty {
+            keys.append(bookmarkPathResolver.bookmarkKey(for: .source, profileName: setupStore.selectedProfileName))
+        }
+        return keys
+    }
+
+    private func activeDestinationBookmarkKeys() -> [String] {
+        var keys = [bookmarkPathResolver.bookmarkKey(for: .destination, profileName: nil)]
+        if setupStore.usingProfile, !setupStore.selectedProfileName.isEmpty {
+            keys.append(bookmarkPathResolver.bookmarkKey(for: .destination, profileName: setupStore.selectedProfileName))
+        }
+        keys.append(Self.deduplicateDestinationBookmarkKey)
+        return keys
+    }
+
+    private func scopedAccess(forKeys keys: [String]) -> SecurityScopedFolderAccess? {
+        let bookmarks = keys.compactMap { preferencesStore.bookmark(for: $0) }
+        guard !bookmarks.isEmpty else { return nil }
+        return folderAccessService.scopedAccess(for: bookmarks)
+    }
+
+    private func pathsOverlap(_ bookmarkPath: String, _ requestedPath: String) -> Bool {
+        let bookmark = URL(fileURLWithPath: bookmarkPath).standardizedFileURL.path
+        let requested = URL(fileURLWithPath: requestedPath).standardizedFileURL.path
+        return requested == bookmark || requested.hasPrefix(bookmark + "/") || bookmark.hasPrefix(requested + "/")
     }
 
     /// Repopulates the Setup view with a previously-used source path and switches to it.

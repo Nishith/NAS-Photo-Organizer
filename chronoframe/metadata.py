@@ -1,7 +1,7 @@
 import os
 import re
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     import exifread
@@ -63,14 +63,23 @@ def get_date_mdls(path):
 
 def get_date_from_filename(path):
     fname = os.path.basename(path)
-    patterns = [r'(?:IMG|VID|PANO|BURST|MVIMG)_(\d{8})_\d{6}', r'^(\d{8})_\d{6}', r'_(\d{8})_']
+    patterns = [
+        r'(?:IMG|VID|PANO|BURST|MVIMG|PXL)_(\d{8})[_-]\d{6}',
+        r'^(?:IMG|VID)-(\d{8})-WA\d+',
+        r'^(\d{8})[_-]\d{6}',
+        r'(\d{4})-(\d{2})-(\d{2})',
+        r'_(\d{8})_',
+    ]
     for pat in patterns:
         m = re.search(pat, fname)
         if m:
-            s = m.group(1)
+            if len(m.groups()) == 3:
+                s = ''.join(m.groups())
+            else:
+                s = m.group(1)
             try:
                 dt = datetime(int(s[:4]), int(s[4:6]), int(s[6:8]))
-                if 2000 <= dt.year <= 2030: return dt
+                if 1900 <= dt.year <= 2100: return dt
             except ValueError:
                 pass
     return None
@@ -79,12 +88,12 @@ def get_file_date(path):
     ext = os.path.splitext(path)[1].lower()
     if HAS_EXIFREAD and ext in PHOTO_EXTS:
         dt = get_date_exifread(path)
-        if dt and dt.year > 1971: return dt
+        if dt and 1900 <= dt.year <= 2100: return dt
 
     dt = get_date_from_filename(path)
     if dt: return dt
 
     dt = get_date_mdls(path)
-    if dt and dt.year > 1971: return dt
+    if dt and 1900 <= dt.year <= 2100: return dt
 
-    return datetime.fromtimestamp(os.path.getmtime(path))
+    return datetime.fromtimestamp(os.path.getmtime(path), timezone.utc).replace(tzinfo=None)

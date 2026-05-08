@@ -12,6 +12,16 @@ enum TestFailure: Error, LocalizedError {
     }
 }
 
+final class SecurityScopeCloseTracker {
+    private(set) var closeCount = 0
+
+    func makeScope() -> SecurityScopedFolderAccess {
+        SecurityScopedFolderAccess(onClose: { [weak self] _ in
+            self?.closeCount += 1
+        })
+    }
+}
+
 @MainActor
 final class MockOrganizerEngine: OrganizerEngine {
     enum StreamMode {

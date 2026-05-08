@@ -79,6 +79,39 @@ final class DeduplicateSessionStoreTests: XCTestCase {
         XCTAssertEqual(store.totalRecoverableBytes, plan.totalBytes, "totalRecoverableBytes must mirror the plan total")
     }
 
+    @MainActor
+    func testSecurityScopeClosesAfterScanAndCommitCompletion() async throws {
+        let scanTracker = SecurityScopeCloseTracker()
+        let commitTracker = SecurityScopeCloseTracker()
+        let engine = MockDeduplicateEngine(
+            summary: DeduplicateSummary(totalCandidatesScanned: 0),
+            commitEvents: [
+                .started(totalToDelete: 0),
+                .complete(DeduplicateCommitSummary(
+                    deletedCount: 0,
+                    failedCount: 0,
+                    bytesReclaimed: 0,
+                    receiptPath: nil,
+                    hardDelete: false
+                )),
+            ]
+        )
+        let store = DeduplicateSessionStore(engine: engine)
+        let configuration = DeduplicateConfiguration(destinationPath: "/dest")
+
+        store.startScan(configuration: configuration, securityScope: scanTracker.makeScope())
+        let scanned = await waitForCondition { store.status == .readyToReview }
+        XCTAssertTrue(scanned)
+        XCTAssertEqual(scanTracker.closeCount, 1)
+
+        store.commit(configuration: configuration, securityScope: commitTracker.makeScope())
+        let committed = await waitForCondition { store.status == .completed }
+        XCTAssertTrue(committed)
+        XCTAssertEqual(commitTracker.closeCount, 1)
+        store.reset()
+        XCTAssertEqual(commitTracker.closeCount, 1, "Reset after completion must not double-close the security scope")
+    }
+
     /// The same plan-driven count must reflect a user toggle in real
     /// time: flipping the JPEG from delete back to keep removes both
     /// the JPEG and its RAW partner from the count.

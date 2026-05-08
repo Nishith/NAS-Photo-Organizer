@@ -146,7 +146,6 @@ private struct PerformanceSettingsTab: View {
 
 private struct DeduplicateSettingsTab: View {
     @ObservedObject var preferencesStore: PreferencesStore
-    @State private var pendingHardDeleteToggle = false
 
     var body: some View {
         Form {
@@ -189,38 +188,8 @@ private struct DeduplicateSettingsTab: View {
             } footer: {
                 Text("Paired files are always kept or deleted together. Exact duplicates use the existing file-identity hash and are surfaced as their own group.")
             }
-
-            Section {
-                Toggle("Allow hard delete (skip Trash)", isOn: Binding(
-                    get: { preferencesStore.dedupeAllowHardDelete },
-                    set: { newValue in
-                        if newValue {
-                            pendingHardDeleteToggle = true
-                        } else {
-                            preferencesStore.dedupeAllowHardDelete = false
-                        }
-                    }
-                ))
-            } header: {
-                Text("Deletion")
-            } footer: {
-                Text("By default, Deduplicate moves files to the Trash so you can recover them. Hard delete unlinks files immediately and cannot be undone.")
-            }
         }
         .formStyle(.grouped)
-        .confirmationDialog(
-            "Allow hard delete?",
-            isPresented: $pendingHardDeleteToggle
-        ) {
-            Button("Allow", role: .destructive) {
-                preferencesStore.dedupeAllowHardDelete = true
-            }
-            Button("Cancel", role: .cancel) {
-                pendingHardDeleteToggle = false
-            }
-        } message: {
-            Text("Files removed by Deduplicate will bypass the Trash and cannot be recovered. The dedupe receipt in Run History will still record what was deleted but the Revert action will not be able to restore the files.")
-        }
     }
 }
 

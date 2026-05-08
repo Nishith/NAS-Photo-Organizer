@@ -242,6 +242,37 @@ final class ChronoframeCoreCopyPlanTests: XCTestCase {
         XCTAssertEqual(result.copyJobs.first?.destinationPath, "/dest/2024/03/01/2024-03-01_001.jpg")
     }
 
+    func testCopyPlanResultDecodesLegacyPayloadWithMissingOptionalArrays() throws {
+        let json = """
+        {
+          "transfers": [],
+          "counts": {
+            "alreadyInDestinationCount": 1,
+            "newCount": 2,
+            "duplicateCount": 3,
+            "hashErrorCount": 4
+          },
+          "sequenceState": {
+            "primaryByDate": { "2024-03-01": 2 },
+            "duplicatesByDate": { "2024-03-01": 1 }
+          }
+        }
+        """
+
+        let result = try JSONDecoder().decode(CopyPlanResult.self, from: Data(json.utf8))
+
+        XCTAssertEqual(result.transfers, [])
+        XCTAssertEqual(result.counts.alreadyInDestinationCount, 1)
+        XCTAssertEqual(result.counts.newCount, 2)
+        XCTAssertEqual(result.counts.duplicateCount, 3)
+        XCTAssertEqual(result.counts.hashErrorCount, 4)
+        XCTAssertEqual(result.warningMessages, [])
+        XCTAssertEqual(result.infoMessages, [])
+        XCTAssertEqual(result.dateHistogram, [])
+        XCTAssertEqual(result.sequenceState.primaryByDate, ["2024-03-01": 2])
+        XCTAssertEqual(result.sequenceState.duplicatesByDate, ["2024-03-01": 1])
+    }
+
     private func candidate(_ path: String, identity: String, date: String?) -> PlanningFileCandidate {
         PlanningFileCandidate(
             sourcePath: path,

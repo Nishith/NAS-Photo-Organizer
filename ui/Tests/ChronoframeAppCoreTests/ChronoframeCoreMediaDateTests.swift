@@ -39,20 +39,23 @@ final class ChronoframeCoreMediaDateTests: XCTestCase {
         XCTAssertEqual(dayString(FilenameDateParser.parse(from: "/photos/MVIMG_20170820_090000.jpg")), "2017-08-20")
         XCTAssertEqual(dayString(FilenameDateParser.parse(from: "/photos/20210101_120000.jpg")), "2021-01-01")
         XCTAssertEqual(dayString(FilenameDateParser.parse(from: "/photos/signal_20201225_photo.jpg")), "2020-12-25")
+        XCTAssertEqual(dayString(FilenameDateParser.parse(from: "/photos/scan_19700101_001.jpg")), "1970-01-01")
+        XCTAssertEqual(dayString(FilenameDateParser.parse(from: "/photos/export_20310101_001.jpg")), "2031-01-01")
     }
 
     func testFilenameDateParserRejectsInvalidAndOutOfRangeDates() {
         XCTAssertNil(FilenameDateParser.parse(from: "/photos/IMG_20211301_120000.jpg"))
         XCTAssertNil(FilenameDateParser.parse(from: "/photos/IMG_20210132_120000.jpg"))
-        XCTAssertNil(FilenameDateParser.parse(from: "/photos/IMG_19990101_120000.jpg"))
-        XCTAssertNil(FilenameDateParser.parse(from: "/photos/IMG_20310101_120000.jpg"))
+        XCTAssertNil(FilenameDateParser.parse(from: "/photos/IMG_18990101_120000.jpg"))
+        XCTAssertNil(FilenameDateParser.parse(from: "/photos/IMG_21010101_120000.jpg"))
         XCTAssertNil(FilenameDateParser.parse(from: "/photos/family_photo.jpg"))
         XCTAssertNil(FilenameDateParser.parse(from: "/photos/DSC_1234.jpg"))
     }
 
     func testDateClassificationUsesUnknownDateForNilAndOldYears() {
         XCTAssertEqual(DateClassification.bucket(for: nil), "Unknown_Date")
-        XCTAssertEqual(DateClassification.bucket(for: makeDate("1970-01-01")), "Unknown_Date")
+        XCTAssertEqual(DateClassification.bucket(for: makeDate("1899-12-31")), "Unknown_Date")
+        XCTAssertEqual(DateClassification.bucket(for: makeDate("1970-01-01")), "1970-01-01")
         XCTAssertEqual(DateClassification.bucket(for: makeDate("2023-06-15")), "2023-06-15")
     }
 
@@ -123,10 +126,10 @@ final class ChronoframeCoreMediaDateTests: XCTestCase {
         XCTAssertEqual(reader.creationDateCallCount, 1)
     }
 
-    func testFileDateResolverRejectsOldCreationDateAndFallsBackToModificationDate() {
+    func testFileDateResolverRejectsPreArchivalCreationDateAndFallsBackToModificationDate() {
         let reader = StubMetadataReader(
             photoDate: nil,
-            creationDate: makeDate("1970-01-01"),
+            creationDate: makeDate("1899-12-31"),
             modificationDate: makeDate("2024-01-01")
         )
         let resolver = FileDateResolver(metadataReader: reader)
@@ -164,12 +167,12 @@ final class ChronoframeCoreMediaDateTests: XCTestCase {
         XCTAssertEqual(DateClassification.bucket(for: result), "Unknown_Date")
     }
 
-    /// Modification date is also epoch/old → resolver returns nil.
-    func testFileDateResolverReturnsNilWhenModificationDateIsAlsoAncient() {
+    /// Modification date is also outside the archival range → resolver returns nil.
+    func testFileDateResolverReturnsNilWhenModificationDateIsAlsoPreArchival() {
         let reader = StubMetadataReader(
             photoDate: nil,
-            creationDate: makeDate("1970-01-01"),
-            modificationDate: makeDate("1970-01-01")
+            creationDate: makeDate("1899-12-31"),
+            modificationDate: makeDate("1899-12-31")
         )
         let resolver = FileDateResolver(metadataReader: reader)
         let result = resolver.resolveDate(for: "/photos/no_date.jpg")
@@ -193,12 +196,12 @@ final class ChronoframeCoreMediaDateTests: XCTestCase {
         let r3 = StubMetadataReader(photoDate: nil, creationDate: makeDate("2020-01-01"), modificationDate: makeDate("2019-01-01"))
         XCTAssertEqual(dayString(FileDateResolver(metadataReader: r3).resolveDate(for: "/photos/DSC_4321.jpg")), "2020-01-01")
 
-        // 4. No EXIF, no filename, old creation → mtime.
-        let r4 = StubMetadataReader(photoDate: nil, creationDate: makeDate("1970-01-01"), modificationDate: makeDate("2019-06-15"))
+        // 4. No EXIF, no filename, pre-archival creation → mtime.
+        let r4 = StubMetadataReader(photoDate: nil, creationDate: makeDate("1899-12-31"), modificationDate: makeDate("2019-06-15"))
         XCTAssertEqual(dayString(FileDateResolver(metadataReader: r4).resolveDate(for: "/photos/DSC_4321.jpg")), "2019-06-15")
 
-        // 5. All unavailable/old → nil → Unknown_Date.
-        let r5 = StubMetadataReader(photoDate: nil, creationDate: makeDate("1970-01-01"), modificationDate: makeDate("1970-01-01"))
+        // 5. All unavailable/pre-archival → nil → Unknown_Date.
+        let r5 = StubMetadataReader(photoDate: nil, creationDate: makeDate("1899-12-31"), modificationDate: makeDate("1899-12-31"))
         XCTAssertNil(FileDateResolver(metadataReader: r5).resolveDate(for: "/photos/DSC_4321.jpg"))
     }
 

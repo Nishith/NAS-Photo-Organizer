@@ -86,14 +86,20 @@ public final class PreferencesStore: ObservableObject {
     }
 
     @Published public var dedupeAllowHardDelete: Bool {
-        didSet { persist(dedupeAllowHardDelete, key: "dedupeAllowHardDelete") }
+        didSet {
+            if dedupeAllowHardDelete {
+                dedupeAllowHardDelete = false
+                return
+            }
+            persist(false, key: "dedupeAllowHardDelete")
+        }
     }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.workerCount = defaults.object(forKey: "workerCount") as? Int ?? 8
         self.useFastDestinationScan = defaults.object(forKey: "useFastDestinationScan") as? Bool ?? false
-        self.verifyCopies = defaults.object(forKey: "verifyCopies") as? Bool ?? false
+        self.verifyCopies = defaults.object(forKey: "verifyCopies") as? Bool ?? true
         self.parallelTransferEnabled = defaults.object(forKey: "parallelTransferEnabled") as? Bool ?? false
         self.logBufferCapacity = defaults.object(forKey: "logBufferCapacity") as? Int ?? 2_000
         self.lastManualSourcePath = defaults.string(forKey: "lastManualSourcePath") ?? ""
@@ -110,7 +116,8 @@ public final class PreferencesStore: ObservableObject {
         self.dedupeTreatRawJpegPairsAsUnit = defaults.object(forKey: "dedupeTreatRawJpegPairsAsUnit") as? Bool ?? true
         self.dedupeTreatLivePhotoPairsAsUnit = defaults.object(forKey: "dedupeTreatLivePhotoPairsAsUnit") as? Bool ?? true
         self.dedupeIncludeExactDuplicates = defaults.object(forKey: "dedupeIncludeExactDuplicates") as? Bool ?? true
-        self.dedupeAllowHardDelete = defaults.object(forKey: "dedupeAllowHardDelete") as? Bool ?? false
+        self.dedupeAllowHardDelete = false
+        defaults.set(false, forKey: "dedupeAllowHardDelete")
     }
 
     public func makeDeduplicateConfiguration(destinationPath: String) -> DeduplicateConfiguration {

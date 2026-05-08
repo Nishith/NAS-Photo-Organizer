@@ -346,13 +346,13 @@ public enum DedupeDecision: String, Sendable, Codable {
 /// User-supplied keep/delete map handed to the executor at commit time.
 public struct DedupeDecisions: Sendable, Equatable {
     public var byPath: [String: DedupeDecision]
-    /// Whether to bypass the Trash and unlink directly. Default `false`. The
-    /// UI gates this behind an explicit Settings toggle + confirm dialog.
+    /// Retained for backward-compatible decoding and older tests. Production
+    /// commits always move files to the macOS Trash.
     public var hardDelete: Bool
 
     public init(byPath: [String: DedupeDecision] = [:], hardDelete: Bool = false) {
         self.byPath = byPath
-        self.hardDelete = hardDelete
+        self.hardDelete = false
     }
 
     public func decision(for path: String) -> DedupeDecision? {
@@ -472,21 +472,68 @@ public struct DeduplicateAuditReceipt: Codable, Sendable, Equatable {
     }
 
     public var kind: String
+    public var schemaVersion: Int
+    public var runID: UUID
+    public var operation: String
+    public var status: String
     public var createdAt: Date
+    public var finishedAt: Date?
     public var destinationRoot: String
     public var items: [Item]
     public var bytesReclaimed: Int64
+    public var abortReason: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case schemaVersion
+        case runID
+        case operation
+        case status
+        case createdAt
+        case finishedAt
+        case destinationRoot
+        case items
+        case bytesReclaimed
+        case abortReason
+    }
 
     public init(
+        schemaVersion: Int = 2,
+        runID: UUID = UUID(),
+        operation: String = "deduplicate",
+        status: String = "PENDING",
         createdAt: Date,
+        finishedAt: Date? = nil,
         destinationRoot: String,
         items: [Item],
-        bytesReclaimed: Int64
+        bytesReclaimed: Int64,
+        abortReason: String? = nil
     ) {
         self.kind = "dedupe"
+        self.schemaVersion = schemaVersion
+        self.runID = runID
+        self.operation = operation
+        self.status = status
         self.createdAt = createdAt
+        self.finishedAt = finishedAt
         self.destinationRoot = destinationRoot
         self.items = items
         self.bytesReclaimed = bytesReclaimed
+        self.abortReason = abortReason
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.kind = try container.decodeIfPresent(String.self, forKey: .kind) ?? "dedupe"
+        self.schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        self.runID = try container.decodeIfPresent(UUID.self, forKey: .runID) ?? UUID()
+        self.operation = try container.decodeIfPresent(String.self, forKey: .operation) ?? "deduplicate"
+        self.status = try container.decodeIfPresent(String.self, forKey: .status) ?? "COMPLETED"
+        self.createdAt = try container.decode(Date.self, forKey: .createdAt)
+        self.finishedAt = try container.decodeIfPresent(Date.self, forKey: .finishedAt)
+        self.destinationRoot = try container.decode(String.self, forKey: .destinationRoot)
+        self.items = try container.decodeIfPresent([Item].self, forKey: .items) ?? []
+        self.bytesReclaimed = try container.decodeIfPresent(Int64.self, forKey: .bytesReclaimed) ?? 0
+        self.abortReason = try container.decodeIfPresent(String.self, forKey: .abortReason)
     }
 }

@@ -13,6 +13,7 @@ final class RunCoordinator {
     private let showSettingsWindowAction: @MainActor () -> Void
     private let navigate: @MainActor (AppRoute) -> Void
     private let canStartRun: @MainActor () -> Bool
+    private let makeSecurityScope: @MainActor (RunConfiguration) -> SecurityScopedFolderAccess?
 
     init(
         preferencesStore: PreferencesStore,
@@ -22,7 +23,8 @@ final class RunCoordinator {
         finderService: any FinderServicing,
         showSettingsWindowAction: @escaping @MainActor () -> Void,
         navigate: @escaping @MainActor (AppRoute) -> Void,
-        canStartRun: @escaping @MainActor () -> Bool
+        canStartRun: @escaping @MainActor () -> Bool,
+        makeSecurityScope: @escaping @MainActor (RunConfiguration) -> SecurityScopedFolderAccess? = { _ in nil }
     ) {
         self.preferencesStore = preferencesStore
         self.setupStore = setupStore
@@ -32,23 +34,28 @@ final class RunCoordinator {
         self.showSettingsWindowAction = showSettingsWindowAction
         self.navigate = navigate
         self.canStartRun = canStartRun
+        self.makeSecurityScope = makeSecurityScope
     }
 
     func startPreview() async {
         guard canStartRun() else { return }
         navigate(.organize(.run))
+        let configuration = setupStore.makeConfiguration(preferences: preferencesStore, mode: .preview)
         await runSessionStore.requestRun(
             mode: .preview,
-            configuration: setupStore.makeConfiguration(preferences: preferencesStore, mode: .preview)
+            configuration: configuration,
+            securityScope: makeSecurityScope(configuration)
         )
     }
 
     func startTransfer() async {
         guard canStartRun() else { return }
         navigate(.organize(.run))
+        let configuration = setupStore.makeConfiguration(preferences: preferencesStore, mode: .transfer)
         await runSessionStore.requestRun(
             mode: .transfer,
-            configuration: setupStore.makeConfiguration(preferences: preferencesStore, mode: .transfer)
+            configuration: configuration,
+            securityScope: makeSecurityScope(configuration)
         )
     }
 

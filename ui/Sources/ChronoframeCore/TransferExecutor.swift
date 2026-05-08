@@ -413,19 +413,18 @@ public struct TransferExecutor: Sendable {
         return try context.finish(attemptedJobs: attemptedJobs)
     }
 
-    fileprivate func shouldAbort(
+    fileprivate func abortReason(
         consecutiveFailures: Int,
         totalFailures: Int,
-        attemptedJobs: Int,
-        runLogger: PersistentRunLogger
-    ) -> Bool {
-        guard consecutiveFailures >= failureThresholds.consecutive else {
-            return false
+        attemptedJobs: Int
+    ) -> String? {
+        if consecutiveFailures >= failureThresholds.consecutive {
+            return "Aborting: \(consecutiveFailures) consecutive failures (out of \(attemptedJobs) attempted)"
         }
-
-        let message = "Aborting: \(consecutiveFailures) consecutive failures (out of \(attemptedJobs) attempted)"
-        runLogger.error(message)
-        return true
+        if totalFailures >= failureThresholds.total {
+            return "Aborting: \(totalFailures) total failures (out of \(attemptedJobs) attempted)"
+        }
+        return nil
     }
 
     fileprivate func removeUnverifiedCopyIfNeeded(
@@ -849,6 +848,7 @@ private final class StreamingAuditReceiptWriter {
     private let transferSpoolURL: URL
     private let createdAt: Date
     private let timestampString: String
+    private let runID: UUID
     private let fileManager: FileManager
 
     private var spoolHandle: FileHandle?
@@ -863,6 +863,7 @@ private final class StreamingAuditReceiptWriter {
         self.fileManager = fileManager
         self.createdAt = createdAt
         self.timestampString = ISO8601DateFormatter().string(from: createdAt)
+        self.runID = UUID()
 
         let logsDirectoryURL = destinationRoot.appendingPathComponent(
             EngineArtifactLayout.pythonReference.logsDirectoryName,
@@ -870,7 +871,7 @@ private final class StreamingAuditReceiptWriter {
         )
         try fileManager.createDirectory(at: logsDirectoryURL, withIntermediateDirectories: true)
 
-        let stem = "\(EngineArtifactLayout.pythonReference.auditReceiptPrefix)\(TransferExecutor.receiptTimestampFormatter.string(from: createdAt))"
+        let stem = "\(EngineArtifactLayout.pythonReference.auditReceiptPrefix)\(TransferExecutor.receiptTimestampFormatter.string(from: createdAt))_\(runID.uuidString)"
         self.finalReceiptURL = logsDirectoryURL.appendingPathComponent("\(stem).json")
         self.transferSpoolURL = logsDirectoryURL.appendingPathComponent("\(stem).transfers.tmp")
 
@@ -898,7 +899,13 @@ private final class StreamingAuditReceiptWriter {
         transferCount += 1
     }
 
-    func finish(status: String) throws {
+    func finish(
+        status: String,
+        abortReason: String?,
+        attemptedJobs: Int,
+        failedCount: Int,
+        verifyCopies: Bool
+    ) throws {
         guard !finished else {
             return
         }
@@ -912,17 +919,25 @@ private final class StreamingAuditReceiptWriter {
 
         do {
             try receiptHandle.write(contentsOf: Data("{\n".utf8))
-            try receiptHandle.write(contentsOf: Data("  \"status\" : \"\(status)\",\n".utf8))
-            try receiptHandle.write(contentsOf: Data("  \"timestamp\" : \"\(timestampString)\",\n".utf8))
+            try receiptHandle.write(contentsOf: Data("  \"schemaVersion\" : 2,\n".utf8))
+            try receiptHandle.write(contentsOf: Data("  \"runID\" : \(try Self.jsonString(runID.uuidString)),\n".utf8))
+            try receiptHandle.write(contentsOf: Data("  \"operation\" : \"organize\",\n".utf8))
+            try receiptHandle.write(contentsOf: Data("  \"status\" : \(try Self.jsonString(status)),\n".utf8))
+            try receiptHandle.write(contentsOf: Data("  \"timestamp\" : \(try Self.jsonString(timestampString)),\n".utf8))
+            try receiptHandle.write(contentsOf: Data("  \"startedAt\" : \(try Self.jsonString(timestampString)),\n".utf8))
+            try receiptHandle.write(contentsOf: Data("  \"finishedAt\" : \(try Self.jsonString(ISO8601DateFormatter().string(from: Date()))),\n".utf8))
+            try receiptHandle.write(contentsOf: Data("  \"attempted_jobs\" : \(attemptedJobs),\n".utf8))
+            try receiptHandle.write(contentsOf: Data("  \"failed_jobs\" : \(failedCount),\n".utf8))
             try receiptHandle.write(contentsOf: Data("  \"total_jobs\" : \(transferCount),\n".utf8))
+            try receiptHandle.write(contentsOf: Data("  \"verification\" : { \"enabled\" : \(verifyCopies ? "true" : "false") },\n".utf8))
+            if let abortReason {
+                try receiptHandle.write(contentsOf: Data("  \"abortReason\" : \(try Self.jsonString(abortReason)),\n".utf8))
+            }
             try receiptHandle.write(contentsOf: Data("  \"transfers\" : [\n".utf8))
             try pipeTransferSpool(into: receiptHandle)
             try receiptHandle.write(contentsOf: Data("\n  ]\n}\n".utf8))
             try receiptHandle.close()
 
-            if fileManager.fileExists(atPath: finalReceiptURL.path) {
-                try fileManager.removeItem(at: finalReceiptURL)
-            }
             try fileManager.moveItem(at: temporaryReceiptURL, to: finalReceiptURL)
             try? fileManager.removeItem(at: transferSpoolURL)
             finished = true
@@ -958,6 +973,11 @@ private final class StreamingAuditReceiptWriter {
             try receiptHandle.write(contentsOf: chunk)
         }
     }
+
+    private static func jsonString(_ value: String) throws -> String {
+        let data = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
+        return String(data: data, encoding: .utf8) ?? "\"\""
+    }
 }
 
 private final class TransferExecutionContext {
@@ -978,6 +998,7 @@ private final class TransferExecutionContext {
     private var bytesCopied: Int64 = 0
     private var destinationUpdates: [RawFileCacheRecord]
     private var finished = false
+    private var abortReason: String?
 
     init(
         executor: TransferExecutor,
@@ -1054,12 +1075,13 @@ private final class TransferExecutionContext {
                 observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal)
                 emittedProgress = true
 
-                if executor.shouldAbort(
+                if let reason = executor.abortReason(
                     consecutiveFailures: consecutiveFailures,
                     totalFailures: failedCount,
-                    attemptedJobs: attemptedJobs,
-                    runLogger: runLogger
+                    attemptedJobs: attemptedJobs
                 ) {
+                    abortReason = reason
+                    runLogger.error(reason)
                     return false
                 }
             }
@@ -1083,12 +1105,13 @@ private final class TransferExecutionContext {
             observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal)
             emittedProgress = true
 
-            if executor.shouldAbort(
+            if let reason = executor.abortReason(
                 consecutiveFailures: consecutiveFailures,
                 totalFailures: failedCount,
-                attemptedJobs: attemptedJobs,
-                runLogger: runLogger
+                attemptedJobs: attemptedJobs
             ) {
+                abortReason = reason
+                runLogger.error(reason)
                 return false
             }
         }
@@ -1129,7 +1152,17 @@ private final class TransferExecutionContext {
 
     func finish(attemptedJobs: Int) throws -> TransferExecutionResult {
         try executor.flushDestinationUpdates(destinationUpdates, database: database)
-        try receiptWriter.finish(status: "COMPLETED")
+        if abortReason == nil, isCancelled(), attemptedJobs < totalJobs {
+            abortReason = "Transfer was cancelled before all queued files were processed."
+        }
+        let status = abortReason == nil ? "COMPLETED" : "ABORTED"
+        try receiptWriter.finish(
+            status: status,
+            abortReason: abortReason,
+            attemptedJobs: attemptedJobs,
+            failedCount: failedCount,
+            verifyCopies: verifyCopies
+        )
 
         if totalJobs > 0, attemptedJobs == 0 {
             observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal)

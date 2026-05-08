@@ -56,6 +56,11 @@ class CacheDB:
                                   [(type_id, p, h, s, m) for p, h, s, m in updates])
             self.conn.commit()
 
+    def delete_cache_entry(self, type_id, path):
+        with self._lock:
+            self.conn.execute("DELETE FROM FileCache WHERE id = ? AND path = ?", (type_id, path))
+            self.conn.commit()
+
     def enqueue_jobs(self, jobs):
         """jobs: list of (src, dst, hash, status)"""
         if not jobs:

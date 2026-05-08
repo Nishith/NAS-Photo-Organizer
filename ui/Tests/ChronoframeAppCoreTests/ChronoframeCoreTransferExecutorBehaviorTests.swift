@@ -204,6 +204,95 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
         XCTAssertEqual(pendingRows.count, 3, "remaining jobs must stay PENDING for resume")
     }
 
+    func testRunAbortsAfterTotalFailureThresholdEvenWhenSuccessesResetConsecutiveFailures() throws {
+        let env = try makeEnvironment(jobCount: 0)
+        var jobs: [QueuedCopyJob] = []
+
+        func appendMissing(_ index: Int) {
+            jobs.append(
+                QueuedCopyJob(
+                    sourcePath: env.sourceRoot.appendingPathComponent("missing_\(index).jpg").path,
+                    destinationPath: env.destinationRoot.appendingPathComponent("2024/01/01/missing_\(index).jpg").path,
+                    hash: "0_missing_\(index)",
+                    status: .pending
+                )
+            )
+        }
+
+        func appendGood(_ index: Int) throws {
+            let sourceURL = env.sourceRoot.appendingPathComponent("good_\(index).jpg")
+            try Data("good-\(index)".utf8).write(to: sourceURL)
+            let hash = try FileIdentityHasher().hashIdentity(at: sourceURL).rawValue
+            jobs.append(
+                QueuedCopyJob(
+                    sourcePath: sourceURL.path,
+                    destinationPath: env.destinationRoot.appendingPathComponent("2024/01/01/good_\(index).jpg").path,
+                    hash: hash,
+                    status: .pending
+                )
+            )
+        }
+
+        appendMissing(0)
+        try appendGood(0)
+        appendMissing(1)
+        try appendGood(1)
+        appendMissing(2)
+        try appendGood(2)
+        try env.database.enqueueQueuedJobs(jobs)
+
+        let executor = TransferExecutor(failureThresholds: FailureThresholds(consecutive: 10, total: 3))
+        let result = try executor.execute(
+            queuedJobs: jobs,
+            database: env.database,
+            destinationRoot: env.destinationRoot,
+            verifyCopies: false,
+            runLogger: env.logger
+        )
+
+        XCTAssertEqual(result.copiedCount, 2)
+        XCTAssertEqual(result.failedCount, 3)
+        XCTAssertEqual(
+            try env.database.loadQueuedJobs(orderByInsertion: true).map(\.status),
+            [.failed, .copied, .failed, .copied, .failed, .pending]
+        )
+
+        let payload = try readAuditPayload(in: env.destinationRoot)
+        XCTAssertEqual(payload["status"] as? String, "ABORTED")
+        XCTAssertEqual(payload["attempted_jobs"] as? Int, 5)
+        XCTAssertEqual(payload["failed_jobs"] as? Int, 3)
+        XCTAssertTrue((payload["abortReason"] as? String)?.contains("total failures") == true)
+        XCTAssertEqual((payload["transfers"] as? [[String: Any]])?.count, 2)
+    }
+
+    func testCancellationBeforeFirstJobWritesAbortedReceiptAndKeepsQueuePending() throws {
+        let env = try makeEnvironment(jobCount: 2)
+        let progress = Recorder<(completed: Int, total: Int)>()
+
+        let result = try TransferExecutor().execute(
+            queuedJobs: env.jobs,
+            database: env.database,
+            destinationRoot: env.destinationRoot,
+            verifyCopies: false,
+            runLogger: env.logger,
+            observer: TransferExecutionObserver(onPhaseProgress: { completed, total, _, _ in
+                progress.append((completed, total))
+            }),
+            isCancelled: { true }
+        )
+
+        XCTAssertEqual(result.copiedCount, 0)
+        XCTAssertEqual(result.failedCount, 0)
+        XCTAssertEqual(try env.database.loadQueuedJobs(orderByInsertion: true).map(\.status), [.pending, .pending])
+        XCTAssertEqual(progress.values.map(\.completed), [0])
+
+        let payload = try readAuditPayload(in: env.destinationRoot)
+        XCTAssertEqual(payload["status"] as? String, "ABORTED")
+        XCTAssertEqual(payload["attempted_jobs"] as? Int, 0)
+        XCTAssertEqual(payload["failed_jobs"] as? Int, 0)
+        XCTAssertTrue((payload["abortReason"] as? String)?.contains("cancelled") == true)
+    }
+
 
 
     // MARK: - Bytes tracking
@@ -450,6 +539,91 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
         )
     }
 
+    func testCopyUsesCloneAndCopiesMetadataWhenCloneSucceeds() throws {
+        let env = try makeEnvironment(jobCount: 1)
+        let cloneCalls = Counter()
+        let copyAllCalls = Counter()
+        let metadataCalls = Counter()
+        let strategy = TransferFileCopyStrategy(
+            clone: { sourcePath, destinationPath in
+                cloneCalls.increment()
+                do {
+                    try FileManager.default.copyItem(atPath: sourcePath, toPath: destinationPath)
+                    return 0
+                } catch {
+                    errno = EIO
+                    return -1
+                }
+            },
+            copyAll: { _, _ in
+                copyAllCalls.increment()
+                errno = EIO
+                return -1
+            },
+            copyMetadata: { _, _ in
+                metadataCalls.increment()
+                return 0
+            }
+        )
+
+        let result = try TransferExecutor(fileCopyStrategy: strategy).execute(
+            queuedJobs: env.jobs,
+            database: env.database,
+            destinationRoot: env.destinationRoot,
+            verifyCopies: false,
+            runLogger: env.logger
+        )
+
+        XCTAssertEqual(result.copiedCount, 1)
+        XCTAssertEqual(result.failedCount, 0)
+        XCTAssertEqual(cloneCalls.value, 1)
+        XCTAssertEqual(copyAllCalls.value, 0)
+        XCTAssertEqual(metadataCalls.value, 1)
+    }
+
+    func testCopyRetriesTransientCopyFailure() throws {
+        let env = try makeEnvironment(jobCount: 1)
+        let copyAllCalls = Counter()
+        let strategy = TransferFileCopyStrategy(
+            clone: { _, _ in
+                errno = ENOTSUP
+                return -1
+            },
+            copyAll: { sourcePath, destinationPath in
+                if copyAllCalls.incrementAndGet() == 1 {
+                    errno = EAGAIN
+                    return -1
+                }
+                do {
+                    try FileManager.default.copyItem(atPath: sourcePath, toPath: destinationPath)
+                    return 0
+                } catch {
+                    errno = EIO
+                    return -1
+                }
+            },
+            copyMetadata: { _, _ in 0 }
+        )
+        let retryPolicy = RetryPolicy(
+            maxAttempts: 2,
+            minimumBackoffSeconds: 0,
+            maximumBackoffSeconds: 0,
+            nonRetryableErrnos: RetryPolicy.pythonReference.nonRetryableErrnos
+        )
+
+        let result = try TransferExecutor(retryPolicy: retryPolicy, fileCopyStrategy: strategy).execute(
+            queuedJobs: env.jobs,
+            database: env.database,
+            destinationRoot: env.destinationRoot,
+            verifyCopies: false,
+            runLogger: env.logger
+        )
+
+        XCTAssertEqual(result.copiedCount, 1)
+        XCTAssertEqual(result.failedCount, 0)
+        XCTAssertEqual(copyAllCalls.value, 2)
+    }
+
     // MARK: - Audit receipt
 
     /// Every completed run must produce exactly one `audit_receipt_*.json` in
@@ -556,6 +730,13 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
             lock.unlock()
         }
 
+        func incrementAndGet() -> Int {
+            lock.lock()
+            defer { lock.unlock() }
+            count += 1
+            return count
+        }
+
         var value: Int {
             lock.lock()
             defer { lock.unlock() }
@@ -609,6 +790,15 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
     }
 
     private func readAuditReceipt(in destinationRoot: URL) throws -> ReceiptSummary {
+        let payload = try readAuditPayload(in: destinationRoot)
+        let transfers = payload["transfers"] as? [[String: Any]] ?? []
+        return ReceiptSummary(
+            totalJobs: payload["total_jobs"] as? Int ?? 0,
+            transferCount: transfers.count
+        )
+    }
+
+    private func readAuditPayload(in destinationRoot: URL) throws -> [String: Any] {
         let logsDirectory = destinationRoot.appendingPathComponent(".organize_logs", isDirectory: true)
         let receiptURL = try FileManager.default
             .contentsOfDirectory(at: logsDirectory, includingPropertiesForKeys: nil)
@@ -616,12 +806,7 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
             .last
         let url = try XCTUnwrap(receiptURL)
-        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-        let transfers = payload["transfers"] as? [[String: Any]] ?? []
-        return ReceiptSummary(
-            totalJobs: payload["total_jobs"] as? Int ?? 0,
-            transferCount: transfers.count
-        )
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
     }
 
     private func temporaryFilesUnder(_ root: URL) -> [String] {

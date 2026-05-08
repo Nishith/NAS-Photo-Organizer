@@ -5,6 +5,7 @@ import concurrent.futures
 import json
 import csv
 import yaml
+import uuid
 from datetime import datetime
 from collections import defaultdict
 
@@ -80,7 +81,8 @@ def parse_args():
     parser.add_argument("--profile", type=str, default=None, help="Use paths from profiles.yaml")
     parser.add_argument("--dry-run", action="store_true", help="Generate CSV report without copying")
     parser.add_argument("--rebuild-cache", action="store_true", help="Force database re-index")
-    parser.add_argument("--verify", action="store_true", help="Re-hash each file after copy to verify integrity")
+    parser.add_argument("--verify", action="store_true", help="Re-hash each file after copy to verify integrity (default)")
+    parser.add_argument("--skip-verify", action="store_true", help="Skip post-copy verification for faster transfers")
     parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
                         help=f"Thread pool size for hashing (default {DEFAULT_WORKERS})")
     parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts (unattended)")
@@ -133,27 +135,48 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
 
     if fast_dest:
         if progress is not None and ptask is not None:
-            progress.update(ptask, description="[cyan]Fast Dest: Loading from cache...", total=1)
+            progress.update(ptask, description="[cyan]Fast Dest: Validating cache...", total=len(cache))
         emit_json("task_start", task="dest_hash", total=len(cache))
 
-        for path, data in cache.items():
-            hash_index[data["hash"]] = path
-            fname = os.path.basename(path)
-            m = seq_pattern.match(fname)
-            if m:
-                prefix = m.group(1)
-                date_str = "Unknown_Date" if prefix == "Unknown" else prefix
-                seq = int(m.group(2))
-                if path.startswith(dup_dir):
-                    if seq > dup_seq_index[date_str]:
-                        dup_seq_index[date_str] = seq
+        invalidated = 0
+        updates = []
+        for index, (path, data) in enumerate(cache.items(), start=1):
+            try:
+                st = os.lstat(path)
+                if os.path.islink(path) or not os.path.isfile(path):
+                    raise OSError("not a regular file")
+                if data["size"] == st.st_size and abs(data["mtime"] - st.st_mtime) < 0.001:
+                    h, size, mtime = data["hash"], data["size"], data["mtime"]
                 else:
-                    if seq > seq_index[date_str]:
-                        seq_index[date_str] = seq
+                    h, size, mtime, was_hashed = process_single_file(path, None)
+                    if not h:
+                        raise OSError("could not refresh cached file hash")
+                    if was_hashed:
+                        updates.append((path, h, size, mtime))
+                hash_index[h] = path
+                fname = os.path.basename(path)
+                m = seq_pattern.match(fname)
+                if m:
+                    prefix = m.group(1)
+                    date_str = "Unknown_Date" if prefix == "Unknown" else prefix
+                    seq = int(m.group(2))
+                    if path.startswith(dup_dir):
+                        if seq > dup_seq_index[date_str]:
+                            dup_seq_index[date_str] = seq
+                    else:
+                        if seq > seq_index[date_str]:
+                            seq_index[date_str] = seq
+            except OSError:
+                invalidated += 1
+                cache_db.delete_cache_entry(2, path)
+            if progress is not None and ptask is not None:
+                progress.update(ptask, completed=index)
+
+        cache_db.save_batch(2, updates)
 
         if progress is not None and ptask is not None:
-            progress.update(ptask, completed=1)
-        emit_json("task_complete", task="dest_hash")
+            progress.update(ptask, completed=len(cache))
+        emit_json("task_complete", task="dest_hash", invalidated=invalidated)
         return hash_index, seq_index, dup_seq_index
 
     # ── Standard Validation (Network Scan) — walk and hash concurrently ──
@@ -167,13 +190,16 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
 
         # Submit hashing jobs while walking — overlaps tree traversal with I/O
         for root, dirs, fnames in os.walk(dst_dir):
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            dirs[:] = [
+                d for d in dirs
+                if not d.startswith('.') and not os.path.islink(os.path.join(root, d))
+            ]
             for fname in fnames:
                 if fname.startswith('.') or fname in SKIP_FILES:
                     continue
-                if os.path.splitext(fname)[1].lower() not in ALL_EXTS:
-                    continue
                 path = os.path.join(root, fname)
+                if os.path.islink(path) or os.path.splitext(fname)[1].lower() not in ALL_EXTS:
+                    continue
 
                 # Update sequence index while walking (cheap, serial)
                 m = seq_pattern.match(fname)
@@ -232,19 +258,42 @@ def generate_dry_run_report(jobs, dst, report_path):
     console.print(f"\n[green]Dry-run complete.[/green] Report: [cyan]{report_path}[/cyan]")
 
 
-def generate_audit_receipt(jobs_executed, dest_path):
-    receipt_name = f"audit_receipt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+def generate_audit_receipt(
+    jobs_executed,
+    dest_path,
+    *,
+    status="COMPLETED",
+    abort_reason=None,
+    attempted_count=None,
+    failed_count=0,
+    verify=False,
+):
+    run_id = str(uuid.uuid4())
+    receipt_name = f"audit_receipt_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{run_id}.json"
     log_dir = os.path.join(dest_path, ".organize_logs")
     os.makedirs(log_dir, exist_ok=True)
     rpath = os.path.join(log_dir, receipt_name)
+    tmp_path = f"{rpath}.tmp"
+    now = datetime.now().isoformat()
     payload = {
-        "timestamp": datetime.now().isoformat(),
+        "schemaVersion": 2,
+        "runID": run_id,
+        "operation": "organize",
+        "timestamp": now,
+        "startedAt": now,
+        "finishedAt": now,
         "total_jobs": len(jobs_executed),
-        "status": "COMPLETED",
+        "attempted_jobs": attempted_count if attempted_count is not None else len(jobs_executed),
+        "failed_jobs": failed_count,
+        "status": status,
+        "verification": {"enabled": verify},
         "transfers": [{"source": src, "dest": dst, "hash": h} for src, dst, h in jobs_executed]
     }
-    with open(rpath, 'w') as f:
+    if abort_reason:
+        payload["abortReason"] = abort_reason
+    with open(tmp_path, 'x') as f:
         json.dump(payload, f, indent=4)
+    os.rename(tmp_path, rpath)
     console.print(f"\n[bold green]Audit receipt:[/bold green] [cyan]{rpath}[/cyan]")
     return rpath
 
@@ -374,6 +423,7 @@ def main():
     dup = os.path.join(dst, "Duplicate")
     rebuild = args.rebuild_cache
     workers = max(1, args.workers)
+    verify_copies = not args.skip_verify
 
     os.makedirs(dst, exist_ok=True)
 
@@ -410,13 +460,13 @@ def main():
             if args.dry_run:
                 console.print("[cyan]Dry-run active — ignoring pending queue.[/cyan]")
             elif args.yes:
-                execute_jobs(pending_jobs, cache_db, dst, run_log, verify=args.verify, workers=workers)
+                execute_jobs(pending_jobs, cache_db, dst, run_log, verify=verify_copies, workers=workers)
                 run_log.log("Resumed session complete")
                 emit_json("complete", status="finished", dest=dst)
                 return
             else:
                 if Confirm.ask("Resume where you left off?"):
-                    execute_jobs(pending_jobs, cache_db, dst, run_log, verify=args.verify, workers=workers)
+                    execute_jobs(pending_jobs, cache_db, dst, run_log, verify=verify_copies, workers=workers)
                     console.print("[bold green]Queue complete![/bold green]")
                     run_log.log("Resumed session complete")
                     emit_json("complete", status="finished", dest=dst)
@@ -432,12 +482,18 @@ def main():
         emit_json("task_start", task="discovery")
         with console.status("[bold blue]Scanning source directories...", spinner="dots"):
             for root, dirs, fnames in os.walk(src):
-                dirs[:] = sorted(d for d in dirs if not d.startswith('.'))
+                dirs[:] = sorted(
+                    d for d in dirs
+                    if not d.startswith('.') and not os.path.islink(os.path.join(root, d))
+                )
                 for fname in sorted(fnames):
                     if fname.startswith('.') or fname in SKIP_FILES:
                         continue
+                    path = os.path.join(root, fname)
+                    if os.path.islink(path):
+                        continue
                     if os.path.splitext(fname)[1].lower() in ALL_EXTS:
-                        src_files.append(os.path.join(root, fname))
+                        src_files.append(path)
         emit_json("task_complete", task="discovery", found=len(src_files))
 
         if not src_files:
@@ -549,7 +605,7 @@ def main():
 
         for src_path, h in new_files:
             dt = file_dates.get(src_path)
-            date_str = dt.strftime('%Y-%m-%d') if (dt and dt.year > 1971) else "Unknown_Date"
+            date_str = dt.strftime('%Y-%m-%d') if (dt and 1900 <= dt.year <= 2100) else "Unknown_Date"
             date_groups[date_str].append((src_path, h))
 
         emit_json("task_complete", task="classification",
@@ -641,7 +697,7 @@ def main():
         dup_groups = defaultdict(list)
         for src_path, h in src_dups:
             dt = get_file_date(src_path)
-            date_str = dt.strftime('%Y-%m-%d') if (dt and dt.year > 1971) else "Unknown_Date"
+            date_str = dt.strftime('%Y-%m-%d') if (dt and 1900 <= dt.year <= 2100) else "Unknown_Date"
             dup_groups[date_str].append((src_path, h))
 
         for date_str in sorted(dup_groups.keys()):
@@ -708,7 +764,7 @@ def main():
                 return
 
         cache_db.enqueue_jobs(jobs_to_insert)
-        rpath = execute_jobs(cache_db.get_pending_jobs(), cache_db, dst, run_log, verify=args.verify, workers=workers)
+        rpath = execute_jobs(cache_db.get_pending_jobs(), cache_db, dst, run_log, verify=verify_copies, workers=workers)
 
         run_log.log("Run complete")
         emit_json("complete", status="finished", dest=dst, report=rpath)
@@ -726,6 +782,8 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, w
     total_fail = 0
     executed_log = []
     verify_failures = 0
+    abort_reason = None
+    attempted_count = 0
 
     # Pre-compute total bytes for transfer rate reporting
     bytes_total = 0
@@ -750,6 +808,7 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, w
 
         count = 0
         for src_p, dst_p, h in pending_jobs:
+            attempted_count = count + 1
             try:
                 result = safe_copy_atomic(src_p, dst_p)
                 if verify:
@@ -766,9 +825,14 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, w
                         cache_db.update_job_status(src_p, 'FAILED')
                         consecutive_fail += 1
                         total_fail += 1
-                        if consecutive_fail >= MAX_CONSECUTIVE_FAILURES:
-                            msg = (f"Aborting: {consecutive_fail} consecutive failures "
-                                   f"(out of {count + 1} attempted)")
+                        if consecutive_fail >= MAX_CONSECUTIVE_FAILURES or total_fail >= MAX_TOTAL_FAILURES:
+                            if consecutive_fail >= MAX_CONSECUTIVE_FAILURES:
+                                msg = (f"Aborting: {consecutive_fail} consecutive failures "
+                                       f"(out of {attempted_count} attempted)")
+                            else:
+                                msg = (f"Aborting: {total_fail} total failures "
+                                       f"(out of {attempted_count} attempted)")
+                            abort_reason = msg
                             console.print(f"\n[bold red]{msg}[/bold red]")
                             if run_log:
                                 run_log.error(msg)
@@ -795,9 +859,14 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, w
                     run_log.error(f"Copy failed: {src_p} → {dst_p}: {e}")
                 consecutive_fail += 1
                 total_fail += 1
-                if consecutive_fail >= MAX_CONSECUTIVE_FAILURES:
-                    msg = (f"Aborting: {consecutive_fail} consecutive failures "
-                           f"(out of {count + 1} attempted)")
+                if consecutive_fail >= MAX_CONSECUTIVE_FAILURES or total_fail >= MAX_TOTAL_FAILURES:
+                    if consecutive_fail >= MAX_CONSECUTIVE_FAILURES:
+                        msg = (f"Aborting: {consecutive_fail} consecutive failures "
+                               f"(out of {attempted_count} attempted)")
+                    else:
+                        msg = (f"Aborting: {total_fail} total failures "
+                               f"(out of {attempted_count} attempted)")
+                    abort_reason = msg
                     console.print(f"\n[bold red]{msg}[/bold red]")
                     if run_log:
                         run_log.error(msg)
@@ -815,4 +884,12 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, w
     if verify and verify_failures > 0:
         console.print(f"[bold yellow]{verify_failures} files failed verification![/bold yellow]")
 
-    return generate_audit_receipt(executed_log, dst_root)
+    return generate_audit_receipt(
+        executed_log,
+        dst_root,
+        status="ABORTED" if abort_reason else "COMPLETED",
+        abort_reason=abort_reason,
+        attempted_count=attempted_count,
+        failed_count=total_fail,
+        verify=verify,
+    )

@@ -156,7 +156,7 @@ private struct HelpPrivacySection: View {
             HelpListPanel(title: "Your files stay on your Mac") {
                 HelpBullet("Chronoframe runs entirely on-device. No photos, paths, or filenames are sent over the network.")
                 HelpBullet("There is no telemetry, no analytics, no crash reporting service. Nothing phones home.")
-                HelpBullet("The app needs read access to your source folder and read/write access to your destination — granted by macOS through the standard folder picker. Access is per-folder; it never asks for whole-disk access.")
+                HelpBullet("The app uses macOS sandboxed folder access. Choose a source and destination with the standard folder picker; access is scoped to those choices and saved with security-scoped bookmarks.")
             }
 
             HelpListPanel(title: "What lives where") {
@@ -180,10 +180,10 @@ private struct HelpCreditsSection: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HelpListPanel(title: "Bundled components") {
-                CreditRow(name: "ExifRead",  version: "3.3.0",  license: "BSD 3-Clause", url: "https://github.com/ianare/exif-py")
-                CreditRow(name: "Tenacity",  version: "8.2.3",  license: "Apache 2.0",   url: "https://github.com/jd/tenacity")
-                CreditRow(name: "Rich",      version: "13.7.1", license: "MIT",          url: "https://github.com/Textualize/rich")
-                CreditRow(name: "PyYAML",    version: "6.0.1",  license: "MIT",          url: "https://pyyaml.org")
+                CreditRow(name: "ExifRead",  version: "3.5.1",  license: "BSD 3-Clause", url: "https://github.com/ianare/exif-py")
+                CreditRow(name: "Tenacity",  version: "9.1.4",  license: "Apache 2.0",   url: "https://github.com/jd/tenacity")
+                CreditRow(name: "Rich",      version: "15.0.0", license: "MIT",          url: "https://github.com/Textualize/rich")
+                CreditRow(name: "PyYAML",    version: "6.0.3",  license: "MIT",          url: "https://pyyaml.org")
             }
 
             HelpListPanel(title: "Chronoframe") {

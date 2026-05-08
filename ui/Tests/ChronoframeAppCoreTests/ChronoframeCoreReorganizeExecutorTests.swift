@@ -45,6 +45,17 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
         }
     }
 
+    func testErrorDescriptionsAreUserFacing() {
+        XCTAssertTrue(
+            ReorganizeExecutorError.destinationNotFound(path: "/missing").errorDescription?
+                .contains("destination folder is no longer available") == true
+        )
+        XCTAssertTrue(
+            ReorganizeExecutorError.destinationNotADirectory(path: "/file").errorDescription?
+                .contains("selected destination is not a folder") == true
+        )
+    }
+
     // MARK: - Plan: layout transitions
 
     func testPlanFlatToYYYYMMDDProducesCorrectMoves() throws {
@@ -125,6 +136,21 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
         )
     }
 
+    func testPlanFlatToYYYYMMProducesMonthOnlyPath() throws {
+        try writeFile(at: ["2024-03-15_001.jpg"])
+
+        let plan = try ReorganizeExecutor().plan(
+            destinationRoot: temporaryDirectoryURL,
+            targetStructure: .yyyyMM
+        )
+
+        XCTAssertEqual(plan.moves.count, 1)
+        XCTAssertEqual(
+            plan.moves[0].destinationPath,
+            temporaryDirectoryURL.appendingPathComponent("2024/03/2024-03-15_001.jpg").standardizedFileURL.path
+        )
+    }
+
     func testPlanPreservesDuplicateSubfolder() throws {
         try writeFile(at: ["Duplicate", "2024-04-10_001.png"])
 
@@ -170,6 +196,20 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
         XCTAssertEqual(plan.moves.count, 1)
         XCTAssertEqual(plan.moves[0].sourcePath, temporaryDirectoryURL.appendingPathComponent("2024-04-08_001.jpg").standardizedFileURL.path)
         XCTAssertEqual(plan.unrecognizedCount, 0)
+    }
+
+    func testPlanSkipsHiddenFilenames() throws {
+        try writeFile(at: [".2024-04-08_001.jpg"])
+        try writeFile(at: ["2024-04-08_001.jpg"])
+
+        let plan = try ReorganizeExecutor().plan(
+            destinationRoot: temporaryDirectoryURL,
+            targetStructure: .yyyyMMDD
+        )
+
+        XCTAssertEqual(plan.moves.map(\.sourcePath), [
+            temporaryDirectoryURL.appendingPathComponent("2024-04-08_001.jpg").standardizedFileURL.path
+        ])
     }
 
     func testPlanCountsUnrecognizedFilesSeparately() throws {
@@ -244,6 +284,31 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
         )
     }
 
+    func testPlanPreservesUnknownDateEventFolderInYYYYMonEvent() throws {
+        try writeFile(at: ["Unknown_Date", "Birthday", "Unknown_001.jpg"])
+
+        let plan = try ReorganizeExecutor().plan(
+            destinationRoot: temporaryDirectoryURL,
+            targetStructure: .yyyyMonEvent
+        )
+
+        XCTAssertEqual(plan.moves.count, 0)
+        XCTAssertEqual(plan.unchangedCount, 1)
+    }
+
+    func testPlanSkipsSymlinkFiles() throws {
+        let targetURL = try writeFile(at: ["2024-04-08_001.jpg"])
+        let linkURL = temporaryDirectoryURL.appendingPathComponent("2024-04-09_001.jpg")
+        try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: targetURL)
+
+        let plan = try ReorganizeExecutor().plan(
+            destinationRoot: temporaryDirectoryURL,
+            targetStructure: .yyyyMMDD
+        )
+
+        XCTAssertEqual(plan.moves.map(\.sourcePath), [targetURL.standardizedFileURL.path])
+    }
+
     // MARK: - Execute
 
     func testExecuteMovesFilesAndCleansEmptyParents() throws {
@@ -254,7 +319,7 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
             targetStructure: .yyyyMMDD
         )
 
-        let result = ReorganizeExecutor().execute(plan: plan)
+        let result = try ReorganizeExecutor().execute(plan: plan)
 
         XCTAssertEqual(result.movedCount, 1)
         XCTAssertEqual(result.failedCount, 0)
@@ -265,6 +330,27 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
         ))
     }
 
+    func testExecuteWritesCompletedReceipt() throws {
+        try writeFile(at: ["2024-04-08_001.HEIC"])
+        let plan = try ReorganizeExecutor().plan(
+            destinationRoot: temporaryDirectoryURL,
+            targetStructure: .yyyyMMDD
+        )
+
+        let result = try ReorganizeExecutor().execute(plan: plan)
+        let receipt = try decodeReceipt(at: try XCTUnwrap(result.receiptPath))
+
+        XCTAssertEqual(receipt.schemaVersion, 1)
+        XCTAssertEqual(receipt.operation, "reorganize")
+        XCTAssertEqual(receipt.status, "COMPLETED")
+        XCTAssertEqual(receipt.destinationRoot, temporaryDirectoryURL.standardizedFileURL.path)
+        XCTAssertNotNil(receipt.finishedAt)
+        XCTAssertNil(receipt.abortReason)
+        XCTAssertEqual(receipt.items.count, 1)
+        XCTAssertEqual(receipt.items[0].completed, true)
+        XCTAssertTrue(receipt.items[0].destinationPath.hasSuffix("2024/04/08/2024-04-08_001.HEIC"))
+    }
+
     func testExecuteRemovesEmptyParentDirectory() throws {
         let fileURL = try writeFile(at: ["2024", "04", "08", "2024-04-08_001.HEIC"])
         let plan = try ReorganizeExecutor().plan(
@@ -273,7 +359,7 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
         )
         XCTAssertEqual(plan.moves.count, 1)
 
-        _ = ReorganizeExecutor().execute(plan: plan)
+        _ = try ReorganizeExecutor().execute(plan: plan)
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
         XCTAssertFalse(
@@ -296,13 +382,125 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
 
         let issues = Recorder<RunIssue>()
         let observer = ReorganizeExecutionObserver(onIssue: { issues.append($0) })
-        let result = ReorganizeExecutor().execute(plan: plan, observer: observer)
+        let result = try ReorganizeExecutor().execute(plan: plan, observer: observer)
 
         XCTAssertEqual(result.movedCount, 0)
         XCTAssertEqual(result.skippedCount, 1)
         XCTAssertTrue(FileManager.default.fileExists(atPath: oldURL.path), "Source must be preserved on collision")
         XCTAssertEqual(issues.count, 1)
         XCTAssertTrue(issues.values[0].message.contains("Destination exists"))
+    }
+
+    func testExecuteSkipsMovesEscapingDestinationRoot() throws {
+        let outsideURL = temporaryDirectoryURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("outside-\(UUID().uuidString).jpg")
+        try Data("outside".utf8).write(to: outsideURL)
+        defer { try? FileManager.default.removeItem(at: outsideURL) }
+
+        let plan = ReorganizePlan(
+            destinationRoot: temporaryDirectoryURL.path,
+            targetStructure: .yyyyMMDD,
+            moves: [
+                ReorganizeMove(
+                    sourcePath: outsideURL.path,
+                    destinationPath: temporaryDirectoryURL.appendingPathComponent("2024/04/08/2024-04-08_001.jpg").path
+                ),
+            ],
+            unchangedCount: 0,
+            unrecognizedCount: 0
+        )
+        let issues = Recorder<RunIssue>()
+
+        let result = try ReorganizeExecutor().execute(
+            plan: plan,
+            observer: ReorganizeExecutionObserver(onIssue: { issues.append($0) })
+        )
+
+        XCTAssertEqual(result.movedCount, 0)
+        XCTAssertEqual(result.skippedCount, 1)
+        XCTAssertTrue(issues.values.first?.message.contains("escaped") == true)
+    }
+
+    func testExecuteSkipsMissingSourceDuringPreflight() throws {
+        let missingURL = temporaryDirectoryURL.appendingPathComponent("missing.jpg")
+        let destinationURL = temporaryDirectoryURL.appendingPathComponent("2024/04/08/missing.jpg")
+        let plan = ReorganizePlan(
+            destinationRoot: temporaryDirectoryURL.path,
+            targetStructure: .yyyyMMDD,
+            moves: [
+                ReorganizeMove(sourcePath: missingURL.path, destinationPath: destinationURL.path),
+            ],
+            unchangedCount: 0,
+            unrecognizedCount: 0
+        )
+        let issues = Recorder<RunIssue>()
+
+        let result = try ReorganizeExecutor().execute(
+            plan: plan,
+            observer: ReorganizeExecutionObserver(onIssue: { issues.append($0) })
+        )
+        let receipt = try decodeReceipt(at: try XCTUnwrap(result.receiptPath))
+
+        XCTAssertEqual(result.skippedCount, 1)
+        XCTAssertEqual(receipt.items.count, 0)
+        XCTAssertTrue(issues.values.first?.message.contains("Source no longer exists") == true)
+    }
+
+    func testExecuteSkipsUnhashableSourceDuringPreflight() throws {
+        let directoryURL = temporaryDirectoryURL.appendingPathComponent("2024-04-08_001.jpg", isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let plan = ReorganizePlan(
+            destinationRoot: temporaryDirectoryURL.path,
+            targetStructure: .yyyyMMDD,
+            moves: [
+                ReorganizeMove(
+                    sourcePath: directoryURL.path,
+                    destinationPath: temporaryDirectoryURL.appendingPathComponent("2024/04/08/2024-04-08_001.jpg").path
+                ),
+            ],
+            unchangedCount: 0,
+            unrecognizedCount: 0
+        )
+        let issues = Recorder<RunIssue>()
+
+        let result = try ReorganizeExecutor().execute(
+            plan: plan,
+            observer: ReorganizeExecutionObserver(onIssue: { issues.append($0) })
+        )
+
+        XCTAssertEqual(result.skippedCount, 1)
+        XCTAssertTrue(issues.values.first?.message.contains("Could not prepare") == true)
+    }
+
+    func testExecuteRecordsMoveFailureWithoutMarkingReceiptItemCompleted() throws {
+        let sourceURL = try writeFile(at: ["2024-04-08_001.jpg"])
+        let blockedParentURL = temporaryDirectoryURL.appendingPathComponent("blocked")
+        try Data("not a directory".utf8).write(to: blockedParentURL)
+        let plan = ReorganizePlan(
+            destinationRoot: temporaryDirectoryURL.path,
+            targetStructure: .yyyyMMDD,
+            moves: [
+                ReorganizeMove(
+                    sourcePath: sourceURL.path,
+                    destinationPath: blockedParentURL.appendingPathComponent("2024-04-08_001.jpg").path
+                ),
+            ],
+            unchangedCount: 0,
+            unrecognizedCount: 0
+        )
+        let issues = Recorder<RunIssue>()
+
+        let result = try ReorganizeExecutor().execute(
+            plan: plan,
+            observer: ReorganizeExecutionObserver(onIssue: { issues.append($0) })
+        )
+        let receipt = try decodeReceipt(at: try XCTUnwrap(result.receiptPath))
+
+        XCTAssertEqual(result.failedCount, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sourceURL.path))
+        XCTAssertEqual(receipt.items.first?.completed, false)
+        XCTAssertTrue(issues.values.first?.message.contains("Could not move") == true)
     }
 
     func testExecuteHonorsCancellation() throws {
@@ -317,13 +515,34 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
         let flag = AtomicFlag()
         let observer = ReorganizeExecutionObserver(onTaskProgress: { _, _ in flag.set(true) })
 
-        let result = ReorganizeExecutor().execute(
+        let result = try ReorganizeExecutor().execute(
             plan: plan,
             observer: observer,
             isCancelled: { flag.value }
         )
 
         XCTAssertEqual(result.movedCount, 1, "Cancellation should stop the loop after one move")
+    }
+
+    func testExecuteCancellationFinalizesAbortedReceipt() throws {
+        try writeFile(at: ["2024-04-08_001.HEIC"])
+        try writeFile(at: ["2024-04-09_001.HEIC"])
+        let plan = try ReorganizeExecutor().plan(
+            destinationRoot: temporaryDirectoryURL,
+            targetStructure: .yyyyMMDD
+        )
+        let cancellationGate = AtomicCounter()
+
+        let result = try ReorganizeExecutor().execute(
+            plan: plan,
+            isCancelled: { cancellationGate.incrementAndGet() > 1 }
+        )
+        let receipt = try decodeReceipt(at: try XCTUnwrap(result.receiptPath))
+
+        XCTAssertEqual(result.movedCount, 1)
+        XCTAssertEqual(receipt.status, "ABORTED")
+        XCTAssertNotNil(receipt.abortReason)
+        XCTAssertEqual(receipt.items.filter(\.completed).count, 1)
     }
 
     func testExecuteReportsProgressEachStep() throws {
@@ -342,7 +561,7 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
             onTaskProgress: { completed, total in progressEvents.append((completed, total)) }
         )
 
-        _ = ReorganizeExecutor().execute(plan: plan, observer: observer)
+        _ = try ReorganizeExecutor().execute(plan: plan, observer: observer)
 
         XCTAssertEqual(startTotal.value, 3)
         XCTAssertEqual(progressEvents.count, 3)
@@ -350,7 +569,7 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
         XCTAssertEqual(progressEvents.values.last?.1, 3)
     }
 
-    func testExecuteEmptyPlanIsNoOp() {
+    func testExecuteEmptyPlanIsNoOp() throws {
         let plan = ReorganizePlan(
             destinationRoot: temporaryDirectoryURL.path,
             targetStructure: .yyyyMMDD,
@@ -358,11 +577,149 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
             unchangedCount: 0,
             unrecognizedCount: 0
         )
-        let result = ReorganizeExecutor().execute(plan: plan)
+        let result = try ReorganizeExecutor().execute(plan: plan)
         XCTAssertEqual(result.movedCount, 0)
         XCTAssertEqual(result.skippedCount, 0)
         XCTAssertEqual(result.failedCount, 0)
         XCTAssertEqual(result.totalMoves, 0)
+    }
+
+    // MARK: - Revert
+
+    func testRevertRestoresCompletedReorganizeMoveWhenHashMatches() throws {
+        let originalURL = try writeFile(at: ["2024-04-08_001.HEIC"])
+        let plan = try ReorganizeExecutor().plan(
+            destinationRoot: temporaryDirectoryURL,
+            targetStructure: .yyyyMMDD
+        )
+        let executeResult = try ReorganizeExecutor().execute(plan: plan)
+        let receiptURL = URL(fileURLWithPath: try XCTUnwrap(executeResult.receiptPath))
+        let movedURL = temporaryDirectoryURL.appendingPathComponent("2024/04/08/2024-04-08_001.HEIC")
+
+        let revertResult = try ReorganizeExecutor().revert(receiptURL: receiptURL)
+
+        XCTAssertEqual(revertResult.movedCount, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: originalURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: movedURL.path))
+    }
+
+    func testRevertSkipsChangedMovedFile() throws {
+        let originalURL = try writeFile(at: ["2024-04-08_001.HEIC"])
+        let plan = try ReorganizeExecutor().plan(
+            destinationRoot: temporaryDirectoryURL,
+            targetStructure: .yyyyMMDD
+        )
+        let executeResult = try ReorganizeExecutor().execute(plan: plan)
+        let receiptURL = URL(fileURLWithPath: try XCTUnwrap(executeResult.receiptPath))
+        let movedURL = temporaryDirectoryURL.appendingPathComponent("2024/04/08/2024-04-08_001.HEIC")
+        try Data("changed".utf8).write(to: movedURL)
+        let issues = Recorder<RunIssue>()
+
+        let revertResult = try ReorganizeExecutor().revert(
+            receiptURL: receiptURL,
+            observer: ReorganizeExecutionObserver(onIssue: { issues.append($0) })
+        )
+
+        XCTAssertEqual(revertResult.skippedCount, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: originalURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: movedURL.path))
+        XCTAssertTrue(issues.values.first?.message.contains("changed") == true)
+    }
+
+    func testRevertSkipsReceiptPathsEscapingRoot() throws {
+        let outsideURL = temporaryDirectoryURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("outside-reorg-\(UUID().uuidString).jpg")
+        try Data("outside".utf8).write(to: outsideURL)
+        defer { try? FileManager.default.removeItem(at: outsideURL) }
+        let receiptURL = try writeReceipt(
+            items: [
+                ReorganizeAuditReceipt.Item(
+                    sourcePath: temporaryDirectoryURL.appendingPathComponent("original.jpg").path,
+                    destinationPath: outsideURL.path,
+                    hash: "7_outside",
+                    completed: true
+                ),
+            ]
+        )
+        let issues = Recorder<RunIssue>()
+
+        let result = try ReorganizeExecutor().revert(
+            receiptURL: receiptURL,
+            observer: ReorganizeExecutionObserver(onIssue: { issues.append($0) })
+        )
+
+        XCTAssertEqual(result.skippedCount, 1)
+        XCTAssertTrue(issues.values.first?.message.contains("escaped") == true)
+    }
+
+    func testRevertSkipsMissingMovedFile() throws {
+        let receiptURL = try writeReceipt(
+            items: [
+                ReorganizeAuditReceipt.Item(
+                    sourcePath: temporaryDirectoryURL.appendingPathComponent("original.jpg").path,
+                    destinationPath: temporaryDirectoryURL.appendingPathComponent("missing.jpg").path,
+                    hash: "7_missing",
+                    completed: true
+                ),
+            ]
+        )
+        let issues = Recorder<RunIssue>()
+
+        let result = try ReorganizeExecutor().revert(
+            receiptURL: receiptURL,
+            observer: ReorganizeExecutionObserver(onIssue: { issues.append($0) })
+        )
+
+        XCTAssertEqual(result.skippedCount, 1)
+        XCTAssertTrue(issues.values.first?.message.contains("no longer present") == true)
+    }
+
+    func testRevertSkipsWhenOriginalPathAlreadyExists() throws {
+        let originalURL = try writeFile(at: ["2024-04-08_001.HEIC"])
+        let plan = try ReorganizeExecutor().plan(
+            destinationRoot: temporaryDirectoryURL,
+            targetStructure: .yyyyMMDD
+        )
+        let executeResult = try ReorganizeExecutor().execute(plan: plan)
+        let receiptURL = URL(fileURLWithPath: try XCTUnwrap(executeResult.receiptPath))
+        try Data("new file".utf8).write(to: originalURL)
+
+        let issues = Recorder<RunIssue>()
+        let revertResult = try ReorganizeExecutor().revert(
+            receiptURL: receiptURL,
+            observer: ReorganizeExecutionObserver(onIssue: { issues.append($0) })
+        )
+
+        XCTAssertEqual(revertResult.skippedCount, 1)
+        XCTAssertTrue(issues.values.first?.message.contains("Original path already exists") == true)
+    }
+
+    func testRevertReportsRestoreFailure() throws {
+        let movedURL = try writeFile(at: ["2024", "04", "08", "2024-04-08_001.jpg"])
+        let identity = try FileIdentityHasher().hashIdentity(at: movedURL)
+        let blockedParent = temporaryDirectoryURL.appendingPathComponent("blocked")
+        try Data("not a directory".utf8).write(to: blockedParent)
+        let receiptURL = try writeReceipt(
+            items: [
+                ReorganizeAuditReceipt.Item(
+                    sourcePath: blockedParent.appendingPathComponent("2024-04-08_001.jpg").path,
+                    destinationPath: movedURL.path,
+                    hash: identity.rawValue,
+                    completed: true
+                ),
+            ]
+        )
+        let issues = Recorder<RunIssue>()
+
+        let result = try ReorganizeExecutor().revert(
+            receiptURL: receiptURL,
+            observer: ReorganizeExecutionObserver(onIssue: { issues.append($0) })
+        )
+
+        XCTAssertEqual(result.failedCount, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: movedURL.path))
+        XCTAssertTrue(issues.values.first?.message.contains("Could not restore") == true)
     }
 
     // MARK: - Helpers
@@ -385,6 +742,30 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
         return url
     }
 
+    private func decodeReceipt(at path: String) throws -> ReorganizeAuditReceipt {
+        try JSONDecoder().decode(
+            ReorganizeAuditReceipt.self,
+            from: Data(contentsOf: URL(fileURLWithPath: path))
+        )
+    }
+
+    private func writeReceipt(items: [ReorganizeAuditReceipt.Item]) throws -> URL {
+        let receipt = ReorganizeAuditReceipt(
+            schemaVersion: 1,
+            runID: UUID(),
+            operation: "reorganize",
+            status: "COMPLETED",
+            startedAt: Date(),
+            finishedAt: Date(),
+            destinationRoot: temporaryDirectoryURL.standardizedFileURL.path,
+            items: items,
+            abortReason: nil
+        )
+        let receiptURL = temporaryDirectoryURL.appendingPathComponent("reorganize-test-receipt-\(UUID().uuidString).json")
+        try JSONEncoder().encode(receipt).write(to: receiptURL)
+        return receiptURL
+    }
+
     private final class AtomicFlag: @unchecked Sendable {
         private let lock = NSLock()
         private var _value = false
@@ -395,6 +776,17 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
         func set(_ newValue: Bool) {
             lock.lock(); defer { lock.unlock() }
             _value = newValue
+        }
+    }
+
+    private final class AtomicCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+
+        func incrementAndGet() -> Int {
+            lock.lock(); defer { lock.unlock() }
+            value += 1
+            return value
         }
     }
 

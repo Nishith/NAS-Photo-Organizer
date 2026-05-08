@@ -49,18 +49,40 @@ public struct ReorganizeExecutionResult: Equatable, Sendable {
     public var skippedCount: Int
     public var failedCount: Int
     public var totalMoves: Int
+    public var receiptPath: String?
 
     public init(
         movedCount: Int,
         skippedCount: Int,
         failedCount: Int,
-        totalMoves: Int
+        totalMoves: Int,
+        receiptPath: String? = nil
     ) {
         self.movedCount = movedCount
         self.skippedCount = skippedCount
         self.failedCount = failedCount
         self.totalMoves = totalMoves
+        self.receiptPath = receiptPath
     }
+}
+
+public struct ReorganizeAuditReceipt: Codable, Equatable, Sendable {
+    public struct Item: Codable, Equatable, Sendable {
+        public var sourcePath: String
+        public var destinationPath: String
+        public var hash: String
+        public var completed: Bool
+    }
+
+    public var schemaVersion: Int
+    public var runID: UUID
+    public var operation: String
+    public var status: String
+    public var startedAt: Date
+    public var finishedAt: Date?
+    public var destinationRoot: String
+    public var items: [Item]
+    public var abortReason: String?
 }
 
 public struct ReorganizeExecutionObserver: Sendable {
@@ -99,9 +121,14 @@ public enum ReorganizeExecutorError: LocalizedError, Equatable {
 
 public struct ReorganizeExecutor: Sendable {
     private let namingRules: PlannerNamingRules
+    private let hasher: FileIdentityHasher
 
-    public init(namingRules: PlannerNamingRules = .pythonReference) {
+    public init(
+        namingRules: PlannerNamingRules = .pythonReference,
+        hasher: FileIdentityHasher = FileIdentityHasher()
+    ) {
         self.namingRules = namingRules
+        self.hasher = hasher
     }
 
     private var fileManager: FileManager { .default }
@@ -131,8 +158,8 @@ public struct ReorganizeExecutor: Sendable {
 
         let enumerator = fileManager.enumerator(
             at: rootURL,
-            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
-            options: []
+            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey, .isPackageKey],
+            options: [.skipsPackageDescendants]
         )
 
         while let item = enumerator?.nextObject() as? URL {
@@ -141,6 +168,11 @@ public struct ReorganizeExecutor: Sendable {
                 if Self.shouldSkipDirectory(name: item.lastPathComponent) {
                     enumerator?.skipDescendants()
                 }
+                continue
+            }
+
+            let values = try? item.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .isPackageKey])
+            if values?.isSymbolicLink == true || values?.isPackage == true || values?.isRegularFile == false {
                 continue
             }
 
@@ -213,47 +245,85 @@ public struct ReorganizeExecutor: Sendable {
         plan: ReorganizePlan,
         observer: ReorganizeExecutionObserver = ReorganizeExecutionObserver(),
         isCancelled: @escaping @Sendable () -> Bool = { false }
-    ) -> ReorganizeExecutionResult {
+    ) throws -> ReorganizeExecutionResult {
         observer.onTaskStart(plan.moves.count)
 
         var movedCount = 0
         var skippedCount = 0
         var failedCount = 0
+        let rootURL = URL(fileURLWithPath: plan.destinationRoot, isDirectory: true).standardizedFileURL
+        let logsDirectoryURL = rootURL.appendingPathComponent(
+            EngineArtifactLayout.pythonReference.logsDirectoryName,
+            isDirectory: true
+        )
+        try fileManager.createDirectory(at: logsDirectoryURL, withIntermediateDirectories: true)
+
+        var executableMoves: [ReorganizeMove] = []
+        var receiptItems: [ReorganizeAuditReceipt.Item] = []
 
         for move in plan.moves {
+            let sourceURL = URL(fileURLWithPath: move.sourcePath)
+            let destinationURL = URL(fileURLWithPath: move.destinationPath)
+            guard Self.isContained(sourceURL, in: rootURL), Self.isContained(destinationURL, in: rootURL) else {
+                skippedCount += 1
+                observer.onIssue(RunIssue(severity: .warning, message: "Move escaped the destination root, skipping: \(move.sourcePath)"))
+                observer.onTaskProgress(movedCount + skippedCount + failedCount, plan.moves.count)
+                continue
+            }
+            guard fileManager.fileExists(atPath: move.sourcePath) else {
+                skippedCount += 1
+                observer.onIssue(RunIssue(severity: .warning, message: "Source no longer exists: \(move.sourcePath)"))
+                observer.onTaskProgress(movedCount + skippedCount + failedCount, plan.moves.count)
+                continue
+            }
+            guard !fileManager.fileExists(atPath: move.destinationPath) else {
+                skippedCount += 1
+                observer.onIssue(RunIssue(severity: .warning, message: "Destination exists, skipping: \(move.destinationPath)"))
+                observer.onTaskProgress(movedCount + skippedCount + failedCount, plan.moves.count)
+                continue
+            }
+            do {
+                let identity = try hasher.hashIdentity(at: sourceURL)
+                executableMoves.append(move)
+                receiptItems.append(
+                    ReorganizeAuditReceipt.Item(
+                        sourcePath: move.sourcePath,
+                        destinationPath: move.destinationPath,
+                        hash: identity.rawValue,
+                        completed: false
+                    )
+                )
+            } catch {
+                skippedCount += 1
+                observer.onIssue(RunIssue(severity: .warning, message: "Could not prepare \(move.sourcePath): \(error.localizedDescription)"))
+                observer.onTaskProgress(movedCount + skippedCount + failedCount, plan.moves.count)
+            }
+        }
+
+        let runID = UUID()
+        let startedAt = Date()
+        let receiptURL = Self.reorganizeReceiptURL(logsDirectory: logsDirectoryURL, runID: runID, createdAt: startedAt)
+        try Self.writeReorganizeReceipt(
+            to: receiptURL,
+            runID: runID,
+            status: "PENDING",
+            startedAt: startedAt,
+            finishedAt: nil,
+            destinationRoot: plan.destinationRoot,
+            items: receiptItems,
+            abortReason: nil
+        )
+
+        var abortReason: String?
+
+        for (index, move) in executableMoves.enumerated() {
             if isCancelled() {
+                abortReason = "Reorganize was cancelled before all planned moves completed."
                 break
             }
 
             let sourceURL = URL(fileURLWithPath: move.sourcePath)
             let destinationURL = URL(fileURLWithPath: move.destinationPath)
-
-            guard fileManager.fileExists(atPath: move.sourcePath) else {
-                // Disappeared between plan + execute — count as skipped.
-                skippedCount += 1
-                observer.onIssue(
-                    RunIssue(
-                        severity: .warning,
-                        message: "Source no longer exists: \(move.sourcePath)"
-                    )
-                )
-                observer.onTaskProgress(movedCount + skippedCount + failedCount, plan.moves.count)
-                continue
-            }
-
-            if fileManager.fileExists(atPath: move.destinationPath) {
-                // Don't clobber an existing file. The user can revert + re-run
-                // to resolve the collision; we never silently overwrite.
-                skippedCount += 1
-                observer.onIssue(
-                    RunIssue(
-                        severity: .warning,
-                        message: "Destination exists, skipping: \(move.destinationPath)"
-                    )
-                )
-                observer.onTaskProgress(movedCount + skippedCount + failedCount, plan.moves.count)
-                continue
-            }
 
             do {
                 try fileManager.createDirectory(
@@ -262,10 +332,22 @@ public struct ReorganizeExecutor: Sendable {
                 )
                 try fileManager.moveItem(at: sourceURL, to: destinationURL)
                 movedCount += 1
+                receiptItems[index].completed = true
+                try Self.writeReorganizeReceipt(
+                    to: receiptURL,
+                    runID: runID,
+                    status: "PENDING",
+                    startedAt: startedAt,
+                    finishedAt: nil,
+                    destinationRoot: plan.destinationRoot,
+                    items: receiptItems,
+                    abortReason: nil
+                )
 
                 // Best-effort empty-directory cleanup.
                 let parentURL = sourceURL.deletingLastPathComponent()
-                if let contents = try? fileManager.contentsOfDirectory(
+                if Self.isContained(parentURL, in: rootURL),
+                   let contents = try? fileManager.contentsOfDirectory(
                     atPath: parentURL.path
                 ), contents.isEmpty {
                     try? fileManager.removeItem(at: parentURL)
@@ -283,11 +365,90 @@ public struct ReorganizeExecutor: Sendable {
             observer.onTaskProgress(movedCount + skippedCount + failedCount, plan.moves.count)
         }
 
+        try Self.writeReorganizeReceipt(
+            to: receiptURL,
+            runID: runID,
+            status: abortReason == nil ? "COMPLETED" : "ABORTED",
+            startedAt: startedAt,
+            finishedAt: Date(),
+            destinationRoot: plan.destinationRoot,
+            items: receiptItems,
+            abortReason: abortReason
+        )
+
         return ReorganizeExecutionResult(
             movedCount: movedCount,
             skippedCount: skippedCount,
             failedCount: failedCount,
-            totalMoves: plan.moves.count
+            totalMoves: plan.moves.count,
+            receiptPath: receiptURL.path
+        )
+    }
+
+    @discardableResult
+    public func revert(
+        receiptURL: URL,
+        observer: ReorganizeExecutionObserver = ReorganizeExecutionObserver(),
+        isCancelled: @escaping @Sendable () -> Bool = { false }
+    ) throws -> ReorganizeExecutionResult {
+        let data = try Data(contentsOf: receiptURL)
+        let receipt = try JSONDecoder().decode(ReorganizeAuditReceipt.self, from: data)
+        let rootURL = URL(fileURLWithPath: receipt.destinationRoot, isDirectory: true).standardizedFileURL
+        let completedItems = receipt.items.filter(\.completed).reversed()
+        observer.onTaskStart(completedItems.count)
+
+        var movedCount = 0
+        var skippedCount = 0
+        var failedCount = 0
+
+        for item in completedItems {
+            if isCancelled() { break }
+            let currentURL = URL(fileURLWithPath: item.destinationPath)
+            let originalURL = URL(fileURLWithPath: item.sourcePath)
+
+            guard Self.isContained(currentURL, in: rootURL), Self.isContained(originalURL, in: rootURL) else {
+                skippedCount += 1
+                observer.onIssue(RunIssue(severity: .warning, message: "Receipt path escaped the destination root, skipping: \(item.destinationPath)"))
+                observer.onTaskProgress(movedCount + skippedCount + failedCount, completedItems.count)
+                continue
+            }
+            guard fileManager.fileExists(atPath: item.destinationPath) else {
+                skippedCount += 1
+                observer.onIssue(RunIssue(severity: .warning, message: "Moved file is no longer present: \(item.destinationPath)"))
+                observer.onTaskProgress(movedCount + skippedCount + failedCount, completedItems.count)
+                continue
+            }
+            guard !fileManager.fileExists(atPath: item.sourcePath) else {
+                skippedCount += 1
+                observer.onIssue(RunIssue(severity: .warning, message: "Original path already exists, skipping: \(item.sourcePath)"))
+                observer.onTaskProgress(movedCount + skippedCount + failedCount, completedItems.count)
+                continue
+            }
+
+            do {
+                let currentIdentity = try hasher.hashIdentity(at: currentURL)
+                guard currentIdentity.rawValue == item.hash else {
+                    skippedCount += 1
+                    observer.onIssue(RunIssue(severity: .info, message: "Preserved reorganized file because it changed: \(item.destinationPath)"))
+                    observer.onTaskProgress(movedCount + skippedCount + failedCount, completedItems.count)
+                    continue
+                }
+                try fileManager.createDirectory(at: originalURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fileManager.moveItem(at: currentURL, to: originalURL)
+                movedCount += 1
+            } catch {
+                failedCount += 1
+                observer.onIssue(RunIssue(severity: .error, message: "Could not restore \(item.destinationPath): \(error.localizedDescription)"))
+            }
+            observer.onTaskProgress(movedCount + skippedCount + failedCount, completedItems.count)
+        }
+
+        return ReorganizeExecutionResult(
+            movedCount: movedCount,
+            skippedCount: skippedCount,
+            failedCount: failedCount,
+            totalMoves: completedItems.count,
+            receiptPath: receiptURL.path
         )
     }
 
@@ -423,6 +584,48 @@ public struct ReorganizeExecutor: Sendable {
         if filename == layout.runLogFilename { return true }
         if filename.hasPrefix(layout.dryRunReportPrefix) { return true }
         if filename.hasPrefix(layout.auditReceiptPrefix) { return true }
+        if filename.hasPrefix("reorganize_audit_receipt_") { return true }
         return false
+    }
+
+    private static func reorganizeReceiptURL(logsDirectory: URL, runID: UUID, createdAt: Date) -> URL {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let timestamp = formatter.string(from: createdAt)
+        return logsDirectory.appendingPathComponent("reorganize_audit_receipt_\(timestamp)_\(runID.uuidString).json")
+    }
+
+    private static func writeReorganizeReceipt(
+        to url: URL,
+        runID: UUID,
+        status: String,
+        startedAt: Date,
+        finishedAt: Date?,
+        destinationRoot: String,
+        items: [ReorganizeAuditReceipt.Item],
+        abortReason: String?
+    ) throws {
+        let receipt = ReorganizeAuditReceipt(
+            schemaVersion: 1,
+            runID: runID,
+            operation: "reorganize",
+            status: status,
+            startedAt: startedAt,
+            finishedAt: finishedAt,
+            destinationRoot: destinationRoot,
+            items: items,
+            abortReason: abortReason
+        )
+        let data = try JSONEncoder().encode(receipt)
+        try data.write(to: url, options: .atomic)
+    }
+
+    private static func isContained(_ url: URL, in rootURL: URL) -> Bool {
+        let rootPath = rootURL.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        return path == rootPath || path.hasPrefix(rootPath + "/")
     }
 }

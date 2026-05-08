@@ -38,6 +38,7 @@ public final class DeduplicateSessionStore: ObservableObject {
     private let engine: any DeduplicateEngine
     private let runHistoryStore: any DeduplicateRunHistoryStoring
     private var streamTask: Task<Void, Never>?
+    private var securityScope: SecurityScopedFolderAccess?
     /// Configuration of the most recent scan. Captured so plan previews
     /// (footer counts, recoverable bytes) and the actual commit always
     /// agree on which pair-as-unit toggles + similarity thresholds were
@@ -105,8 +106,12 @@ public final class DeduplicateSessionStore: ObservableObject {
         pausedReviewConfiguration == configuration
     }
 
-    public func startScan(configuration: DeduplicateConfiguration) {
+    public func startScan(
+        configuration: DeduplicateConfiguration,
+        securityScope: SecurityScopedFolderAccess? = nil
+    ) {
         cancelStream()
+        self.securityScope = securityScope
         clusters = []
         summary = nil
         commitSummary = nil
@@ -117,7 +122,7 @@ public final class DeduplicateSessionStore: ObservableObject {
         phaseCompleted = 0
         phaseTotal = 0
         lastScanConfiguration = configuration
-        decisions = DedupeDecisions(byPath: [:], hardDelete: decisions.hardDelete)
+        decisions = DedupeDecisions(byPath: [:])
 
         do {
             let stream = try engine.scan(configuration)
@@ -133,6 +138,7 @@ public final class DeduplicateSessionStore: ObservableObject {
                         self?.status = .failed(error.localizedDescription)
                         self?.lastErrorMessage = error.localizedDescription
                         self?.activeCommitConfiguration = nil
+                        self?.closeSecurityScope()
                     }
                 }
             }
@@ -140,6 +146,7 @@ public final class DeduplicateSessionStore: ObservableObject {
             status = .failed(error.localizedDescription)
             lastErrorMessage = error.localizedDescription
             activeCommitConfiguration = nil
+            closeSecurityScope()
         }
     }
 
@@ -150,13 +157,15 @@ public final class DeduplicateSessionStore: ObservableObject {
             status = .idle
         }
         activeCommitConfiguration = nil
+        closeSecurityScope()
     }
 
     /// Restore items listed in a previous dedupe audit receipt from Trash
     /// back to their original paths. Streams progress through the same
     /// commit-event channel as the forward path so the UI surface is shared.
-    public func revert(receiptURL: URL) {
+    public func revert(receiptURL: URL, securityScope: SecurityScopedFolderAccess? = nil) {
         cancelStream()
+        self.securityScope = securityScope
         commitSummary = nil
         isHandlingRevert = true
         status = .reverting
@@ -173,17 +182,23 @@ public final class DeduplicateSessionStore: ObservableObject {
                     await MainActor.run { [weak self] in
                         self?.status = .failed(error.localizedDescription)
                         self?.lastErrorMessage = error.localizedDescription
+                        self?.closeSecurityScope()
                     }
                 }
             }
         } catch {
             status = .failed(error.localizedDescription)
             lastErrorMessage = error.localizedDescription
+            closeSecurityScope()
         }
     }
 
-    public func commit(configuration: DeduplicateConfiguration) {
+    public func commit(
+        configuration: DeduplicateConfiguration,
+        securityScope: SecurityScopedFolderAccess? = nil
+    ) {
         cancelStream()
+        self.securityScope = securityScope
         commitSummary = nil
         isHandlingRevert = false
         status = .committing
@@ -206,19 +221,21 @@ public final class DeduplicateSessionStore: ObservableObject {
                     await MainActor.run { [weak self] in
                         self?.status = .failed(error.localizedDescription)
                         self?.lastErrorMessage = error.localizedDescription
+                        self?.closeSecurityScope()
                     }
                 }
             }
         } catch {
             status = .failed(error.localizedDescription)
             lastErrorMessage = error.localizedDescription
+            closeSecurityScope()
         }
     }
 
     public func setDecision(_ decision: DedupeDecision, forPath path: String) {
         var byPath = decisions.byPath
         byPath[path] = decision
-        decisions = DedupeDecisions(byPath: byPath, hardDelete: decisions.hardDelete)
+        decisions = DedupeDecisions(byPath: byPath)
     }
 
     public func acceptSuggestionsForCluster(_ cluster: DuplicateCluster) {
@@ -226,7 +243,7 @@ public final class DeduplicateSessionStore: ObservableObject {
         for (path, decision) in suggestedDecisions(for: [cluster]).byPath {
             byPath[path] = decision
         }
-        decisions = DedupeDecisions(byPath: byPath, hardDelete: decisions.hardDelete)
+        decisions = DedupeDecisions(byPath: byPath)
     }
 
     public func acceptAllSuggestions() {
@@ -234,7 +251,7 @@ public final class DeduplicateSessionStore: ObservableObject {
         for (path, decision) in suggestedDecisions(for: clusters).byPath {
             byPath[path] = decision
         }
-        decisions = DedupeDecisions(byPath: byPath, hardDelete: decisions.hardDelete)
+        decisions = DedupeDecisions(byPath: byPath)
     }
 
     // MARK: - Confidence Triage
@@ -257,7 +274,7 @@ public final class DeduplicateSessionStore: ObservableObject {
         for (path, decision) in suggestedDecisions(for: highClusters).byPath {
             byPath[path] = decision
         }
-        decisions = DedupeDecisions(byPath: byPath, hardDelete: decisions.hardDelete)
+        decisions = DedupeDecisions(byPath: byPath)
     }
 
     public func pauseReview() {
@@ -294,7 +311,8 @@ public final class DeduplicateSessionStore: ObservableObject {
         lastScanConfiguration = nil
         isHandlingRevert = false
         activeCommitConfiguration = nil
-        decisions = DedupeDecisions(byPath: [:], hardDelete: decisions.hardDelete)
+        decisions = DedupeDecisions(byPath: [:])
+        closeSecurityScope()
     }
 
     // MARK: - Private
@@ -302,6 +320,12 @@ public final class DeduplicateSessionStore: ObservableObject {
     private func cancelStream() {
         streamTask?.cancel()
         streamTask = nil
+        closeSecurityScope()
+    }
+
+    private func closeSecurityScope() {
+        securityScope?.close()
+        securityScope = nil
     }
 
     private func consume(_ event: DeduplicateEvent) {
@@ -326,6 +350,7 @@ public final class DeduplicateSessionStore: ObservableObject {
             self.summary = summary
             status = .readyToReview
             currentPhase = nil
+            closeSecurityScope()
             // Pre-populate decisions with suggestions so the UI starts in
             // an "everything reviewed" state — the user only intervenes
             // for clusters they disagree with.
@@ -355,15 +380,16 @@ public final class DeduplicateSessionStore: ObservableObject {
             status = isHandlingRevert ? .reverted : .completed
             isHandlingRevert = false
             activeCommitConfiguration = nil
+            closeSecurityScope()
         }
     }
 
     private func applySuggestionsToDecisions() -> DedupeDecisions {
         var byPath = decisions.byPath
-        for (path, decision) in suggestedDecisions(for: clusters).byPath where byPath[path] == nil {
+        for (path, decision) in automaticDecisions(for: clusters).byPath where byPath[path] == nil {
             byPath[path] = decision
         }
-        return DedupeDecisions(byPath: byPath, hardDelete: decisions.hardDelete)
+        return DedupeDecisions(byPath: byPath)
     }
 
     private func suggestedDecisions(for clusters: [DuplicateCluster]) -> DedupeDecisions {
@@ -375,12 +401,21 @@ public final class DeduplicateSessionStore: ObservableObject {
                     byPath[member.path] = keepers.contains(member.id) ? .keep : .delete
                 }
             }
-            return DedupeDecisions(byPath: byPath, hardDelete: decisions.hardDelete)
+            return DedupeDecisions(byPath: byPath)
         }
         return DeduplicationPlanner.suggestedDecisions(
             for: clusters,
-            configuration: configuration,
-            hardDelete: decisions.hardDelete
+            configuration: configuration
+        )
+    }
+
+    private func automaticDecisions(for clusters: [DuplicateCluster]) -> DedupeDecisions {
+        guard let configuration = lastScanConfiguration else {
+            return DedupeDecisions(byPath: [:])
+        }
+        return DeduplicationPlanner.automaticDecisions(
+            for: clusters,
+            configuration: configuration
         )
     }
 }
@@ -391,8 +426,12 @@ extension DedupeDecisions {
     /// no explicit decision.
     public func keepersForCluster(_ cluster: DuplicateCluster) -> [String] {
         let suggestedKeepers = Set(cluster.suggestedKeeperIDs.prefix(1))
+        let autoSelectable = DeduplicationPlanner.isAutomaticCommitEligible(cluster)
         return cluster.members.compactMap { member in
-            let decision = byPath[member.path] ?? (suggestedKeepers.contains(member.id) ? .keep : .delete)
+            let decision = byPath[member.path]
+                ?? (autoSelectable
+                    ? (suggestedKeepers.contains(member.id) ? .keep : .delete)
+                    : .keep)
             return decision == .keep ? member.path : nil
         }
     }

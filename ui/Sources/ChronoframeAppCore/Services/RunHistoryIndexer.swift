@@ -69,6 +69,8 @@ public struct RunHistoryIndexer: RunHistoryIndexing {
             return .dryRunReport
         case let name where name.hasPrefix("dedupe_audit_receipt_") && name.hasSuffix(".json"):
             return .dedupeAuditReceipt
+        case let name where name.hasPrefix("reorganize_audit_receipt_") && name.hasSuffix(".json"):
+            return .reorganizeAuditReceipt
         case let name where name.hasPrefix("audit_receipt_") && name.hasSuffix(".json"):
             return .auditReceipt
         case let name where name.hasSuffix(".csv"):
@@ -111,7 +113,7 @@ public struct RunHistoryIndexer: RunHistoryIndexing {
         switch kind {
         case .csvArtifact, .jsonArtifact:
             return humanizedTitle(from: url.deletingPathExtension().lastPathComponent)
-        case .dryRunReport, .auditReceipt, .dedupeAuditReceipt, .runLog, .queueDatabase:
+        case .dryRunReport, .auditReceipt, .dedupeAuditReceipt, .reorganizeAuditReceipt, .runLog, .queueDatabase:
             return kind.title
         }
     }

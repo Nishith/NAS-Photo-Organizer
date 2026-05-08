@@ -81,7 +81,7 @@ public struct FileIdentityHasher: Sendable {
         // FileHandle.readData can raise Objective-C exceptions on read failures,
         // which Swift cannot catch. POSIX read keeps failures in the throwing path.
         let descriptor = path.withCString { pointer in
-            Darwin.open(pointer, O_RDONLY | O_CLOEXEC)
+            Darwin.open(pointer, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
         }
         guard descriptor >= 0 else {
             throw Self.posixReadError(code: errno, path: path, operation: "open")
@@ -153,9 +153,12 @@ public struct FileIdentityHasher: Sendable {
     private func fileMetadata(atPath path: String) -> (size: Int64, modificationTime: TimeInterval)? {
         var fileStatus = stat()
         let result = path.withCString { pointer in
-            stat(pointer, &fileStatus)
+            lstat(pointer, &fileStatus)
         }
         guard result == 0 else {
+            return nil
+        }
+        guard (fileStatus.st_mode & S_IFMT) == S_IFREG else {
             return nil
         }
 

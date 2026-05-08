@@ -30,16 +30,47 @@ public enum DeduplicationPlanner {
         // 1. Effective decision per cluster member.
         struct Effective {
             var decision: DedupeDecision
+            var source: DecisionSource
             let cluster: DuplicateCluster
             let member: PhotoCandidate
+        }
+        enum DecisionSource {
+            case explicit
+            case automatic
+            case defaultKeep
+
+            var blocksPairDeletion: Bool {
+                switch self {
+                case .explicit, .automatic:
+                    return true
+                case .defaultKeep:
+                    return false
+                }
+            }
         }
         var effective: [String: Effective] = [:]
         for cluster in clusters {
             let suggestedKeepers = Set(cluster.suggestedKeeperIDs.prefix(1))
+            let canAutoSelectDeletes = isAutomaticCommitEligible(cluster)
             for member in cluster.members {
-                let decision = decisions.decision(for: member.path)
-                    ?? (suggestedKeepers.contains(member.id) ? .keep : .delete)
-                effective[member.path] = Effective(decision: decision, cluster: cluster, member: member)
+                let explicitDecision = decisions.decision(for: member.path)
+                let decision = explicitDecision
+                    ?? (canAutoSelectDeletes
+                        ? (suggestedKeepers.contains(member.id) ? .keep : .delete)
+                        : .keep)
+                let source: DecisionSource = if explicitDecision != nil {
+                    .explicit
+                } else if canAutoSelectDeletes {
+                    .automatic
+                } else {
+                    .defaultKeep
+                }
+                effective[member.path] = Effective(
+                    decision: decision,
+                    source: source,
+                    cluster: cluster,
+                    member: member
+                )
             }
         }
 
@@ -52,9 +83,13 @@ public enum DeduplicationPlanner {
             guard let partnerInfo = effective[partner] else { continue }
             switch (info.decision, partnerInfo.decision) {
             case (.keep, .delete):
-                effective[partner]?.decision = .keep
+                if info.source.blocksPairDeletion {
+                    effective[partner]?.decision = .keep
+                }
             case (.delete, .keep):
-                effective[path]?.decision = .keep
+                if partnerInfo.source.blocksPairDeletion {
+                    effective[path]?.decision = .keep
+                }
             default:
                 break
             }
@@ -93,7 +128,11 @@ public enum DeduplicationPlanner {
                 if !pairKindEnabled(kind, in: configuration) { continue }
                 // If the partner is a cluster member with effective Keep,
                 // step 2 already neutralised this conflict — but be defensive.
-                if effective[partner]?.decision == .keep { continue }
+                if let partnerEffective = effective[partner],
+                   partnerEffective.decision == .keep,
+                   partnerEffective.source.blocksPairDeletion {
+                    continue
+                }
                 if planItems[partner] != nil { continue }
                 let partnerSize = effective[partner]?.member.size ?? fileSize(at: partner)
                 planItems[partner] = DeduplicationPlan.Item(
@@ -122,10 +161,26 @@ public enum DeduplicationPlanner {
             }
         }
         applyPairKeepWins(to: &byPath, clusters: clusters, configuration: configuration)
-        return DedupeDecisions(byPath: byPath, hardDelete: hardDelete)
+        return DedupeDecisions(byPath: byPath, hardDelete: false)
+    }
+
+    public static func automaticDecisions(
+        for clusters: [DuplicateCluster],
+        configuration: DeduplicateConfiguration
+    ) -> DedupeDecisions {
+        suggestedDecisions(
+            for: clusters.filter(isAutomaticCommitEligible),
+            configuration: configuration,
+            hardDelete: false
+        )
     }
 
     // MARK: - Helpers
+
+    public static func isAutomaticCommitEligible(_ cluster: DuplicateCluster) -> Bool {
+        let confidence = cluster.annotation?.confidence ?? .medium
+        return confidence == .high
+    }
 
     static func applyPairKeepWins(
         to decisions: inout [String: DedupeDecision],

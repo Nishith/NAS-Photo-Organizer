@@ -24,7 +24,7 @@
     {
       "src": "source/incoming/photo.jpg",
       "dst": "dest/2023/06/15/2023-06-15_001.jpg",
-      "hash": "h1",
+      "hash": "actual:source/incoming/photo.jpg",
       "status": "PENDING"
     }
   ]

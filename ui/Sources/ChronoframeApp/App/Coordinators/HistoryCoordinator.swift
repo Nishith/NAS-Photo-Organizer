@@ -12,6 +12,7 @@ final class HistoryCoordinator {
     private let deduplicateSessionStore: DeduplicateSessionStore
     private let finderService: any FinderServicing
     private let navigate: @MainActor (AppRoute) -> Void
+    private let makeSecurityScopeForDestination: @MainActor (String) -> SecurityScopedFolderAccess?
 
     init(
         preferencesStore: PreferencesStore,
@@ -20,7 +21,8 @@ final class HistoryCoordinator {
         runSessionStore: RunSessionStore,
         deduplicateSessionStore: DeduplicateSessionStore,
         finderService: any FinderServicing,
-        navigate: @escaping @MainActor (AppRoute) -> Void
+        navigate: @escaping @MainActor (AppRoute) -> Void,
+        makeSecurityScopeForDestination: @escaping @MainActor (String) -> SecurityScopedFolderAccess? = { _ in nil }
     ) {
         self.preferencesStore = preferencesStore
         self.setupStore = setupStore
@@ -29,6 +31,7 @@ final class HistoryCoordinator {
         self.deduplicateSessionStore = deduplicateSessionStore
         self.finderService = finderService
         self.navigate = navigate
+        self.makeSecurityScopeForDestination = makeSecurityScopeForDestination
     }
 
     /// Triggers a revert of the receipt. Audit receipts go through the
@@ -38,17 +41,40 @@ final class HistoryCoordinator {
     func revertHistoryEntry(_ entry: RunHistoryEntry) {
         switch entry.kind {
         case .auditReceipt:
+            let destinationRoot = receiptDestinationRoot(for: entry)
             navigate(.organize(.run))
             runSessionStore.requestRevert(
                 receiptURL: URL(fileURLWithPath: entry.path),
-                destinationRoot: historyStore.destinationRoot
+                destinationRoot: destinationRoot,
+                securityScope: makeSecurityScopeForDestination(destinationRoot)
             )
         case .dedupeAuditReceipt:
+            let destinationRoot = receiptDestinationRoot(for: entry)
             navigate(.deduplicate)
-            deduplicateSessionStore.revert(receiptURL: URL(fileURLWithPath: entry.path))
+            deduplicateSessionStore.revert(
+                receiptURL: URL(fileURLWithPath: entry.path),
+                securityScope: makeSecurityScopeForDestination(destinationRoot)
+            )
+        case .reorganizeAuditReceipt:
+            let destinationRoot = receiptDestinationRoot(for: entry)
+            navigate(.organize(.run))
+            runSessionStore.requestReorganizeRevert(
+                receiptURL: URL(fileURLWithPath: entry.path),
+                destinationRoot: destinationRoot,
+                securityScope: makeSecurityScopeForDestination(destinationRoot)
+            )
         default:
             return
         }
+    }
+
+    private func receiptDestinationRoot(for entry: RunHistoryEntry) -> String {
+        let receiptURL = URL(fileURLWithPath: entry.path)
+        let logDirectory = receiptURL.deletingLastPathComponent()
+        if logDirectory.lastPathComponent == ".organize_logs" {
+            return logDirectory.deletingLastPathComponent().path
+        }
+        return historyStore.destinationRoot
     }
 
     func revealHistoryEntry(_ entry: RunHistoryEntry) {

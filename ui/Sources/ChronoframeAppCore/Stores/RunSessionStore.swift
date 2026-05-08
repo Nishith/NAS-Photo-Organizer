@@ -27,6 +27,7 @@ public final class RunSessionStore: ObservableObject {
     private let logStore: RunLogStore
     private let historyStore: HistoryStore
     private var streamTask: Task<Void, Never>?
+    private var securityScope: SecurityScopedFolderAccess?
     private var copySpeedLastSampleDate = Date()
     private var copySpeedLastBytes = 0
     private var currentPhaseStartDate: Date?
@@ -61,8 +62,13 @@ public final class RunSessionStore: ObservableObject {
         max(metrics.errorCount, metrics.hashErrorCount + metrics.failedCount)
     }
 
-    public func requestRun(mode: RunMode, configuration: RunConfiguration) async {
+    public func requestRun(
+        mode: RunMode,
+        configuration: RunConfiguration,
+        securityScope: SecurityScopedFolderAccess? = nil
+    ) async {
         resetSessionState(mode: mode)
+        self.securityScope = securityScope
         status = .preflighting
         currentTaskTitle = "Preparing \(mode.title)..."
 
@@ -107,8 +113,13 @@ public final class RunSessionStore: ObservableObject {
     /// Run a revert against the audit receipt at `receiptURL`. Streams the
     /// engine's `RunEvent`s into this store so the standard Run workspace
     /// renders progress, issues, and the final summary.
-    public func requestRevert(receiptURL: URL, destinationRoot: String) {
+    public func requestRevert(
+        receiptURL: URL,
+        destinationRoot: String,
+        securityScope: SecurityScopedFolderAccess? = nil
+    ) {
         resetSessionState(mode: .revert)
+        self.securityScope = securityScope
         status = .running
         currentTaskTitle = "Reverting…"
         artifacts = RunArtifactPaths(
@@ -135,8 +146,13 @@ public final class RunSessionStore: ObservableObject {
     /// Reorganize the destination layout to match `targetStructure`. Streams
     /// engine events into this store identically to `requestRun` so the same
     /// UI surface renders progress.
-    public func requestReorganize(destinationRoot: String, targetStructure: FolderStructure) {
+    public func requestReorganize(
+        destinationRoot: String,
+        targetStructure: FolderStructure,
+        securityScope: SecurityScopedFolderAccess? = nil
+    ) {
         resetSessionState(mode: .reorganize)
+        self.securityScope = securityScope
         status = .running
         currentTaskTitle = "Reorganizing…"
         artifacts = RunArtifactPaths(destinationRoot: destinationRoot)
@@ -151,6 +167,76 @@ public final class RunSessionStore: ObservableObject {
                 for try await event in stream {
                     self.consume(event)
                 }
+            } catch {
+                self.handleFailure(error: error)
+            }
+        }
+    }
+
+    public func requestReorganizeRevert(
+        receiptURL: URL,
+        destinationRoot: String,
+        securityScope: SecurityScopedFolderAccess? = nil
+    ) {
+        resetSessionState(mode: .reorganize)
+        self.securityScope = securityScope
+        status = .running
+        currentTaskTitle = "Undoing Reorganize…"
+        artifacts = RunArtifactPaths(
+            destinationRoot: destinationRoot,
+            reportPath: receiptURL.path,
+            logFilePath: nil,
+            logsDirectoryPath: URL(fileURLWithPath: destinationRoot)
+                .appendingPathComponent(".organize_logs", isDirectory: true).path
+        )
+
+        streamTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let executor = ReorganizeExecutor()
+                let observer = ReorganizeExecutionObserver(
+                    onTaskStart: { total in
+                        Task { @MainActor [weak self] in
+                            self?.consume(.phaseStarted(phase: .reorganize, total: total))
+                        }
+                    },
+                    onTaskProgress: { completed, total in
+                        Task { @MainActor [weak self] in
+                            self?.consume(.phaseProgress(
+                                phase: .reorganize,
+                                completed: completed,
+                                total: total,
+                                bytesCopied: nil,
+                                bytesTotal: nil
+                            ))
+                        }
+                    },
+                    onIssue: { issue in
+                        Task { @MainActor [weak self] in
+                            self?.consume(.issue(issue))
+                        }
+                    }
+                )
+                let result = try executor.revert(receiptURL: receiptURL, observer: observer)
+                consume(.phaseCompleted(
+                    phase: .reorganize,
+                    result: RunPhaseResult(
+                        failedCount: result.failedCount,
+                        skippedCount: result.skippedCount,
+                        movedCount: result.movedCount
+                    )
+                ))
+                consume(.complete(RunSummary(
+                    status: .reorganized,
+                    title: "Reorganize undone",
+                    metrics: RunMetrics(
+                        plannedCount: result.totalMoves,
+                        failedCount: result.failedCount,
+                        skippedCount: result.skippedCount,
+                        movedCount: result.movedCount
+                    ),
+                    artifacts: artifacts
+                )))
             } catch {
                 self.handleFailure(error: error)
             }
@@ -194,6 +280,7 @@ public final class RunSessionStore: ObservableObject {
         if status == .preflighting {
             status = .idle
             currentTaskTitle = "Idle"
+            closeSecurityScope()
         }
     }
 
@@ -214,6 +301,7 @@ public final class RunSessionStore: ObservableObject {
                 artifacts: artifacts
             )
         }
+        closeSecurityScope()
     }
 
     private func resetSessionState(mode: RunMode) {
@@ -222,6 +310,7 @@ public final class RunSessionStore: ObservableObject {
         }
         streamTask?.cancel()
         streamTask = nil
+        closeSecurityScope()
         currentMode = mode
         currentPhase = nil
         currentTaskTitle = "Idle"
@@ -471,6 +560,7 @@ public final class RunSessionStore: ObservableObject {
             historyStore.refresh(destinationRoot: finalSummary.artifacts.destinationRoot)
             logStore.append("Finished: \(finalSummary.title)")
             postRunCompletionNotification(summary: finalSummary)
+            closeSecurityScope()
         }
     }
 
@@ -588,6 +678,12 @@ public final class RunSessionStore: ObservableObject {
         lastErrorMessage = message
         logStore.append("ERROR: \(message)")
         summary = RunSummary(status: .failed, title: "Failed", metrics: metrics, artifacts: artifacts)
+        closeSecurityScope()
+    }
+
+    private func closeSecurityScope() {
+        securityScope?.close()
+        securityScope = nil
     }
 
     private func estimatedFileETA(completed: Int, total: Int) -> Double? {

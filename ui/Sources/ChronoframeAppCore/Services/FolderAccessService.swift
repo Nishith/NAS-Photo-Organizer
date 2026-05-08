@@ -14,6 +14,39 @@ public struct ResolvedFolderBookmark: Equatable, Sendable {
     }
 }
 
+public final class SecurityScopedFolderAccess: @unchecked Sendable {
+    private let lock = NSLock()
+    private let onClose: (([URL]) -> Void)?
+    private var accessedURLs: [URL]
+    private var isClosed = false
+
+    public init(accessedURLs: [URL] = [], onClose: (([URL]) -> Void)? = nil) {
+        self.accessedURLs = accessedURLs
+        self.onClose = onClose
+    }
+
+    deinit {
+        close()
+    }
+
+    public func close() {
+        lock.lock()
+        if isClosed {
+            lock.unlock()
+            return
+        }
+        isClosed = true
+        let urls = accessedURLs
+        accessedURLs = []
+        lock.unlock()
+
+        for url in urls {
+            url.stopAccessingSecurityScopedResource()
+        }
+        onClose?(urls)
+    }
+}
+
 public enum FolderValidationError: LocalizedError, Equatable, Sendable {
     case pathDoesNotExist(role: FolderRole, path: String)
     case notDirectory(role: FolderRole, path: String)
@@ -39,6 +72,7 @@ public protocol FolderAccessServicing: AnyObject {
     func chooseFolder(startingAt path: String?, prompt: String) -> URL?
     func makeBookmark(for url: URL, key: String) throws -> FolderBookmark
     func resolveBookmark(_ bookmark: FolderBookmark) -> ResolvedFolderBookmark?
+    func scopedAccess(for bookmarks: [FolderBookmark]) -> SecurityScopedFolderAccess
     func validateFolder(_ url: URL, role: FolderRole) throws
 }
 
@@ -76,9 +110,27 @@ public final class FolderAccessService: FolderAccessServicing {
             return ResolvedFolderBookmark(url: URL(fileURLWithPath: bookmark.path))
         }
 
-        _ = url.startAccessingSecurityScopedResource()
         let refreshedBookmark = isStale ? try? makeBookmark(for: url, key: bookmark.key) : nil
         return ResolvedFolderBookmark(url: url, refreshedBookmark: refreshedBookmark)
+    }
+
+    public func scopedAccess(for bookmarks: [FolderBookmark]) -> SecurityScopedFolderAccess {
+        var accessedURLs: [URL] = []
+        for bookmark in bookmarks {
+            var isStale = false
+            guard let url = try? URL(
+                resolvingBookmarkData: bookmark.data,
+                options: [.withSecurityScope, .withoutUI],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            ) else {
+                continue
+            }
+            if url.startAccessingSecurityScopedResource() {
+                accessedURLs.append(url)
+            }
+        }
+        return SecurityScopedFolderAccess(accessedURLs: accessedURLs)
     }
 
     public func validateFolder(_ url: URL, role: FolderRole) throws {

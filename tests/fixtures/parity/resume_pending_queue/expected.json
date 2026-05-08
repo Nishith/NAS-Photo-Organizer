@@ -16,14 +16,14 @@
     {
       "src": "source/incoming/photo.jpg",
       "dst": "dest/2023/06/15/2023-06-15_001.jpg",
-      "hash": "h1",
+      "hash": "11_1cc405336ad74f1a0a98697ff4bb89485eefb0203e52699ce8f684221314e7b1c55e4de8050108c81e2bb308be87ad7b92c004d7c07235321a1a9cc289d4d9bb",
       "status": "COPIED"
     }
   ],
   "dest_cache_rows": [
     {
       "path": "dest/2023/06/15/2023-06-15_001.jpg",
-      "hash": "h1",
+      "hash": "11_1cc405336ad74f1a0a98697ff4bb89485eefb0203e52699ce8f684221314e7b1c55e4de8050108c81e2bb308be87ad7b92c004d7c07235321a1a9cc289d4d9bb",
       "size": 11
     }
   ],
@@ -38,7 +38,7 @@
       {
         "source": "source/incoming/photo.jpg",
         "dest": "dest/2023/06/15/2023-06-15_001.jpg",
-        "hash": "h1"
+        "hash": "11_1cc405336ad74f1a0a98697ff4bb89485eefb0203e52699ce8f684221314e7b1c55e4de8050108c81e2bb308be87ad7b92c004d7c07235321a1a9cc289d4d9bb"
       }
     ]
   },

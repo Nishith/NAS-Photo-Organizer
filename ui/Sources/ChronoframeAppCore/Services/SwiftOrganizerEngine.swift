@@ -268,11 +268,17 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                     }
                 )
 
-                let result = reorganizeExecutor.execute(
-                    plan: plan,
-                    observer: observer,
-                    isCancelled: { isCancelledRef.isCancelled }
-                )
+                let result: ReorganizeExecutionResult
+                do {
+                    result = try reorganizeExecutor.execute(
+                        plan: plan,
+                        observer: observer,
+                        isCancelled: { isCancelledRef.isCancelled }
+                    )
+                } catch {
+                    continuation.finish(throwing: error)
+                    return
+                }
 
                 if isCancelledRef.isCancelled {
                     continuation.finish()
@@ -296,7 +302,10 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                     skippedCount: result.skippedCount,
                     movedCount: result.movedCount
                 )
-                let artifacts = RunArtifactPaths(destinationRoot: plan.destinationRoot)
+                let artifacts = RunArtifactPaths(
+                    destinationRoot: plan.destinationRoot,
+                    reportPath: result.receiptPath
+                )
 
                 continuation.yield(
                     .complete(

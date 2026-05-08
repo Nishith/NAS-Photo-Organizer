@@ -46,7 +46,7 @@
   "audit_receipt": {
     "present": true,
     "total_jobs": 0,
-    "status": "COMPLETED",
+    "status": "ABORTED",
     "transfers": []
   },
   "log_markers": {

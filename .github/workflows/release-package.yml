@@ -26,6 +26,12 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
       - name: Build release archive
+        env:
+          CHRONOFRAME_CODESIGN_IDENTITY: ${{ secrets.CHRONOFRAME_CODESIGN_IDENTITY }}
+          CHRONOFRAME_DEVELOPMENT_TEAM: ${{ secrets.CHRONOFRAME_DEVELOPMENT_TEAM }}
+          CHRONOFRAME_NOTARY_PROFILE: ${{ secrets.CHRONOFRAME_NOTARY_PROFILE }}
+          CHRONOFRAME_NOTARY_APPLE_ID: ${{ secrets.CHRONOFRAME_NOTARY_APPLE_ID }}
+          CHRONOFRAME_NOTARY_PASSWORD: ${{ secrets.CHRONOFRAME_NOTARY_PASSWORD }}
         run: |
           cd ui
           ./archive.sh

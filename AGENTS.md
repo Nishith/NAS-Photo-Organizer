@@ -42,8 +42,9 @@ Shared on-disk artifacts include:
 
 - `.organize_cache.db` (organize source/destination file identity hashes are checkpointed during planning; also hosts a `DedupeFeatures` table caching per-photo Vision feature prints, dHash, and quality scores so dedupe re-scans are incremental)
 - `.organize_logs/dry_run_report_*.csv`
-- `.organize_logs/audit_receipt_*.json` (organize transfer audit receipt)
+- `.organize_logs/audit_receipt_*.json` (organize transfer audit receipt; versioned, UUID-suffixed, status-aware)
 - `.organize_logs/dedupe_audit_receipt_*.json` (Deduplicate run audit receipt — used by Run History → Revert)
+- `.organize_logs/reorganize_audit_receipt_*.json` (Reorganize move audit receipt — used by Run History → Revert)
 - `.organize_log.txt`
 
 The macOS app sidebar consolidates the original Setup / Run / Run History flows under a single **Organize** destination (`ui/Sources/ChronoframeApp/Views/Organize/OrganizeContainerView.swift`) and adds a peer **Deduplicate** destination (`ui/Sources/ChronoframeApp/Views/Deduplicate/`). Both share the active organize destination by default; Deduplicate may also point at a user-picked dedicated folder.
@@ -54,28 +55,37 @@ Do not weaken these unless the user explicitly asks for a product change.
 
 - The source folder is read-only from Chronoframe's perspective. Never delete, move, rename, or modify source files.
 - Copies are written to a temporary file, flushed, then atomically renamed into place.
+- Copy verification defaults on for new runs and profiles. Skipping verification is an advanced opt-out.
 - Existing destination files are not overwritten. Collisions get a distinct destination name.
 - Deduplication is content-based, using BLAKE2b hashes, not filenames.
-- `--verify` re-hashes written files and removes a bad copy if verification fails.
+- Dedupe dHash-only similarity is never enough for automatic deletion; non-exact weak matches stay review-only with zero preselected deletions unless explicitly confirmed.
+- `--verify` re-hashes written files and removes a bad copy if verification fails. The Python CLI now verifies by default; use `--skip-verify` only for the explicit speed/integrity tradeoff.
 - Revert deletes only destination files whose current hash still matches the audit receipt.
+- Organize, dedupe, and reorganize receipts are written before mutation where possible, carry statuses (`PENDING`, `COMPLETED`, `ABORTED`, `FAILED` as applicable), and use collision-proof names.
 - Aborted runs should make it clear that source files were left untouched.
 - Failure thresholds intentionally stop bad runs: 5 consecutive failures or 20 total failures.
-- Deduplicate moves files to the macOS Trash by default. Hard delete is only available behind an explicit Settings toggle gated by a confirmation dialog.
+- Deduplicate moves files to the macOS Trash only. Hard delete is not available in the production UI or executor commit path.
 - The dedupe audit receipt directory (`.organize_logs/`) is preflighted before any deletion. An unwritable destination aborts the commit with `ReceiptPreflightError` and zero files touched.
 - Pair-as-unit conflict resolution is **Keep-wins**: if a user explicitly keeps either half of a RAW+JPEG or Live Photo HEIC+MOV pair, neither is deleted, even when the other half is marked Delete.
+- Organize and dedupe traversal must not follow symlinks or aliases by default. Skip symlink files/directories, app bundles, photo libraries, packages, hidden system-like containers, and any path that escapes the selected root.
+- Fast destination scans are validating scans: cached records are trusted only when the file still exists and size/mtime still match; stale cache rows are refreshed or removed.
 
 ## Deduplicate Workspace
 
 `ui/Sources/ChronoframeCore/DeduplicateScanner.swift` runs the scan; `DeduplicationPlanner.plan` is the single source of truth for "what files will the executor mutate". Both the commit-footer preview and `DeduplicateExecutor.commit` consume the same `DeduplicationPlan` so what the user sees in the footer is exactly what happens.
 
+- Exact hashes and valid Vision feature-print confirmation can produce high-confidence automatic suggestions. dHash-only clusters are intentionally excluded from automatic deletion and must remain review-only.
 - Per-pair-kind toggles (`treatRawJpegPairsAsUnit`, `treatLivePhotoPairsAsUnit`) are honored independently. Disabling RAW pairing must not affect Live Photo behaviour and vice versa.
 - The plan carries owning-cluster metadata for **every** mutation, including pair partners that aren't cluster members on their own (Live Photo MOV halves, mainly), so the audit receipt is exhaustive and Run History → Revert can restore everything the executor touched.
+- `DeduplicateExecutor` preflights `.organize_logs/`, writes a `PENDING` receipt before moving anything to Trash, updates the same receipt as each item moves, and finalizes it to `COMPLETED` or `ABORTED`.
 - Thumbnails go through `ui/Sources/ChronoframeApp/Views/Components/ThumbnailRenderer.swift` (single QuickLook entry point shared by ContactSheet and DedupeThumbnailLoader). The dedupe loader uses `NSCache<NSString, NSImage>` with `countLimit = 256` for steady-state memory and bumps a `@Published version` so SwiftUI redraws after each insert. `cancelAll()` is called on `.onDisappear` to drop in-flight renders when the user leaves the workspace.
 - The dedicated dedupe folder picker stores its bookmark under key `deduplicate.destination`. If the bookmark fails to resolve at bootstrap, both the bookmark and the path are dropped so `deduplicateDestinationPath` falls back to the organize destination instead of silently scanning a dead path.
 
 ## Sandbox Status
 
-`ui/Packaging/Chronoframe.entitlements` is currently empty — **App Sandbox is not enabled** in the shipped build. Both organize and dedupe rely on `FolderAccessService.resolveBookmark` calling `startAccessingSecurityScopedResource` once at bootstrap and never `stop`ing (process-wide hold). If sandboxing is enabled later, both flows need an explicit `withSecurityScopedAccess { ... }` lifecycle around their scans. Update both at the same time, not one in isolation.
+`ui/Packaging/Chronoframe.entitlements` enables the App Sandbox with user-selected read/write file access and security-scoped bookmarks for Developer ID distribution. Organize and dedupe rely on stored folder bookmarks; keep scoped access lifecycle changes synchronized across both flows so one mutating path is not sandbox-ready while another is not.
+
+Release packaging defaults to Developer ID signed, hardened-runtime, notarized, stapled artifacts. Local ad hoc archives require the explicit `ui/archive.sh --local` mode and must not be treated as releasable assets.
 
 ## User-Facing Error Handling
 
@@ -116,6 +126,14 @@ Local Xcode build:
 xcodebuild -project ui/Chronoframe.xcodeproj -scheme Chronoframe -configuration Debug -derivedDataPath .tmp/ChronoframeDerivedData -destination "generic/platform=macOS" CODE_SIGNING_ALLOWED=NO build
 ```
 
+Xcode UI tests:
+
+```bash
+xcodebuild -project ui/Chronoframe.xcodeproj -scheme Chronoframe -configuration Debug -derivedDataPath .tmp/ChronoframeXcodeTestDerivedData -destination "platform=macOS" CODE_SIGNING_ALLOWED=NO test
+```
+
+The shared Xcode scheme runs the macOS UI-test target only. SwiftPM remains the authoritative lane for unit tests across `ChronoframeCore`, `ChronoframeAppCore`, and `ChronoframeApp`.
+
 CI-like Swift CodeQL build:
 
 ```bash
@@ -149,7 +167,7 @@ Be precise when discussing coverage.
 - Full Python coverage was 98%.
 - `UserFacingErrorMessage.swift` had 98.2% line coverage.
 - Raw SwiftPM aggregate coverage was around 62% after the April 2026 meaningful coverage pass because SwiftUI view files are counted but are not all exercised by unit tests.
-- `script/swift_meaningful_coverage.sh` enforces 95%+ on deterministic domain algorithms, planning/path building, hashing, indexing, and user-facing formatting. Do not claim project-wide Swift coverage over 95% unless the metric excludes SwiftUI view rendering or includes a broader UI-test coverage story.
+- `script/swift_meaningful_coverage.sh` enforces 95%+ on deterministic domain algorithms, planning/path building, hashing, indexing, destructive executors, receipt writers, and user-facing formatting. Do not claim project-wide Swift coverage over 95% unless the metric excludes SwiftUI view rendering or includes a broader UI-test coverage story.
 
 ## GitHub And CI
 
@@ -194,6 +212,7 @@ Verify freshness before relying on these historical details for a new CI/debuggi
 
 - `.codex/environments/environment.toml` is autogenerated. Do not edit it manually.
 - Codex's configured Run action calls `./script/build_and_run.sh`.
+- `ui/archive.sh` defaults to release mode and must fail without Developer ID identity, team ID, notarization credentials, and successful stapling. Use `--local` only for non-release ad hoc archives.
 - `ui/Packaging/validate_app_bundle.py` validates packaged app bundles.
 - `tests/test_ui_packaging.py` uses injectable `codesign_inspector` and `gatekeeper_inspector` hooks so tests stay deterministic.
 

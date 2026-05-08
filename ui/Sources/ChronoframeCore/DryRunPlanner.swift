@@ -489,18 +489,39 @@ public struct DryRunPlanner: Sendable {
             onEvent?(.phaseStarted(phase: .destinationIndexing, total: total))
             var snapshotBuilder = DestinationIndexSnapshotBuilder(namingRules: namingRules)
             var indexedCount = 0
+            var invalidatedCount = 0
+            var refreshedRecords: [RawFileCacheRecord] = []
             try database.enumerateRawCacheRecordBatches(namespace: .destination) { batch in
                 try Self.throwIfCancelled(isCancelled)
-                indexedCount += batch.count
                 for row in batch {
                     try Self.throwIfCancelled(isCancelled)
-                    snapshotBuilder.consume(path: row.path, identity: row.parsedIdentity)
+                    let processed = fileHasher.processFile(at: row.path, cachedRecord: row.typedRecord)
+                    guard let identity = processed.identity else {
+                        invalidatedCount += 1
+                        try database.deleteCacheRecord(namespace: .destination, path: row.path)
+                        continue
+                    }
+                    indexedCount += 1
+                    snapshotBuilder.consume(path: row.path, identity: identity)
+                    if processed.wasHashed {
+                        refreshedRecords.append(
+                            RawFileCacheRecord(
+                                namespace: .destination,
+                                path: row.path,
+                                hash: identity.rawValue,
+                                size: processed.size,
+                                modificationTime: processed.modificationTime
+                            )
+                        )
+                    }
                 }
-                if indexedCount % Self.planningProgressStride == 0 || indexedCount == total {
-                    onEvent?(.phaseProgress(phase: .destinationIndexing, completed: indexedCount,
+                let completed = indexedCount + invalidatedCount
+                if completed % Self.planningProgressStride == 0 || completed == total {
+                    onEvent?(.phaseProgress(phase: .destinationIndexing, completed: completed,
                                             total: total, bytesCopied: nil, bytesTotal: nil))
                 }
             }
+            try database.saveRawCacheRecords(refreshedRecords)
             onEvent?(.phaseCompleted(phase: .destinationIndexing, result: RunPhaseResult()))
             return DestinationIndexBuildResult(
                 indexedFileCount: indexedCount,
