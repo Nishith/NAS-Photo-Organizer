@@ -276,6 +276,7 @@ private enum UITestSettingsWindowPresenter {
 
     static func show(appState: AppState) {
         if let settingsWindow {
+            settingsWindow.level = .floating
             settingsWindow.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -293,6 +294,7 @@ private enum UITestSettingsWindowPresenter {
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Settings"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.level = .floating
         window.setContentSize(NSSize(width: 760, height: 680))
         window.center()
         window.isReleasedWhenClosed = false

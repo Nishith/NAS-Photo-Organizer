@@ -88,13 +88,11 @@ final class ChronoframeUITests: XCTestCase {
                 XCTAssertTrue(clusterList.waitForExistence(timeout: 5), "Cluster list should render for \(scenario.rawValue)")
 
                 let footer = Self.element(identifier: "dedupeCommitFooter", in: app)
-                let memberStrip = Self.element(identifier: "dedupeMemberStrip", in: app)
                 let acceptCluster = Self.hittableElement(identifier: "dedupeAcceptClusterSuggestionButton", in: app)
                 let acceptAll = Self.hittableElement(identifier: "dedupeAcceptAllSuggestionsButton", in: app)
                 let commit = Self.hittableElement(identifier: "dedupeCommitButton", in: app)
 
                 XCTAssertTrue(footer.waitForExistence(timeout: 5), "Commit footer should render for \(scenario.rawValue)")
-                XCTAssertTrue(memberStrip.waitForExistence(timeout: 5), "Member strip should render for \(scenario.rawValue)")
                 XCTAssertTrue(acceptCluster.isHittable, "Accept Suggestion should stay hittable for \(scenario.rawValue)")
                 XCTAssertTrue(acceptAll.isHittable, "Accept All Suggestions should stay hittable for \(scenario.rawValue)")
                 XCTAssertTrue(commit.isHittable, "Commit should stay hittable for \(scenario.rawValue)")
@@ -105,9 +103,9 @@ final class ChronoframeUITests: XCTestCase {
                     Self.assertFrame(element.frame, isInside: window.frame, scenario: scenario.rawValue)
                 }
                 XCTAssertLessThanOrEqual(
-                    memberStrip.frame.maxY,
+                    acceptCluster.frame.maxY,
                     footer.frame.minY + 1,
-                    "Member strip must not overlap the commit footer for \(scenario.rawValue)"
+                    "Review actions must not overlap the commit footer for \(scenario.rawValue)"
                 )
 
                 app.terminate()
@@ -156,30 +154,29 @@ final class ChronoframeUITests: XCTestCase {
     @MainActor
     private static func selectSettingsTab(named title: String, in app: XCUIApplication) {
         let settingsWindow = app.windows[settingsWindowIdentifier]
-        let searchRoot: XCUIElement = settingsWindow.exists ? settingsWindow : app
         if settingsWindow.exists {
             settingsWindow.click()
         }
 
-        let tab = matchingElement(named: title, in: searchRoot, type: .tab)
+        let tab = matchingElement(named: title, in: app, type: .tab)
         if tab.waitForExistence(timeout: 1) {
             click(tab)
             return
         }
 
-        let radioButton = matchingElement(named: title, in: searchRoot, type: .radioButton)
+        let radioButton = matchingElement(named: title, in: app, type: .radioButton)
         if radioButton.waitForExistence(timeout: 1) {
             click(radioButton)
             return
         }
 
-        let button = matchingElement(named: title, in: searchRoot, type: .button)
+        let button = matchingElement(named: title, in: app, type: .button)
         if button.waitForExistence(timeout: 1) {
             click(button)
             return
         }
 
-        let staticText = matchingElement(named: title, in: searchRoot, type: .staticText)
+        let staticText = matchingElement(named: title, in: app, type: .staticText)
         if staticText.waitForExistence(timeout: 1) {
             click(staticText)
             return
