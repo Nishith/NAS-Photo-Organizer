@@ -2445,6 +2445,12 @@ class TestSeqOverflowWarning(TempDirMixin, unittest.TestCase):
     folder will sort in two groups in Finder.
     """
 
+    FIXTURE_DATE = "2026-05-07"
+
+    @classmethod
+    def _dated_source_name(cls, index):
+        return f"IMG_{cls.FIXTURE_DATE.replace('-', '')}_120000_{index:06d}.jpg"
+
     @staticmethod
     def _read_dry_run_dest_paths(dst):
         log_dir = os.path.join(dst, ".organize_logs")
@@ -2463,7 +2469,7 @@ class TestSeqOverflowWarning(TempDirMixin, unittest.TestCase):
         os.makedirs(dst)
 
         for i in range(1001):
-            with open(os.path.join(src, f"IMG_{i:06d}.jpg"), 'wb') as f:
+            with open(os.path.join(src, self._dated_source_name(i)), 'wb') as f:
                 f.write(b"src_" + str(i).encode())
 
         with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
@@ -2502,7 +2508,7 @@ class TestSeqOverflowWarning(TempDirMixin, unittest.TestCase):
         os.makedirs(src)
         os.makedirs(dst)
 
-        today = datetime.now().strftime('%Y-%m-%d')
+        today = self.FIXTURE_DATE
         yyyy, mm, dd = today.split('-')
         existing_dir = os.path.join(dst, yyyy, mm, dd)
         os.makedirs(existing_dir)
@@ -2512,7 +2518,7 @@ class TestSeqOverflowWarning(TempDirMixin, unittest.TestCase):
                 f.write(b"dst_" + str(i).encode())
 
         for i in range(300):
-            with open(os.path.join(src, f"IMG_{i:06d}.jpg"), 'wb') as f:
+            with open(os.path.join(src, self._dated_source_name(i)), 'wb') as f:
                 f.write(b"src_" + str(i).encode())
 
         with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
@@ -2543,7 +2549,7 @@ class TestSeqOverflowWarning(TempDirMixin, unittest.TestCase):
         os.makedirs(src)
         os.makedirs(dst)
 
-        today = datetime.now().strftime('%Y-%m-%d')
+        today = self.FIXTURE_DATE
         yyyy, mm, dd = today.split('-')
         existing_dir = os.path.join(dst, yyyy, mm, dd)
         os.makedirs(existing_dir)
@@ -2553,7 +2559,7 @@ class TestSeqOverflowWarning(TempDirMixin, unittest.TestCase):
                 f.write(b"dst_" + str(i).encode())
 
         for i in range(200):
-            with open(os.path.join(src, f"IMG_{i:06d}.jpg"), 'wb') as f:
+            with open(os.path.join(src, self._dated_source_name(i)), 'wb') as f:
                 f.write(b"src_" + str(i).encode())
 
         with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
