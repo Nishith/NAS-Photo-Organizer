@@ -119,9 +119,9 @@ public struct LibraryHealthScanner: @unchecked Sendable {
             ),
         ]
 
-        let unknownStats = directoryStats(
-            at: destinationURL.appendingPathComponent(namingRules.unknownDateDirectoryName, isDirectory: true)
-        )
+        let singlePass = collectStats(destinationURL: destinationURL, namingRules: namingRules)
+
+        let unknownStats = (count: singlePass.unknownCount, bytes: singlePass.unknownBytes)
         cards.append(
             LibraryHealthCard(
                 id: "unknown-dates",
@@ -135,9 +135,7 @@ public struct LibraryHealthScanner: @unchecked Sendable {
             )
         )
 
-        let duplicateStats = directoryStats(
-            at: destinationURL.appendingPathComponent(namingRules.duplicateDirectoryName, isDirectory: true)
-        )
+        let duplicateStats = (count: singlePass.duplicateCount, bytes: singlePass.duplicateBytes)
         let cachedDuplicateStats = cachedDuplicateStats(destinationURL: destinationURL)
         let duplicateBytes = max(duplicateStats.bytes, cachedDuplicateStats.bytes)
         let duplicateCount = max(duplicateStats.count, cachedDuplicateStats.count)
@@ -182,11 +180,7 @@ public struct LibraryHealthScanner: @unchecked Sendable {
             )
         )
 
-        let driftCount = structureDriftCount(
-            destinationURL: destinationURL,
-            folderStructure: folderStructure,
-            namingRules: namingRules
-        )
+        let driftCount = singlePass.driftCount
         cards.append(
             LibraryHealthCard(
                 id: "structure-drift",
@@ -243,6 +237,51 @@ public struct LibraryHealthScanner: @unchecked Sendable {
             severity: .attention,
             action: .runPreview
         )
+    }
+
+    private struct SinglePassStats {
+        var unknownCount: Int = 0
+        var unknownBytes: Int64 = 0
+        var duplicateCount: Int = 0
+        var duplicateBytes: Int64 = 0
+        var driftCount: Int = 0
+    }
+
+    private func collectStats(
+        destinationURL: URL,
+        namingRules: PlannerNamingRules
+    ) -> SinglePassStats {
+        var stats = SinglePassStats()
+        let unknownComponent = "/" + namingRules.unknownDateDirectoryName + "/"
+        let duplicateComponent = "/" + namingRules.duplicateDirectoryName + "/"
+
+        guard let enumerator = fileManager.enumerator(
+            at: destinationURL,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return stats }
+
+        for case let fileURL as URL in enumerator {
+            guard MediaLibraryRules.isSupportedMediaFile(path: fileURL.path) else { continue }
+            guard let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true else { continue }
+
+            let filePath = fileURL.path
+            let fileSize = Int64(values.fileSize ?? 0)
+
+            if filePath.contains(unknownComponent) {
+                stats.unknownCount += 1
+                stats.unknownBytes += fileSize
+            } else if filePath.contains(duplicateComponent) {
+                stats.duplicateCount += 1
+                stats.duplicateBytes += fileSize
+            }
+
+            if !isChronoframePlannedFile(fileURL.lastPathComponent, namingRules: namingRules) {
+                stats.driftCount += 1
+            }
+        }
+        return stats
     }
 
     private func directoryStats(at url: URL) -> (count: Int, bytes: Int64) {

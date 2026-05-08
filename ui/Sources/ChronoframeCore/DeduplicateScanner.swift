@@ -116,12 +116,30 @@ public final class DeduplicateScanner: @unchecked Sendable {
                     let featureStore = LazyDedupeFeaturePrintStore(database: database)
                     var analysisRequests: [DedupeAnalysisRequest] = []
 
+                    // Batch-stat all image files upfront to avoid per-file
+                    // FileManager.attributesOfItem calls in the loop below.
+                    struct FileAttrs {
+                        var size: Int64
+                        var mtime: TimeInterval
+                    }
+                    var batchedAttrs: [String: FileAttrs] = [:]
+                    batchedAttrs.reserveCapacity(imagePaths.count)
+                    for path in imagePaths {
+                        var st = stat()
+                        if lstat(path, &st) == 0 {
+                            batchedAttrs[path] = FileAttrs(
+                                size: Int64(st.st_size),
+                                mtime: Double(st.st_mtimespec.tv_sec) + Double(st.st_mtimespec.tv_nsec) / 1_000_000_000
+                            )
+                        }
+                    }
+
                     for (offset, path) in imagePaths.enumerated() {
                         if cancelFlag.get() { continuation.finish(); return }
                         let url = URL(fileURLWithPath: path)
-                        let attributes = (try? FileManager.default.attributesOfItem(atPath: path)) ?? [:]
-                        let size = (attributes[.size] as? NSNumber)?.int64Value ?? 0
-                        let mtime = ((attributes[.modificationDate] as? Date)?.timeIntervalSince1970) ?? 0
+                        let attrs = batchedAttrs[path]
+                        let size = attrs?.size ?? 0
+                        let mtime = attrs?.mtime ?? 0
                         let pairedPath = pairs[path].map { pair in
                             pair.primaryPath == path ? pair.secondaryPath : pair.primaryPath
                         }
@@ -271,11 +289,15 @@ public final class DeduplicateScanner: @unchecked Sendable {
                         clusters.append(contentsOf: DuplicateClusterer.exactDuplicateClusters(candidatesByIdentity: byIdentity))
                     }
 
+                    // Pre-load all feature prints in one bulk query to
+                    // avoid per-path DB round-trips during O(N^2) clustering.
+                    let preloadedPrints = (try? database.loadAllDedupeFeaturePrintData()) ?? [:]
                     let near = DuplicateClusterer.cluster(
                         candidates: candidates,
                         configuration: configuration,
                         featurePrintDataProvider: { path in
-                            featureStore.featurePrintData(for: path)
+                            preloadedPrints[path]
+                                ?? preloadedPrints[URL(fileURLWithPath: path).standardizedFileURL.path]
                         }
                     )
                     clusters.append(contentsOf: near)

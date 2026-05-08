@@ -1,5 +1,6 @@
 import errno
 import os
+import stat as stat_module
 import shutil
 import hashlib
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
@@ -11,7 +12,7 @@ MAX_COLLISIONS = 9999
 def fast_hash(path, known_size=None):
     """Stream a full-file blake2b hash prefixed with size for collision-resistant identity."""
     st = os.lstat(path)
-    if os.path.islink(path) or not os.path.isfile(path):
+    if stat_module.S_ISLNK(st.st_mode) or not stat_module.S_ISREG(st.st_mode):
         raise OSError(errno.EINVAL, f"Refusing to hash non-regular file: {path}")
     size = known_size if known_size is not None else st.st_size
     h = hashlib.blake2b()
@@ -135,7 +136,7 @@ def process_single_file(path, cached_data):
     """Hash a single file, using cache if size+mtime unchanged."""
     try:
         st = os.lstat(path)
-        if os.path.islink(path) or not os.path.isfile(path):
+        if stat_module.S_ISLNK(st.st_mode) or not stat_module.S_ISREG(st.st_mode):
             return None, 0, 0, False
         size = st.st_size
         mtime = st.st_mtime

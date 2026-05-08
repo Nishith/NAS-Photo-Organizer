@@ -61,17 +61,18 @@ def get_date_mdls(path):
         pass
     return None
 
+_FILENAME_DATE_PATTERNS = [
+    re.compile(r'(?:IMG|VID|PANO|BURST|MVIMG|PXL)_(\d{8})[_-]\d{6}'),
+    re.compile(r'^(?:IMG|VID)-(\d{8})-WA\d+'),
+    re.compile(r'^(\d{8})[_-]\d{6}'),
+    re.compile(r'(\d{4})-(\d{2})-(\d{2})'),
+    re.compile(r'_(\d{8})_'),
+]
+
 def get_date_from_filename(path):
     fname = os.path.basename(path)
-    patterns = [
-        r'(?:IMG|VID|PANO|BURST|MVIMG|PXL)_(\d{8})[_-]\d{6}',
-        r'^(?:IMG|VID)-(\d{8})-WA\d+',
-        r'^(\d{8})[_-]\d{6}',
-        r'(\d{4})-(\d{2})-(\d{2})',
-        r'_(\d{8})_',
-    ]
-    for pat in patterns:
-        m = re.search(pat, fname)
+    for pat in _FILENAME_DATE_PATTERNS:
+        m = pat.search(fname)
         if m:
             if len(m.groups()) == 3:
                 s = ''.join(m.groups())

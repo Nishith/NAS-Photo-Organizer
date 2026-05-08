@@ -39,14 +39,9 @@ public enum ClusterAnnotator {
         cluster: DuplicateCluster,
         pairwiseMatches: [PairwiseMatch]
     ) -> MatchReason {
-        let memberPaths = Set(cluster.members.map(\.path))
-        let relevant = pairwiseMatches.filter {
-            memberPaths.contains($0.lhsPath) && memberPaths.contains($0.rhsPath)
-        }
-
-        let visionDistances = relevant.compactMap(\.visionDistance)
-        let dhashDistances = relevant.compactMap(\.dhashDistance)
-        let timeDeltas = relevant.compactMap(\.timeDeltaSeconds)
+        let visionDistances = pairwiseMatches.compactMap(\.visionDistance)
+        let dhashDistances = pairwiseMatches.compactMap(\.dhashDistance)
+        let timeDeltas = pairwiseMatches.compactMap(\.timeDeltaSeconds)
 
         let avgVision = visionDistances.isEmpty
             ? nil

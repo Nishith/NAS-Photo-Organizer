@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import argparse
 import concurrent.futures
@@ -23,6 +24,7 @@ from .metadata import get_file_date, ALL_EXTS, SKIP_FILES, HAS_EXIFREAD
 
 SEQ_WIDTH = 3
 MAX_CONSECUTIVE_FAILURES = 5
+_SEQ_PATTERN = re.compile(r'^(\d{4}-\d{2}-\d{2}|Unknown)_(\d+)')
 MAX_TOTAL_FAILURES = 20
 DEFAULT_WORKERS = 8
 
@@ -121,14 +123,12 @@ def load_profile(profile_name):
 
 def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
                      progress=None, ptask=None, fast_dest=False):
-    import re
     if rebuild:
         cache_db.clear_cache(type_id=2)
 
     cache = cache_db.get_cache_dict(2)
     seq_index = defaultdict(int)
     dup_seq_index = defaultdict(int)
-    seq_pattern = re.compile(r'^(\d{4}-\d{2}-\d{2}|Unknown)_(\d+)')
     dup_dir = os.path.join(dst_dir, "Duplicate")
 
     hash_index = {}
@@ -155,7 +155,7 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
                         updates.append((path, h, size, mtime))
                 hash_index[h] = path
                 fname = os.path.basename(path)
-                m = seq_pattern.match(fname)
+                m = _SEQ_PATTERN.match(fname)
                 if m:
                     prefix = m.group(1)
                     date_str = "Unknown_Date" if prefix == "Unknown" else prefix
@@ -202,7 +202,7 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
                     continue
 
                 # Update sequence index while walking (cheap, serial)
-                m = seq_pattern.match(fname)
+                m = _SEQ_PATTERN.match(fname)
                 if m:
                     prefix = m.group(1)
                     date_str = "Unknown_Date" if prefix == "Unknown" else prefix
@@ -577,17 +577,18 @@ def main():
             src_seen[h] = src_path
             new_files.append((src_path, h))
 
-        # Parallel date extraction on new files only (eliminates serial mdls bottleneck)
-        emit_json("task_start", task="classification", total=len(new_files))
+        # Parallel date extraction for all files needing dates (new + duplicates)
+        all_needing_dates = [(p, h) for p, h in new_files] + [(p, h) for p, h in src_dups]
+        emit_json("task_start", task="classification", total=len(all_needing_dates))
         file_dates = {}
         date_groups = defaultdict(list)
 
-        if new_files:
+        if all_needing_dates:
             with console.status("[bold yellow]Classifying by date...", spinner="arc"):
                 with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                     future_to_path = {
                         executor.submit(get_file_date, path): path
-                        for path, _ in new_files
+                        for path, _ in all_needing_dates
                     }
                     done = 0
                     for future in concurrent.futures.as_completed(future_to_path):
@@ -600,8 +601,8 @@ def main():
                             except OSError:
                                 file_dates[path] = None
                         done += 1
-                        if done % max(1, len(new_files) // 100) == 0:
-                            emit_json("task_progress", task="classification", completed=done, total=len(new_files))
+                        if done % max(1, len(all_needing_dates) // 100) == 0:
+                            emit_json("task_progress", task="classification", completed=done, total=len(all_needing_dates))
 
         for src_path, h in new_files:
             dt = file_dates.get(src_path)
@@ -696,7 +697,7 @@ def main():
 
         dup_groups = defaultdict(list)
         for src_path, h in src_dups:
-            dt = get_file_date(src_path)
+            dt = file_dates.get(src_path)
             date_str = dt.strftime('%Y-%m-%d') if (dt and 1900 <= dt.year <= 2100) else "Unknown_Date"
             dup_groups[date_str].append((src_path, h))
 
@@ -807,6 +808,8 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, w
         task_id = progress.add_task("[green]Copying...", total=len(pending_jobs))
 
         count = 0
+        status_updates = []
+        _STATUS_BATCH_SIZE = 50
         for src_p, dst_p, h in pending_jobs:
             attempted_count = count + 1
             try:
@@ -822,7 +825,7 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, w
                             run_log.error(f"Verification failed: {src_p} → {result}")
                         emit_json("error", message=f"Verification failed: {src_p} -> {result}")
                         verify_failures += 1
-                        cache_db.update_job_status(src_p, 'FAILED')
+                        status_updates.append((src_p, 'FAILED'))
                         consecutive_fail += 1
                         total_fail += 1
                         if consecutive_fail >= MAX_CONSECUTIVE_FAILURES or total_fail >= MAX_TOTAL_FAILURES:
@@ -836,14 +839,19 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, w
                             console.print(f"\n[bold red]{msg}[/bold red]")
                             if run_log:
                                 run_log.error(msg)
+                            cache_db.update_job_statuses_batch(status_updates)
+                            status_updates = []
                             break
                         progress.advance(task_id)
                         count += 1
                         if count % max(1, len(pending_jobs) // 100) == 0:
                             emit_json("task_progress", task="copy", completed=count, total=len(pending_jobs),
                                       bytes_copied=bytes_copied, bytes_total=bytes_total)
+                        if len(status_updates) >= _STATUS_BATCH_SIZE:
+                            cache_db.update_job_statuses_batch(status_updates)
+                            status_updates = []
                         continue
-                cache_db.update_job_status(src_p, 'COPIED')
+                status_updates.append((src_p, 'COPIED'))
                 st = os.stat(result)
                 dest_updates.append((result, h, st.st_size, st.st_mtime))
                 executed_log.append((src_p, result, h))
@@ -853,7 +861,7 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, w
                 except OSError:
                     bytes_copied += st.st_size
             except Exception as e:
-                cache_db.update_job_status(src_p, 'FAILED')
+                status_updates.append((src_p, 'FAILED'))
                 emit_json("error", message=f"Copy failed: {src_p} -> {dst_p}: {e}")
                 if run_log:
                     run_log.error(f"Copy failed: {src_p} → {dst_p}: {e}")
@@ -870,13 +878,20 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, w
                     console.print(f"\n[bold red]{msg}[/bold red]")
                     if run_log:
                         run_log.error(msg)
+                    cache_db.update_job_statuses_batch(status_updates)
+                    status_updates = []
                     break
             progress.advance(task_id)
             count += 1
+            if len(status_updates) >= _STATUS_BATCH_SIZE:
+                cache_db.update_job_statuses_batch(status_updates)
+                status_updates = []
             if count % max(1, len(pending_jobs) // 100) == 0:
                 emit_json("task_progress", task="copy", completed=count, total=len(pending_jobs),
                           bytes_copied=bytes_copied, bytes_total=bytes_total)
 
+        if status_updates:
+            cache_db.update_job_statuses_batch(status_updates)
         emit_json("task_complete", task="copy", copied=len(executed_log), failed=total_fail)
 
     cache_db.save_batch(2, dest_updates)

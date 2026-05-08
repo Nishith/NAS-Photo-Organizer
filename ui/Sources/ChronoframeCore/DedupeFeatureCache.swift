@@ -261,6 +261,29 @@ extension OrganizerDatabase {
         return rows
     }
 
+    public func loadAllDedupeFeaturePrintData() throws -> [String: Data] {
+        let statement = try prepare("SELECT path, feature_print FROM DedupeFeatures WHERE feature_print IS NOT NULL")
+        defer { sqlite3_finalize(statement) }
+
+        var rows: [String: Data] = [:]
+        while true {
+            let stepResult = sqlite3_step(statement)
+            if stepResult == SQLITE_DONE { break }
+            guard stepResult == SQLITE_ROW else {
+                throw OrganizerDatabaseError.stepFailed(lastErrorMessage())
+            }
+            guard let pathPtr = sqlite3_column_text(statement, 0) else { continue }
+            let path = String(cString: pathPtr)
+            guard
+                sqlite3_column_type(statement, 1) == SQLITE_BLOB,
+                let bytes = sqlite3_column_blob(statement, 1)
+            else { continue }
+            let length = Int(sqlite3_column_bytes(statement, 1))
+            rows[path] = Data(bytes: bytes, count: length)
+        }
+        return rows
+    }
+
     public func saveDedupeFeatureRecords<S: Sequence>(_ records: S) throws where S.Element == DedupeFeatureRecord {
         let statement = try prepare(
             """

@@ -78,6 +78,17 @@ class CacheDB:
             self.conn.execute("UPDATE CopyJobs SET status = ? WHERE src_path = ?", (status, src_path))
             self.conn.commit()
 
+    def update_job_statuses_batch(self, updates):
+        """Batch-update job statuses. updates: list of (src_path, status) tuples."""
+        if not updates:
+            return
+        with self._lock:
+            self.conn.executemany(
+                "UPDATE CopyJobs SET status = ? WHERE src_path = ?",
+                [(status, src_path) for src_path, status in updates],
+            )
+            self.conn.commit()
+
     def clear_cache(self, type_id=None):
         """Clear hash cache. If type_id given, clear only that type (1=source, 2=dest)."""
         with self._lock:
