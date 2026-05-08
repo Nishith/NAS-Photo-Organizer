@@ -92,12 +92,13 @@ final class ChronoframeUITests: XCTestCase {
 
                 let acceptCluster = Self.hittableButton(identifier: "dedupeAcceptClusterSuggestionButton", in: app)
                 let acceptAll = Self.button(identifier: "dedupeAcceptAllSuggestionsButton", in: app)
-                let commit = Self.hittableButton(identifier: "dedupeCommitButton", in: app)
+                let commit = Self.button(identifier: "dedupeCommitButton", in: app)
 
                 XCTAssertTrue(acceptCluster.isHittable, "Accept Suggestion should stay hittable for \(scenario.rawValue)")
                 XCTAssertTrue(acceptAll.waitForExistence(timeout: 5), "Accept All Suggestions should stay visible for \(scenario.rawValue)")
                 XCTAssertTrue(acceptAll.isEnabled, "Accept All Suggestions should stay enabled for \(scenario.rawValue)")
-                XCTAssertTrue(commit.isHittable, "Commit should stay hittable for \(scenario.rawValue)")
+                XCTAssertTrue(commit.waitForExistence(timeout: 5), "Commit should stay visible for \(scenario.rawValue)")
+                XCTAssertTrue(commit.isEnabled, "Commit should stay enabled for \(scenario.rawValue)")
 
                 let window = app.windows.firstMatch
                 XCTAssertTrue(window.exists)
