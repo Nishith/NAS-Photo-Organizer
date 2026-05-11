@@ -53,4 +53,43 @@ final class SetupScreenModelTests: XCTestCase {
         XCTAssertEqual(model.configurationSummary, "Using the saved profile Travel")
         XCTAssertTrue(model.canStartRun)
     }
+
+    // MARK: - heroTone (design-critique fix #8)
+    //
+    // heroTone drives the contextual hero icon: idle → brand mark,
+    // warning → folder.badge.plus, ready → checkmark.circle.fill.
+
+    func testHeroToneTransitionsAcrossSetupStates() {
+        // Neither path → idle (brand mark shown, not a spinner-like icon)
+        XCTAssertEqual(makeModel(sourcePath: "", destinationPath: "").heroTone, .idle)
+
+        // Only source set → warning (partially configured)
+        XCTAssertEqual(makeModel(sourcePath: "/Volumes/Card", destinationPath: "").heroTone, .warning)
+
+        // Only destination set → warning
+        XCTAssertEqual(makeModel(sourcePath: "", destinationPath: "/Volumes/Archive").heroTone, .warning)
+
+        // Both set → ready
+        XCTAssertEqual(makeModel(sourcePath: "/Volumes/Card", destinationPath: "/Volumes/Archive").heroTone, .ready)
+    }
+
+    // MARK: - Helpers
+
+    private func makeModel(sourcePath: String, destinationPath: String) -> SetupScreenModel {
+        SetupScreenModel(
+            context: SetupScreenContext(
+                sourcePath: sourcePath,
+                destinationPath: destinationPath,
+                selectedProfileName: "",
+                activeProfile: nil,
+                usingDroppedSource: false,
+                droppedSourceLabel: nil,
+                droppedSourceItemCount: 0,
+                workerCount: 4,
+                useFastDestinationScan: false,
+                verifyCopies: true,
+                isRunInProgress: false
+            )
+        )
+    }
 }

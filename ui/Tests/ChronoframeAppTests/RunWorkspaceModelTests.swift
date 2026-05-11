@@ -144,4 +144,46 @@ final class RunWorkspaceModelTests: XCTestCase {
         XCTAssertTrue(model.previewReviewMessage.contains("Rebuild the preview"))
         XCTAssertEqual(model.tabTitle(.review), "Review")
     }
+
+    // MARK: - isBlankIdle (design-critique fix #7)
+
+    func testIsBlankIdleRequiresBothIdleStatusAndZeroDiscoveredFiles() {
+        // Idle with nothing discovered → blank idle (show onboarding card, not empty sections)
+        XCTAssertTrue(makeModel(status: .idle, discoveredCount: 0).isBlankIdle)
+
+        // Idle but files were already discovered in this session → not blank
+        XCTAssertFalse(makeModel(status: .idle, discoveredCount: 1).isBlankIdle)
+        XCTAssertFalse(makeModel(status: .idle, discoveredCount: 200).isBlankIdle)
+
+        // Active/terminal states are never blank idle regardless of count
+        XCTAssertFalse(makeModel(status: .running, discoveredCount: 0).isBlankIdle)
+        XCTAssertFalse(makeModel(status: .preflighting, discoveredCount: 0).isBlankIdle)
+        XCTAssertFalse(makeModel(status: .finished, discoveredCount: 0).isBlankIdle)
+        XCTAssertFalse(makeModel(status: .dryRunFinished, discoveredCount: 0).isBlankIdle)
+        XCTAssertFalse(makeModel(status: .failed, discoveredCount: 0).isBlankIdle)
+    }
+
+    // MARK: - Helpers
+
+    private func makeModel(status: RunStatus, discoveredCount: Int = 0) -> RunWorkspaceModel {
+        RunWorkspaceModel(
+            context: RunWorkspaceContext(
+                status: status,
+                currentMode: nil,
+                currentTaskTitle: "",
+                currentPhase: nil,
+                progress: 0,
+                metrics: RunMetrics(discoveredCount: discoveredCount),
+                summary: nil,
+                lastErrorMessage: nil,
+                warningCount: 0,
+                errorCount: 0,
+                issueCount: 0,
+                logEntries: [],
+                historyDestinationRoot: "",
+                currentSourceRoot: "",
+                canStartRun: false
+            )
+        )
+    }
 }

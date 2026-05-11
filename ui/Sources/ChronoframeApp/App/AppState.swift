@@ -371,6 +371,16 @@ final class AppState: ObservableObject {
         )
     }
 
+    func commitReviewedDeduplicateDecisions() {
+        let destination = deduplicateDestinationPath
+        guard !destination.isEmpty else { return }
+        let configuration = preferencesStore.makeDeduplicateConfiguration(destinationPath: destination)
+        deduplicateSessionStore.commitReviewed(
+            configuration: configuration,
+            securityScope: deduplicateSecurityScope(destination: destination)
+        )
+    }
+
     func resetDeduplicate() {
         deduplicateSessionStore.reset()
     }

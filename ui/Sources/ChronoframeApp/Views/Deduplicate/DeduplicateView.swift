@@ -15,6 +15,7 @@ struct DeduplicateView: View {
     @State private var focusedClusterID: UUID?
     @State private var focusedMemberPath: String?
     @State private var showingCommitConfirmation = false
+    @State private var showingCommitReviewedConfirmation = false
     @State private var showingRapidTriage = false
     @AppStorage("didOnboardDeduplicate") private var didOnboardDeduplicate = false
 
@@ -270,7 +271,10 @@ struct DeduplicateView: View {
             deletionPlan: sessionStore.currentDeletionPlan(),
             focusedClusterID: $focusedClusterID,
             focusedMemberPath: $focusedMemberPath,
-            thumbnailLoader: thumbnailLoader
+            thumbnailLoader: thumbnailLoader,
+            onKeepAll: { sessionStore.keepAllInCluster($0) },
+            onAcceptSuggestion: { sessionStore.acceptSuggestionsForCluster($0) },
+            onDeleteAll: { sessionStore.deleteAllInCluster($0) }
         )
     }
 
@@ -279,7 +283,8 @@ struct DeduplicateView: View {
             cluster: focusedCluster,
             focusedMemberPath: $focusedMemberPath,
             sessionStore: sessionStore,
-            thumbnailLoader: thumbnailLoader
+            thumbnailLoader: thumbnailLoader,
+            onAcceptAndAdvance: advanceToNextCluster
         )
     }
 
@@ -318,6 +323,27 @@ struct DeduplicateView: View {
         } message: {
             Text("Files will move to the macOS Trash. The dedupe receipt in Run History can revert this.")
         }
+        .confirmationDialog(
+            reviewedCommitDialogTitle,
+            isPresented: $showingCommitReviewedConfirmation
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                appState.commitReviewedDeduplicateDecisions()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Only groups you have fully reviewed will be affected. Unreviewed groups stay untouched. The dedupe receipt in Run History can revert this.")
+        }
+    }
+
+    private var reviewedCommitDialogTitle: String {
+        let plan = sessionStore.reviewedDeletionPlan()
+        let count = plan.count
+        let reviewed = sessionStore.reviewedClusters.count
+        if count == 0 {
+            return "No deletions in reviewed groups"
+        }
+        return "Move \(count) file\(count == 1 ? "" : "s") from \(reviewed) reviewed group\(reviewed == 1 ? "" : "s") to Trash?"
     }
 
     private func commitFooterWide(toDelete: Int, bytes: Int64, hardDelete: Bool) -> some View {
@@ -401,19 +427,19 @@ struct DeduplicateView: View {
         highCount: Int,
         density: CommitFooterButtonDensity
     ) -> some View {
-        Button(density.changeFolderTitle) {
-            abandonReview()
-        }
-        .accessibilityIdentifier("dedupeReviewChangeFolderButton")
-        .accessibilityHint("Abandons this review and returns to Deduplicate setup")
+        Menu {
+            Button("Change Folder") {
+                abandonReview()
+            }
+            .accessibilityIdentifier("dedupeReviewChangeFolderButton")
 
-        Button(density.settingsTitle) {
-            pauseReviewAndOpenSettings()
-        }
-        .accessibilityIdentifier("dedupeReviewSettingsButton")
-        .accessibilityHint("Keeps this scan available and opens Deduplicate settings")
+            Button("Adjust Settings") {
+                pauseReviewAndOpenSettings()
+            }
+            .accessibilityIdentifier("dedupeReviewSettingsButton")
 
-        Menu("Review") {
+            Divider()
+
             Button("Quick Review") {
                 showingRapidTriage = true
             }
@@ -428,6 +454,17 @@ struct DeduplicateView: View {
                 .accessibilityIdentifier("dedupeAcceptHighConfidenceButton")
                 .accessibilityHint("Accepts suggestions for all high-confidence clusters")
             }
+
+            let reviewedCount = sessionStore.reviewedClusters.count
+            if reviewedCount > 0 {
+                Divider()
+                Button("Move Reviewed to Trash (\(reviewedCount) group\(reviewedCount == 1 ? "" : "s"))") {
+                    showingCommitReviewedConfirmation = true
+                }
+                .accessibilityIdentifier("dedupeCommitReviewedButton")
+            }
+        } label: {
+            Label("Options", systemImage: "ellipsis.circle")
         }
         .accessibilityIdentifier("dedupeReviewActionsMenu")
         .sheet(isPresented: $showingRapidTriage) {
@@ -458,7 +495,9 @@ struct DeduplicateView: View {
         .accessibilityIdentifier("dedupeAcceptAllSuggestionsButton")
         .accessibilityHint("Marks every cluster's suggested keeper as keep and the rest as delete")
 
-        Button(density.commitTitle, role: .destructive) {
+        Spacer().frame(width: DesignTokens.Spacing.lg)
+
+        Button(density.commitTitle(fileCount: toDelete), role: .destructive) {
             showingCommitConfirmation = true
         }
         .keyboardShortcut(.return, modifiers: .command)
@@ -551,6 +590,16 @@ struct DeduplicateView: View {
             focusedClusterID = first.id
             focusedMemberPath = first.members.first?.path
         }
+    }
+
+    private func advanceToNextCluster() {
+        let clusters = sessionStore.clusters
+        guard let currentID = focusedClusterID,
+              let currentIndex = clusters.firstIndex(where: { $0.id == currentID }),
+              currentIndex + 1 < clusters.count else { return }
+        let next = clusters[currentIndex + 1]
+        focusedClusterID = next.id
+        focusedMemberPath = next.members.first?.path
     }
 
     private var currentDeduplicateConfiguration: DeduplicateConfiguration? {
@@ -672,7 +721,7 @@ enum DeduplicateReviewLayout {
     }
 }
 
-private enum CommitFooterButtonDensity {
+enum CommitFooterButtonDensity {
     case full
     case compact
 
@@ -697,10 +746,12 @@ private enum CommitFooterButtonDensity {
         }
     }
 
-    var commitTitle: String {
+    func commitTitle(fileCount: Int) -> String {
         switch self {
-        case .full: return "Move Duplicates to Trash"
-        case .compact: return "Move to Trash"
+        case .full:
+            return fileCount > 0 ? "Move \(fileCount) File\(fileCount == 1 ? "" : "s") to Trash" : "Move to Trash"
+        case .compact:
+            return "Move to Trash"
         }
     }
 }

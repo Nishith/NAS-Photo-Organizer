@@ -107,9 +107,27 @@ struct RunHeroSection: View {
 struct RunProgressSurface: View {
     let model: RunWorkspaceModel
 
+    private var isCopying: Bool {
+        model.context.status == .running && model.context.currentPhase == .copy
+    }
+
     var body: some View {
         MeridianSurfaceCard(style: .inner, tint: model.heroState.tone.color) {
             VStack(alignment: .leading, spacing: 12) {
+                if isCopying {
+                    HStack(alignment: .lastTextBaseline, spacing: 8) {
+                        Text(model.context.metrics.copiedCount.formatted())
+                            .font(DesignTokens.Typography.display)
+                            .foregroundStyle(model.heroState.tone.color)
+                            .contentTransition(.numericText())
+                            .monospacedDigit()
+                        Text("copied")
+                            .font(DesignTokens.Typography.subtitle)
+                            .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+                    }
+                    .animation(Motion.mechanical, value: model.context.metrics.copiedCount)
+                }
+
                 progressView
                     .accessibilityLabel("Run progress")
                     .accessibilityValue(model.progressAccessibilityValue)
@@ -497,6 +515,46 @@ struct RunConsolePanel: View {
                 .frame(minHeight: DesignTokens.Layout.consoleMinHeight, idealHeight: DesignTokens.Layout.consoleIdealHeight)
                 .accessibilityLabel("Run log")
                 .accessibilityIdentifier("consoleScrollView")
+            }
+        }
+    }
+}
+
+struct RunIdleOnboardingCard: View {
+    var body: some View {
+        MeridianSurfaceCard {
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.lg) {
+                SectionHeading(
+                    eyebrow: "How it works",
+                    title: "Three steps to an organized library",
+                    message: ""
+                )
+                VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+                    onboardingStep(number: "1", title: "Set up source and destination", message: "Go to Setup and choose the folder to organize and where organized copies should go.")
+                    onboardingStep(number: "2", title: "Preview to validate the plan", message: "A preview copies nothing — it shows exactly what will happen and flags any issues.")
+                    onboardingStep(number: "3", title: "Transfer when you're confident", message: "Start the transfer. This workspace updates live with progress, issues, and artifacts.")
+                }
+            }
+        }
+        .accessibilityIdentifier("runIdleOnboardingCard")
+    }
+
+    private func onboardingStep(number: String, title: String, message: String) -> some View {
+        HStack(alignment: .top, spacing: DesignTokens.Spacing.md) {
+            Text(number)
+                .font(DesignTokens.Typography.label)
+                .foregroundStyle(DesignTokens.ColorSystem.accentAction)
+                .frame(width: 18, height: 18)
+                .background(DesignTokens.ColorSystem.accentAction.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(DesignTokens.Typography.body.weight(.semibold))
+                    .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+                Text(message)
+                    .font(DesignTokens.Typography.body)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

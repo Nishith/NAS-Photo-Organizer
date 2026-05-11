@@ -14,6 +14,9 @@ struct ClusterListPane: View {
     @Binding var focusedClusterID: UUID?
     @Binding var focusedMemberPath: String?
     @ObservedObject var thumbnailLoader: DedupeThumbnailLoader
+    var onKeepAll: (DuplicateCluster) -> Void = { _ in }
+    var onAcceptSuggestion: (DuplicateCluster) -> Void = { _ in }
+    var onDeleteAll: (DuplicateCluster) -> Void = { _ in }
     @State private var confidenceFilter: ConfidenceFilter = .all
 
     private enum ConfidenceFilter: String, CaseIterable {
@@ -79,7 +82,10 @@ struct ClusterListPane: View {
                                 cluster: cluster,
                                 decisions: decisions,
                                 recoverableBytes: recoverableBytes(for: cluster),
-                                thumbnailLoader: thumbnailLoader
+                                thumbnailLoader: thumbnailLoader,
+                                onKeepAll: { onKeepAll(cluster) },
+                                onAcceptSuggestion: { onAcceptSuggestion(cluster) },
+                                onDeleteAll: { onDeleteAll(cluster) }
                             )
                             .tag(cluster.id)
                             .contentShape(Rectangle())
@@ -108,6 +114,10 @@ private struct ClusterRow: View {
     let decisions: DedupeDecisions
     let recoverableBytes: Int64
     @ObservedObject var thumbnailLoader: DedupeThumbnailLoader
+    var onKeepAll: () -> Void = {}
+    var onAcceptSuggestion: () -> Void = {}
+    var onDeleteAll: () -> Void = {}
+    @State private var isHovered = false
 
     private static let formatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
@@ -146,6 +156,11 @@ private struct ClusterRow: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+                Spacer()
+                if isHovered {
+                    hoverActions
+                        .transition(.opacity.animation(.easeInOut(duration: 0.12)))
+                }
             }
             HStack(spacing: 4) {
                 confidenceDot
@@ -176,6 +191,47 @@ private struct ClusterRow: View {
             }
         }
         .padding(.vertical, 4)
+        .onHover { isHovered = $0 }
+        .contextMenu {
+            Button("Keep All in Group") { onKeepAll() }
+            Button("Accept Suggestion") { onAcceptSuggestion() }
+            Divider()
+            Button("Delete All in Group", role: .destructive) { onDeleteAll() }
+        }
+    }
+
+    private var hoverActions: some View {
+        HStack(spacing: 2) {
+            Button {
+                onKeepAll()
+            } label: {
+                Image(systemName: "tray.and.arrow.down.fill")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(DesignTokens.ColorSystem.statusSuccess)
+            }
+            .buttonStyle(.borderless)
+            .help("Keep all photos in this group")
+
+            Button {
+                onAcceptSuggestion()
+            } label: {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(DesignTokens.ColorSystem.accentAction)
+            }
+            .buttonStyle(.borderless)
+            .help("Accept suggestion (keep best, delete rest)")
+
+            Button(role: .destructive) {
+                onDeleteAll()
+            } label: {
+                Image(systemName: "trash.fill")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(DesignTokens.ColorSystem.statusDanger)
+            }
+            .buttonStyle(.borderless)
+            .help("Delete all photos in this group")
+        }
     }
 
     private func decisionFor(_ member: PhotoCandidate) -> DedupeDecision {

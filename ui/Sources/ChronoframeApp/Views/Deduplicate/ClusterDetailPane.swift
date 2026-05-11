@@ -14,6 +14,7 @@ struct ClusterDetailPane: View {
     @Binding var focusedMemberPath: String?
     @ObservedObject var sessionStore: DeduplicateSessionStore
     @ObservedObject var thumbnailLoader: DedupeThumbnailLoader
+    var onAcceptAndAdvance: (() -> Void)? = nil
     @State private var thumbnailStripHeight = DeduplicateDetailPreviewLayout.defaultThumbnailStripHeight
     @State private var dragStartThumbnailStripHeight: CGFloat?
     @State private var showingReasonDetail = false
@@ -24,6 +25,15 @@ struct ClusterDetailPane: View {
             if let cluster {
                 VStack(spacing: 0) {
                     detailContent(for: cluster)
+                }
+                .background {
+                    VStack {
+                        Button("Previous") { navigateMember(by: -1, in: cluster) }
+                            .keyboardShortcut(.leftArrow, modifiers: [])
+                        Button("Next") { navigateMember(by: 1, in: cluster) }
+                            .keyboardShortcut(.rightArrow, modifiers: [])
+                    }
+                    .opacity(0)
                 }
             } else {
                 VStack(spacing: 12) {
@@ -111,7 +121,7 @@ struct ClusterDetailPane: View {
     }
 
     private func memberThumbnailStrip(cluster: DuplicateCluster, thumbnailSize: CGFloat) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal, showsIndicators: true) {
             HStack(spacing: 8) {
                 ForEach(cluster.members) { member in
                     memberThumb(member: member, cluster: cluster, thumbnailSize: thumbnailSize)
@@ -122,23 +132,25 @@ struct ClusterDetailPane: View {
     }
 
     private func acceptSuggestionButton(for cluster: DuplicateCluster) -> some View {
-        Button("Accept Suggestion") {
+        Button("Accept & Next") {
             sessionStore.acceptSuggestionsForCluster(cluster)
+            onAcceptAndAdvance?()
         }
         .fixedSize()
         .keyboardShortcut(.return, modifiers: [])
         .accessibilityIdentifier("dedupeAcceptClusterSuggestionButton")
-        .accessibilityLabel("Accept Suggestion")
+        .accessibilityLabel("Accept suggestion and move to next group")
+        .accessibilityHint("Confirms the suggested keep and delete choices for this group, then selects the next group")
     }
 
     private func detailContentWide(focused: PhotoCandidate?, cluster: DuplicateCluster) -> some View {
         HStack(alignment: .top, spacing: DesignTokens.Spacing.lg) {
             preview(for: focused)
-                .frame(minWidth: 280, maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: 160, maxWidth: .infinity, maxHeight: .infinity)
+                .layoutPriority(1)
             if let focused {
                 metadataPanel(for: focused, cluster: cluster)
-                    .frame(minWidth: 200, idealWidth: 240, maxWidth: 260)
-                    .layoutPriority(1)
+                    .frame(width: 200)
             }
         }
         .padding(DesignTokens.Spacing.lg)
@@ -185,10 +197,10 @@ struct ClusterDetailPane: View {
 
             Divider().padding(.vertical, 2)
 
-            metaRow("Quality", value: String(format: "%.2f", member.qualityScore))
-            metaRow("Sharpness", value: String(format: "%.2f", member.sharpness))
+            qualityRow("Quality", score: member.qualityScore)
+            sharpnessRow("Sharpness", score: member.sharpness)
             if let face = member.faceScore {
-                metaRow("Face score", value: String(format: "%.2f", face))
+                faceRow("Face", detected: face > 0.5)
             }
             if member.isRaw {
                 Label("RAW", systemImage: "camera.aperture")
@@ -224,6 +236,71 @@ struct ClusterDetailPane: View {
             Spacer()
             Text(value)
                 .font(.caption.monospacedDigit())
+        }
+    }
+
+    private func qualityRow(_ label: String, score: Double) -> some View {
+        let (filled, text) = Self.qualityLabel(score)
+        return HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            HStack(spacing: 3) {
+                ForEach(0..<5, id: \.self) { i in
+                    Circle()
+                        .fill(i < filled ? DesignTokens.ColorSystem.accentAction : DesignTokens.ColorSystem.hairline)
+                        .frame(width: 5, height: 5)
+                }
+            }
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+        }
+        .help(String(format: "Raw score: %.2f", score))
+    }
+
+    private func sharpnessRow(_ label: String, score: Double) -> some View {
+        let text = Self.sharpnessLabel(score)
+        return HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+        }
+        .help(String(format: "Raw score: %.2f", score))
+    }
+
+    private func faceRow(_ label: String, detected: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Label(detected ? "Detected" : "None", systemImage: detected ? "person.fill" : "person.slash")
+                .font(.caption)
+                .foregroundStyle(detected ? DesignTokens.ColorSystem.statusSuccess : DesignTokens.ColorSystem.inkMuted)
+        }
+    }
+
+    static func qualityLabel(_ score: Double) -> (Int, String) {
+        switch score {
+        case 0.8...: return (5, "Excellent")
+        case 0.6..<0.8: return (4, "Good")
+        case 0.4..<0.6: return (3, "Fair")
+        case 0.2..<0.4: return (2, "Poor")
+        default: return (1, "Very poor")
+        }
+    }
+
+    static func sharpnessLabel(_ score: Double) -> String {
+        switch score {
+        case 0.5...: return "Sharp"
+        case 0.25..<0.5: return "Soft"
+        default: return "Motion blur"
         }
     }
 
@@ -378,6 +455,14 @@ struct ClusterDetailPane: View {
             return match
         }
         return cluster.members.first
+    }
+
+    private func navigateMember(by delta: Int, in cluster: DuplicateCluster) {
+        let members = cluster.members
+        guard !members.isEmpty else { return }
+        let currentIndex = members.firstIndex(where: { $0.path == focusedMemberPath }) ?? 0
+        let nextIndex = (currentIndex + delta + members.count) % members.count
+        focusedMemberPath = members[nextIndex].path
     }
 
     private func isSuggestedKeeper(_ member: PhotoCandidate, in cluster: DuplicateCluster) -> Bool {

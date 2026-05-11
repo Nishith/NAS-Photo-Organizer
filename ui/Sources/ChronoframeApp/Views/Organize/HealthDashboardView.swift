@@ -56,7 +56,9 @@ struct HealthDashboardView: View {
                     EmptyStateView(
                         title: "No Health Check Yet",
                         message: "Run a check to see destination readiness, unknown dates, duplicates, interrupted work, and structure drift.",
-                        systemImage: "heart.text.square"
+                        systemImage: "heart.text.square",
+                        actionLabel: "Check Library",
+                        action: { Task { await appState.refreshLibraryHealth() } }
                     )
                 }
             }

@@ -21,30 +21,50 @@ struct SidebarView: View {
     }
 
     var body: some View {
-        List(SidebarDestination.allCases, selection: $appState.selection) { destination in
-            HStack(spacing: 10) {
-                Image(systemName: destination.systemImage)
-                    .foregroundStyle(iconTint(for: destination))
-                    .frame(width: 16)
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(SidebarDestination.allCases) { destination in
+                let isSelected = appState.selection == destination
+                Button {
+                    appState.selection = destination
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: destination.systemImage)
+                            .foregroundStyle(isSelected ? DesignTokens.ColorSystem.accentAction : iconTint(for: destination))
+                            .frame(width: 16)
 
-                Text(destination.title)
-                    .font(DesignTokens.Typography.body)
-                    .lineLimit(1)
+                        Text(destination.title)
+                            .font(DesignTokens.Typography.body)
+                            .foregroundStyle(isSelected ? DesignTokens.ColorSystem.accentAction : DesignTokens.ColorSystem.inkPrimary)
+                            .lineLimit(1)
 
-                Spacer()
+                        Spacer()
 
-                if showsProgress(for: destination) {
-                    ProgressView()
-                        .controlSize(.small)
-                } else if showsStatusDot(for: destination) {
-                    Circle()
-                        .fill(statusDotTint(for: destination))
-                        .frame(width: 6, height: 6)
+                        if showsProgress(for: destination) {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else if showsStatusDot(for: destination) {
+                            Circle()
+                                .fill(statusDotTint(for: destination))
+                                .frame(width: 6, height: 6)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(isSelected ? DesignTokens.ColorSystem.accentAction.opacity(0.12) : Color.clear)
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+                .tag(destination)
             }
-            .tag(destination)
+            Spacer()
         }
-        .listStyle(.sidebar)
+        .padding(.horizontal, 8)
+        .padding(.top, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationTitle("Chronoframe")
         .onChange(of: appState.organizeSubSelection) { sub in
             if appState.selection == .organize && sub == .history {

@@ -571,6 +571,183 @@ final class DeduplicateSessionStoreTests: XCTestCase {
         XCTAssertEqual(UserDefaultsDeduplicateRunHistoryStore(defaults: defaults).load(), store.runHistory)
     }
 
+    // MARK: - keepAllInCluster / deleteAllInCluster
+
+    /// keepAllInCluster must set every member to .keep, which removes all of
+    /// them from the deletion plan (nothing to delete in a keep-everything cluster).
+    @MainActor
+    func testKeepAllInClusterSetsEveryMemberToKeepAndDropsThemFromDeletionPlan() async throws {
+        let keeper = PhotoCandidate(path: "/dest/a.jpg", size: 100, modificationTime: 0, qualityScore: 0.9)
+        let duplicate = PhotoCandidate(path: "/dest/b.jpg", size: 50, modificationTime: 0, qualityScore: 0.4)
+        let cluster = DuplicateCluster(
+            kind: .burst,
+            members: [keeper, duplicate],
+            suggestedKeeperIDs: [keeper.path],
+            bytesIfPruned: 50
+        )
+        let store = DeduplicateSessionStore(engine: MockDeduplicateEngine(clusters: [cluster]))
+        store.startScan(configuration: DeduplicateConfiguration(destinationPath: "/dest"))
+        _ = await waitForCondition { store.status == .readyToReview }
+
+        // Auto-suggestion: keeper=.keep, duplicate=.delete → 1 file pending delete
+        XCTAssertEqual(store.pendingDeleteCount, 1)
+
+        store.keepAllInCluster(store.clusters[0])
+
+        XCTAssertEqual(store.decisions.byPath[keeper.path], .keep)
+        XCTAssertEqual(store.decisions.byPath[duplicate.path], .keep)
+        XCTAssertEqual(store.pendingDeleteCount, 0, "Keeping all members must drop the cluster from the deletion plan")
+    }
+
+    /// deleteAllInCluster writes .delete for every member, including the suggested
+    /// keeper. The planner's per-cluster safety rail then skips execution when all
+    /// members are .delete (preventing total loss), so pendingDeleteCount stays 0.
+    /// The test pins both invariants: decisions are stored correctly AND the planner
+    /// won't blindly wipe a whole cluster.
+    @MainActor
+    func testDeleteAllInClusterSetsEveryMemberToDeleteAndSafetyRailPreventsExecution() async throws {
+        let keeper = PhotoCandidate(path: "/dest/a.jpg", size: 100, modificationTime: 0, qualityScore: 0.9)
+        let duplicate = PhotoCandidate(path: "/dest/b.jpg", size: 50, modificationTime: 0, qualityScore: 0.4)
+        let cluster = DuplicateCluster(
+            kind: .burst,
+            members: [keeper, duplicate],
+            suggestedKeeperIDs: [keeper.path],
+            bytesIfPruned: 50
+        )
+        let store = DeduplicateSessionStore(engine: MockDeduplicateEngine(clusters: [cluster]))
+        store.startScan(configuration: DeduplicateConfiguration(destinationPath: "/dest"))
+        _ = await waitForCondition { store.status == .readyToReview }
+
+        store.deleteAllInCluster(store.clusters[0])
+
+        // Decisions are stored correctly
+        XCTAssertEqual(store.decisions.byPath[keeper.path], .delete)
+        XCTAssertEqual(store.decisions.byPath[duplicate.path], .delete)
+        // Planner safety rail: a cluster where every member is .delete is skipped
+        // entirely to prevent accidentally destroying all copies of a photo.
+        XCTAssertEqual(store.pendingDeleteCount, 0,
+            "Safety rail must skip a cluster where all members are marked delete")
+    }
+
+    // MARK: - reviewedClusters / reviewedDeletionPlan / commitReviewed
+
+    /// A cluster is reviewed when every member has an explicit decision in
+    /// decisions.byPath. Clusters with any undecided member are excluded.
+    @MainActor
+    func testReviewedClustersExcludesClustersMissingExplicitDecisions() async throws {
+        let clusterA = DuplicateCluster(
+            kind: .burst,
+            members: [
+                PhotoCandidate(path: "/dest/a1.jpg", size: 100, modificationTime: 0, qualityScore: 0.9),
+                PhotoCandidate(path: "/dest/a2.jpg", size: 50, modificationTime: 0, qualityScore: 0.4),
+            ],
+            suggestedKeeperIDs: ["/dest/a1.jpg"],
+            bytesIfPruned: 50
+        )
+        let clusterB = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [
+                PhotoCandidate(path: "/dest/b1.jpg", size: 200, modificationTime: 0, qualityScore: 0.8),
+                PhotoCandidate(path: "/dest/b2.jpg", size: 100, modificationTime: 0, qualityScore: 0.3),
+            ],
+            suggestedKeeperIDs: ["/dest/b1.jpg"],
+            bytesIfPruned: 100
+        )
+        let store = DeduplicateSessionStore(engine: MockDeduplicateEngine(clusters: [clusterA, clusterB]))
+        store.startScan(configuration: DeduplicateConfiguration(destinationPath: "/dest"))
+        _ = await waitForCondition { store.status == .readyToReview }
+
+        // Clear all auto-populated decisions so neither cluster is "reviewed"
+        store.decisions = DedupeDecisions(byPath: [:])
+        XCTAssertTrue(store.reviewedClusters.isEmpty, "No explicit decisions → no reviewed clusters")
+
+        // Explicitly decide all of clusterA
+        store.keepAllInCluster(store.clusters[0])
+        XCTAssertEqual(store.reviewedClusters.map(\.id), [clusterA.id], "Only fully decided cluster should be reviewed")
+        XCTAssertFalse(store.reviewedClusters.map(\.id).contains(clusterB.id))
+
+        // Explicitly decide all of clusterB
+        store.acceptSuggestionsForCluster(store.clusters[1])
+        XCTAssertEqual(store.reviewedClusters.count, 2, "Both clusters reviewed after all decisions set")
+    }
+
+    /// reviewedDeletionPlan returns a plan scoped to reviewed clusters only.
+    /// Deletes in unreviewed clusters must not appear in the plan.
+    @MainActor
+    func testReviewedDeletionPlanScopedToReviewedClustersOnly() async throws {
+        let clusterA = DuplicateCluster(
+            kind: .burst,
+            members: [
+                PhotoCandidate(path: "/dest/a1.jpg", size: 100, modificationTime: 0, qualityScore: 0.9),
+                PhotoCandidate(path: "/dest/a2.jpg", size: 50, modificationTime: 0, qualityScore: 0.4),
+            ],
+            suggestedKeeperIDs: ["/dest/a1.jpg"],
+            bytesIfPruned: 50
+        )
+        let clusterB = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [
+                PhotoCandidate(path: "/dest/b1.jpg", size: 200, modificationTime: 0, qualityScore: 0.8),
+                PhotoCandidate(path: "/dest/b2.jpg", size: 100, modificationTime: 0, qualityScore: 0.3),
+            ],
+            suggestedKeeperIDs: ["/dest/b1.jpg"],
+            bytesIfPruned: 100
+        )
+        let store = DeduplicateSessionStore(engine: MockDeduplicateEngine(clusters: [clusterA, clusterB]))
+        store.startScan(configuration: DeduplicateConfiguration(destinationPath: "/dest"))
+        _ = await waitForCondition { store.status == .readyToReview }
+
+        // Clear decisions, then only decide clusterA (keep a1, delete a2)
+        store.decisions = DedupeDecisions(byPath: [:])
+        store.acceptSuggestionsForCluster(store.clusters[0])
+
+        let plan = store.reviewedDeletionPlan()
+        let paths = Set(plan.pathsToDelete)
+
+        XCTAssertTrue(paths.contains("/dest/a2.jpg"), "Reviewed cluster's delete must be in the plan")
+        XCTAssertFalse(paths.contains("/dest/b1.jpg"), "Unreviewed cluster must not appear in the plan")
+        XCTAssertFalse(paths.contains("/dest/b2.jpg"), "Unreviewed cluster must not appear in the plan")
+    }
+
+    /// commitReviewed must pass only the reviewed clusters to the engine,
+    /// leaving unreviewed clusters untouched.
+    @MainActor
+    func testCommitReviewedPassesOnlyReviewedClustersToEngine() async throws {
+        let clusterA = DuplicateCluster(
+            kind: .burst,
+            members: [
+                PhotoCandidate(path: "/dest/a1.jpg", size: 100, modificationTime: 0, qualityScore: 0.9),
+                PhotoCandidate(path: "/dest/a2.jpg", size: 50, modificationTime: 0, qualityScore: 0.4),
+            ],
+            suggestedKeeperIDs: ["/dest/a1.jpg"],
+            bytesIfPruned: 50
+        )
+        let clusterB = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [
+                PhotoCandidate(path: "/dest/b1.jpg", size: 200, modificationTime: 0, qualityScore: 0.8),
+                PhotoCandidate(path: "/dest/b2.jpg", size: 100, modificationTime: 0, qualityScore: 0.3),
+            ],
+            suggestedKeeperIDs: ["/dest/b1.jpg"],
+            bytesIfPruned: 100
+        )
+        let engine = MockDeduplicateEngine(clusters: [clusterA, clusterB])
+        let store = DeduplicateSessionStore(engine: engine)
+        store.startScan(configuration: DeduplicateConfiguration(destinationPath: "/dest"))
+        _ = await waitForCondition { store.status == .readyToReview }
+
+        // Clear decisions, then only review clusterA
+        store.decisions = DedupeDecisions(byPath: [:])
+        store.acceptSuggestionsForCluster(store.clusters[0])
+
+        store.commitReviewed(configuration: DeduplicateConfiguration(destinationPath: "/dest"))
+
+        XCTAssertEqual(engine.lastCommitClusters.map(\.id), [clusterA.id],
+            "commitReviewed must pass only the reviewed cluster to the engine")
+        XCTAssertFalse(engine.lastCommitClusters.map(\.id).contains(clusterB.id),
+            "Unreviewed cluster must not be passed to the engine")
+    }
+
     @MainActor
     func testDeduplicateFolderHistoryAggregatesAndMovesRecentFolderFirst() {
         let historyStore = UserDefaultsDeduplicateRunHistoryStore(defaults: defaults, limit: 3)

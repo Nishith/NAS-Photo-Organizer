@@ -57,7 +57,7 @@ enum DesignTokens {
     }
 
     enum DeduplicateLayout {
-        static let reviewWideBreakpoint: CGFloat = 840
+        static let reviewWideBreakpoint: CGFloat = 700
         static let clusterListMinWidth: CGFloat = 260
         static let clusterListIdealWidth: CGFloat = 340
         static let clusterListMaxWidth: CGFloat = 420

@@ -74,6 +74,27 @@ final class RunHistoryViewTests: XCTestCase {
         )
     }
 
+    // MARK: - Source folder label (design-critique fix #6)
+
+    func testSourceFolderLabelUsesLastPathComponentNotFullVolumePath() {
+        // Primary row label must be the folder name, not the entire volume path.
+        // /Volumes/Photos_4_27_26/2013 → "2013"
+        XCTAssertEqual(
+            RunHistoryView.sourceFolderLabel(for: "/Volumes/Photos_4_27_26/2013"),
+            "2013"
+        )
+        // Backup volumes with opaque names → still readable as the leaf name
+        XCTAssertEqual(
+            RunHistoryView.sourceFolderLabel(for: "/Volumes/Backup_21_12"),
+            "Backup_21_12"
+        )
+        // Deep hierarchy: only the last component
+        XCTAssertEqual(
+            RunHistoryView.sourceFolderLabel(for: "/Users/alice/Pictures/RAW/2024/January"),
+            "January"
+        )
+    }
+
     private func makeEntry(kind: RunHistoryEntryKind) -> RunHistoryEntry {
         RunHistoryEntry(
             kind: kind,
