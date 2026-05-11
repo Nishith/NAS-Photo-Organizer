@@ -81,6 +81,10 @@ def inspect_codesign(app_path: Path) -> SignatureInspection:
     kind = "unknown"
     if "Signature=adhoc" in output:
         kind = "adhoc"
+    elif any(authority.startswith("Apple Distribution:") for authority in authorities):
+        kind = "apple-distribution"
+    elif any(authority.startswith("3rd Party Mac Developer Application:") for authority in authorities):
+        kind = "apple-distribution"
     elif any(authority.startswith("Developer ID Application:") for authority in authorities):
         kind = "developer-id"
 
@@ -120,6 +124,7 @@ def validate_app_bundle(
     app_path: Path,
     *,
     require_distribution_signing: bool = False,
+    app_store: bool = False,
     codesign_inspector: Callable[[Path], SignatureInspection] = inspect_codesign,
     gatekeeper_inspector: Callable[[Path], GatekeeperInspection] = inspect_gatekeeper,
 ) -> BundleValidationResult:
@@ -166,13 +171,23 @@ def validate_app_bundle(
 
     required_files = [
         app_path / "Contents" / "Resources" / "AppIcon.icns",
-        app_path / "Contents" / "Resources" / "Backend" / "chronoframe.py",
-        app_path / "Contents" / "Resources" / "Backend" / "requirements.txt",
-        app_path / "Contents" / "Resources" / "Backend" / "chronoframe" / "core.py",
     ]
+    if not app_store:
+        required_files.extend([
+            app_path / "Contents" / "Resources" / "Backend" / "chronoframe.py",
+            app_path / "Contents" / "Resources" / "Backend" / "requirements.txt",
+            app_path / "Contents" / "Resources" / "Backend" / "chronoframe" / "core.py",
+        ])
     for required_file in required_files:
         if not required_file.exists():
             result.errors.append(f"Missing packaged resource: {required_file}")
+
+    if app_store:
+        backend_dir = app_path / "Contents" / "Resources" / "Backend"
+        if backend_dir.exists():
+            result.errors.append(
+                f"App Store build must not include the Python backend: {backend_dir}"
+            )
 
     signature = codesign_inspector(app_path)
     result.signature = signature
@@ -187,7 +202,16 @@ def validate_app_bundle(
         if not signature.sealed_resources:
             result.errors.append("Bundle resources are not sealed by the code signature.")
 
-        if require_distribution_signing:
+        if app_store:
+            if signature.kind != "apple-distribution":
+                result.errors.append(
+                    "App Store validation requires an Apple Distribution or 3rd Party Mac Developer Application signature."
+                )
+            if not signature.hardened_runtime:
+                result.errors.append(
+                    "App Store validation requires hardened runtime to be enabled."
+                )
+        elif require_distribution_signing:
             if signature.kind != "developer-id":
                 result.errors.append(
                     "Distribution validation requires a Developer ID Application signature."
@@ -223,13 +247,21 @@ def validate_app_bundle(
             "Gatekeeper assessment was unavailable on this machine; inspect the output for details."
         )
 
-    result.distribution_ready = (
-        not result.errors
-        and signature.available
-        and signature.kind == "developer-id"
-        and signature.hardened_runtime
-        and signature.timestamped
-    )
+    if app_store:
+        result.distribution_ready = (
+            not result.errors
+            and signature.available
+            and signature.kind == "apple-distribution"
+            and signature.hardened_runtime
+        )
+    else:
+        result.distribution_ready = (
+            not result.errors
+            and signature.available
+            and signature.kind == "developer-id"
+            and signature.hardened_runtime
+            and signature.timestamped
+        )
     return result
 
 
@@ -269,11 +301,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Require Developer ID signing, hardened runtime, and a timestamped signature.",
     )
+    parser.add_argument(
+        "--app-store",
+        action="store_true",
+        help="Validate for Mac App Store: require Apple Distribution signing and reject bundled Python backend.",
+    )
     args = parser.parse_args(argv)
 
     result = validate_app_bundle(
         Path(args.app_path),
         require_distribution_signing=args.require_distribution_signing,
+        app_store=args.app_store,
     )
 
     if args.json:

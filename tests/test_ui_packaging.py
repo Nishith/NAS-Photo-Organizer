@@ -435,5 +435,184 @@ class TestAppBundleValidator(unittest.TestCase):
         self.assertIn("Warnings:", text)
 
 
+class TestAppStoreValidation(unittest.TestCase):
+    def _create_mas_app_bundle(self, root: Path) -> Path:
+        """Minimal MAS bundle: has AppIcon.icns, executable, Info.plist; NO Python backend."""
+        app_path = root / "Chronoframe.app"
+        executable_path = app_path / "Contents" / "MacOS" / "Chronoframe"
+        resources_path = app_path / "Contents" / "Resources"
+
+        executable_path.parent.mkdir(parents=True)
+        resources_path.mkdir(parents=True)
+
+        with (app_path / "Contents" / "Info.plist").open("wb") as handle:
+            plistlib.dump(
+                {
+                    "CFBundleExecutable": "Chronoframe",
+                    "CFBundleIdentifier": "com.nishith.chronoframe",
+                    "CFBundleIconFile": "AppIcon",
+                    "CFBundlePackageType": "APPL",
+                },
+                handle,
+            )
+
+        executable_path.write_text("binary")
+        (resources_path / "AppIcon.icns").write_text("icon")
+        return app_path
+
+    def _apple_distribution_inspector(self):
+        return lambda _: validator.SignatureInspection(
+            available=True,
+            kind="apple-distribution",
+            identifier="com.nishith.chronoframe",
+            team_identifier="ABCDE12345",
+            sealed_resources=True,
+            hardened_runtime=True,
+            timestamped=False,
+            authorities=["Apple Distribution: Nishith Nand (ABCDE12345)"],
+            output="Authority=Apple Distribution: Nishith Nand (ABCDE12345)",
+        )
+
+    def _null_gatekeeper(self):
+        return lambda _: validator.GatekeeperInspection(
+            status="unavailable", returncode=2, output="spctl unavailable"
+        )
+
+    def test_app_store_validation_accepts_valid_mas_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app_path = self._create_mas_app_bundle(Path(tmp_dir))
+            result = validator.validate_app_bundle(
+                app_path,
+                app_store=True,
+                codesign_inspector=self._apple_distribution_inspector(),
+                gatekeeper_inspector=self._null_gatekeeper(),
+            )
+
+        self.assertEqual(result.errors, [])
+        self.assertTrue(result.distribution_ready)
+
+    def test_app_store_validation_rejects_bundle_with_python_backend(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app_path = self._create_mas_app_bundle(Path(tmp_dir))
+            backend_dir = app_path / "Contents" / "Resources" / "Backend"
+            backend_dir.mkdir()
+            (backend_dir / "chronoframe.py").write_text("print('hi')")
+
+            result = validator.validate_app_bundle(
+                app_path,
+                app_store=True,
+                codesign_inspector=self._apple_distribution_inspector(),
+                gatekeeper_inspector=self._null_gatekeeper(),
+            )
+
+        self.assertTrue(any("must not include the Python backend" in e for e in result.errors))
+        self.assertFalse(result.distribution_ready)
+
+    def test_app_store_validation_requires_apple_distribution_signing(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app_path = self._create_mas_app_bundle(Path(tmp_dir))
+            result = validator.validate_app_bundle(
+                app_path,
+                app_store=True,
+                codesign_inspector=lambda _: validator.SignatureInspection(
+                    available=True,
+                    kind="developer-id",
+                    identifier="com.nishith.chronoframe",
+                    team_identifier="ABCDE12345",
+                    sealed_resources=True,
+                    hardened_runtime=True,
+                    timestamped=True,
+                    authorities=["Developer ID Application: Nishith Nand (ABCDE12345)"],
+                    output="Authority=Developer ID Application: Nishith Nand (ABCDE12345)",
+                ),
+                gatekeeper_inspector=self._null_gatekeeper(),
+            )
+
+        self.assertTrue(any("Apple Distribution" in e for e in result.errors))
+        self.assertFalse(result.distribution_ready)
+
+    def test_app_store_validation_requires_hardened_runtime(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app_path = self._create_mas_app_bundle(Path(tmp_dir))
+            result = validator.validate_app_bundle(
+                app_path,
+                app_store=True,
+                codesign_inspector=lambda _: validator.SignatureInspection(
+                    available=True,
+                    kind="apple-distribution",
+                    identifier="com.nishith.chronoframe",
+                    team_identifier="ABCDE12345",
+                    sealed_resources=True,
+                    hardened_runtime=False,
+                    timestamped=False,
+                    authorities=["Apple Distribution: Nishith Nand (ABCDE12345)"],
+                    output="Authority=Apple Distribution: Nishith Nand (ABCDE12345)",
+                ),
+                gatekeeper_inspector=self._null_gatekeeper(),
+            )
+
+        self.assertTrue(any("hardened runtime" in e for e in result.errors))
+        self.assertFalse(result.distribution_ready)
+
+    def test_app_store_does_not_require_backend_files(self):
+        """MAS bundles must NOT have the backend; the validator must not report them missing."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app_path = self._create_mas_app_bundle(Path(tmp_dir))
+            result = validator.validate_app_bundle(
+                app_path,
+                app_store=True,
+                codesign_inspector=self._apple_distribution_inspector(),
+                gatekeeper_inspector=self._null_gatekeeper(),
+            )
+
+        self.assertFalse(any("chronoframe.py" in e for e in result.errors))
+        self.assertFalse(any("requirements.txt" in e for e in result.errors))
+        self.assertFalse(any("core.py" in e for e in result.errors))
+
+    def test_inspect_codesign_classifies_apple_distribution_authority(self):
+        stderr = (
+            "Identifier=com.nishith.chronoframe\n"
+            "TeamIdentifier=ABCDE12345\n"
+            "Authority=Apple Distribution: Nishith Nand (ABCDE12345)\n"
+            "Sealed Resources version=2 rules=13 files=7\n"
+            "Runtime Version=14.0.0\n"
+        )
+        with mock.patch.object(
+            validator.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(["codesign"], 0, stdout="", stderr=stderr),
+        ):
+            inspection = validator.inspect_codesign(Path("/tmp/Chronoframe.app"))
+
+        self.assertEqual(inspection.kind, "apple-distribution")
+
+    def test_inspect_codesign_classifies_3rd_party_mac_developer_authority(self):
+        stderr = (
+            "Identifier=com.nishith.chronoframe\n"
+            "TeamIdentifier=ABCDE12345\n"
+            "Authority=3rd Party Mac Developer Application: Nishith Nand (ABCDE12345)\n"
+            "Sealed Resources version=2 rules=13 files=7\n"
+            "Runtime Version=14.0.0\n"
+        )
+        with mock.patch.object(
+            validator.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(["codesign"], 0, stdout="", stderr=stderr),
+        ):
+            inspection = validator.inspect_codesign(Path("/tmp/Chronoframe.app"))
+
+        self.assertEqual(inspection.kind, "apple-distribution")
+
+    def test_main_app_store_flag_validates_mas_mode(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            missing = Path(tmp_dir) / "Missing.app"
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                exit_code = validator.main([str(missing), "--app-store", "--json"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn('"distribution_ready": false', output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

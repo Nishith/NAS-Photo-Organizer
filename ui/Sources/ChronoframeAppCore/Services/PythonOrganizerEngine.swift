@@ -1,3 +1,5 @@
+#if !MAS_BUILD
+
 #if canImport(ChronoframeCore)
 import ChronoframeCore
 #endif
@@ -421,3 +423,5 @@ public final class PythonOrganizerEngine: OrganizerEngine {
         }
     }
 }
+
+#endif

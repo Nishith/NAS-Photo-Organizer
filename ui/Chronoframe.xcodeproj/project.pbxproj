@@ -730,7 +730,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\nBACKEND_DIR=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Backend\"\nREPO_ROOT=\"$PROJECT_DIR/..\"\nrm -rf \"$BACKEND_DIR\"\nmkdir -p \"$BACKEND_DIR\"\ncp \"$REPO_ROOT/chronoframe.py\" \"$BACKEND_DIR/\"\ncp \"$REPO_ROOT/requirements.txt\" \"$BACKEND_DIR/\"\nditto \"$REPO_ROOT/chronoframe\" \"$BACKEND_DIR/chronoframe\"\nfind \"$BACKEND_DIR/chronoframe\" -type d -name __pycache__ -prune -exec rm -rf {} +\n";
+			shellScript = "set -euo pipefail\nBACKEND_DIR=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Backend\"\nif [ \"${CHRONOFRAME_SKIP_PYTHON_BACKEND:-}\" = \"YES\" ]; then\n  echo \"note: Skipping Python backend (MAS build)\"\n  rm -rf \"$BACKEND_DIR\"\n  exit 0\nfi\nREPO_ROOT=\"$PROJECT_DIR/..\"\nrm -rf \"$BACKEND_DIR\"\nmkdir -p \"$BACKEND_DIR\"\ncp \"$REPO_ROOT/chronoframe.py\" \"$BACKEND_DIR/\"\ncp \"$REPO_ROOT/requirements.txt\" \"$BACKEND_DIR/\"\nditto \"$REPO_ROOT/chronoframe\" \"$BACKEND_DIR/chronoframe\"\nfind \"$BACKEND_DIR/chronoframe\" -type d -name __pycache__ -prune -exec rm -rf {} +\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

@@ -1,11 +1,14 @@
 import Foundation
 
+#if !MAS_BUILD
 public enum AppEnginePreference: String, Equatable, Sendable {
     case swift
     case python
 }
+#endif
 
 public enum RuntimePaths {
+    #if !MAS_BUILD
     public static func backendRootURL() -> URL? {
         if let bundled = bundledBackendRootURL() {
             return bundled
@@ -21,6 +24,7 @@ public enum RuntimePaths {
     public static func backendScriptURL() -> URL? {
         backendRootURL()?.appendingPathComponent("chronoframe.py")
     }
+    #endif
 
     public static func profilesFileURL() -> URL {
         let environment = ProcessInfo.processInfo.environment
@@ -29,9 +33,11 @@ public enum RuntimePaths {
             return URL(fileURLWithPath: override)
         }
 
+        #if !MAS_BUILD
         if let repositoryRoot = repositoryRootURL() {
             return repositoryRoot.appendingPathComponent("profiles.yaml")
         }
+        #endif
 
         let appSupport = applicationSupportDirectory().appendingPathComponent("profiles.yaml")
         if !FileManager.default.fileExists(atPath: appSupport.deletingLastPathComponent().path) {
@@ -46,6 +52,7 @@ public enum RuntimePaths {
         return base.appendingPathComponent("Chronoframe", isDirectory: true)
     }
 
+    #if !MAS_BUILD
     public static func appEnginePreference() -> AppEnginePreference {
         let environment = ProcessInfo.processInfo.environment
         let rawValue = environment["CHRONOFRAME_APP_ENGINE"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -88,4 +95,5 @@ public enum RuntimePaths {
 
         return nil
     }
+    #endif
 }
