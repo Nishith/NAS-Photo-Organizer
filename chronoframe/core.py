@@ -7,7 +7,7 @@ import json
 import csv
 import yaml
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import defaultdict
 
 from rich.console import Console
@@ -19,7 +19,7 @@ from rich.prompt import Confirm
 from rich.panel import Panel
 
 from .database import CacheDB
-from .io import safe_copy_atomic, process_single_file, verify_copy, cleanup_tmp_files
+from .io import safe_copy_atomic, process_single_file, verify_copy, cleanup_tmp_files, fast_hash
 from .metadata import get_file_date, ALL_EXTS, SKIP_FILES, HAS_EXIFREAD
 
 SEQ_WIDTH = 3
@@ -45,12 +45,28 @@ def emit_json(msg_type, **kwargs):
 class RunLogger:
     """Appends to a persistent plain-text log alongside the DB and audit receipts."""
 
+    # Rotate when the active log exceeds this size. Keeps at most one prior
+    # generation as <log>.1 so total log footprint stays roughly bounded at 2x.
+    MAX_LOG_BYTES = 5 * 1024 * 1024
+
     def __init__(self, log_path):
         self.log_path = log_path
         self._fh = None
 
     def open(self):
         try:
+            if (os.path.exists(self.log_path)
+                    and os.path.getsize(self.log_path) > self.MAX_LOG_BYTES):
+                rotated = self.log_path + '.1'
+                if os.path.exists(rotated):
+                    try:
+                        os.remove(rotated)
+                    except OSError:
+                        pass
+                try:
+                    os.rename(self.log_path, rotated)
+                except OSError:
+                    pass
             self._fh = open(self.log_path, 'a')
         except OSError:
             self._fh = None
@@ -262,26 +278,36 @@ def generate_audit_receipt(
     jobs_executed,
     dest_path,
     *,
+    started_at=None,
     status="COMPLETED",
     abort_reason=None,
     attempted_count=None,
     failed_count=0,
     verify=False,
 ):
+    """Write an audit receipt JSON for a finished run.
+
+    ``started_at`` should be the datetime captured at the start of the run so
+    that ``startedAt`` and ``finishedAt`` accurately bound the run duration.
+    When omitted (legacy callers), we fall back to the current time, matching
+    the historical behaviour.
+    """
+    finished_at = datetime.now()
+    if started_at is None:
+        started_at = finished_at
     run_id = str(uuid.uuid4())
-    receipt_name = f"audit_receipt_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{run_id}.json"
+    receipt_name = f"audit_receipt_{finished_at.strftime('%Y%m%d_%H%M%S')}_{run_id}.json"
     log_dir = os.path.join(dest_path, ".organize_logs")
     os.makedirs(log_dir, exist_ok=True)
     rpath = os.path.join(log_dir, receipt_name)
     tmp_path = f"{rpath}.tmp"
-    now = datetime.now().isoformat()
     payload = {
         "schemaVersion": 2,
         "runID": run_id,
         "operation": "organize",
-        "timestamp": now,
-        "startedAt": now,
-        "finishedAt": now,
+        "timestamp": finished_at.isoformat(),
+        "startedAt": started_at.isoformat(),
+        "finishedAt": finished_at.isoformat(),
         "total_jobs": len(jobs_executed),
         "attempted_jobs": attempted_count if attempted_count is not None else len(jobs_executed),
         "failed_jobs": failed_count,
@@ -298,7 +324,15 @@ def generate_audit_receipt(
     return rpath
 
 
-def revert_receipt(receipt_path):
+def revert_receipt(receipt_path, dest_root_override=None):
+    """Revert a previous run using its audit receipt.
+
+    Every `dest` path in the receipt must resolve inside the destination
+    directory (the receipt's `..` if not overridden). Paths outside this
+    boundary are refused even if the BLAKE2b hash matches — this prevents
+    a crafted or accidentally edited receipt from deleting files anywhere
+    the user has write access.
+    """
     if not os.path.exists(receipt_path):
         console.print(f"[red]Receipt not found:[red] {receipt_path}")
         emit_json("error", message=f"Receipt not found: {receipt_path}")
@@ -312,6 +346,18 @@ def revert_receipt(receipt_path):
         emit_json("error", message=f"Invalid receipt: {e}")
         sys.exit(1)
 
+    # Derive the destination root that bounds permissible deletions.
+    # Receipts normally live at <dest>/.organize_logs/audit_receipt_*.json so
+    # the dest root is two levels up from the receipt path. Callers can
+    # override this by passing --dest (e.g. when the receipt has been moved).
+    if dest_root_override:
+        dest_root = os.path.abspath(dest_root_override)
+    else:
+        receipt_abs = os.path.abspath(receipt_path)
+        logs_dir = os.path.dirname(receipt_abs)
+        dest_root = os.path.dirname(logs_dir)
+    dest_prefix = os.path.normpath(dest_root) + os.sep
+
     transfers = data.get("transfers", [])
     if not transfers:
         console.print("[yellow]No transfers to revert.[/yellow]")
@@ -323,7 +369,7 @@ def revert_receipt(receipt_path):
     failed_count = 0
 
     emit_json("task_start", task="revert", total=len(transfers))
-    
+
     with Progress(
         SpinnerColumn(),
         TaskProgressColumn(),
@@ -337,7 +383,27 @@ def revert_receipt(receipt_path):
         for item in transfers:
             dst = item.get("dest")
             expected_hash = item.get("hash")
-            
+
+            # Refuse paths outside the destination boundary, even if the
+            # hash matches. A crafted receipt cannot escape <dest>/.
+            if dst:
+                dst_abs = os.path.normpath(os.path.abspath(dst))
+                if not dst_abs.startswith(dest_prefix):
+                    console.print(
+                        f"[red]Refusing to revert path outside destination:[/red] {dst}"
+                    )
+                    emit_json(
+                        "error",
+                        message=f"Receipt path outside destination boundary: {dst}",
+                    )
+                    failed_count += 1
+                    progress.advance(task_id)
+                    emit_json(
+                        "task_progress", task="revert",
+                        completed=reverted_count + failed_count, total=len(transfers),
+                    )
+                    continue
+
             if dst and os.path.exists(dst):
                 try:
                     # Optional: Verify it still has the same hash before destroying!
@@ -345,7 +411,7 @@ def revert_receipt(receipt_path):
                     if current_hash == expected_hash:
                         os.remove(dst)
                         reverted_count += 1
-                        
+
                         # Clean up directory if empty
                         d_dir = os.path.dirname(dst)
                         try:
@@ -360,7 +426,7 @@ def revert_receipt(receipt_path):
             else:
                 # Missing implies trivially reverted
                 pass
-            
+
             progress.advance(task_id)
             emit_json("task_progress", task="revert", completed=reverted_count + failed_count, total=len(transfers))
 
@@ -372,22 +438,33 @@ def revert_receipt(receipt_path):
 _MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+# Characters that are valid on macOS APFS but illegal or problematic on common
+# external filesystems (FAT32, NTFS, SMB shares). They are replaced with `_`
+# before the source folder name is reproduced in the destination path.
+_UNSAFE_PATH_CHARS = re.compile(r'[:<>|\\?*"]')
+
 
 def _event_subpath(src_path, src_root):
-    """Immediate parent folder name of the file, relative to source root; '' when the file sits at the root."""
+    """Immediate parent folder name of the file, relative to source root.
+
+    Returns '' when the file sits at the root. The result is sanitized for
+    cross-platform destinations so we never produce a path component that
+    cannot be created on FAT32/NTFS/SMB.
+    """
     try:
         rel = os.path.relpath(os.path.dirname(src_path), src_root)
     except ValueError:
         return ""
     if rel in ("", "."):
         return ""
-    return os.path.basename(rel)
+    return _UNSAFE_PATH_CHARS.sub('_', os.path.basename(rel))
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
 
 def main():
     args = parse_args()
+    run_started_at = datetime.now()
 
     if args.json:
         global _json_active, console
@@ -396,7 +473,7 @@ def main():
         emit_json("startup", status="initializing")
 
     if args.revert:
-        revert_receipt(args.revert)
+        revert_receipt(args.revert, dest_root_override=args.dest)
         return
 
     # Resolve paths
@@ -460,13 +537,15 @@ def main():
             if args.dry_run:
                 console.print("[cyan]Dry-run active — ignoring pending queue.[/cyan]")
             elif args.yes:
-                execute_jobs(pending_jobs, cache_db, dst, run_log, verify=verify_copies, workers=workers)
+                execute_jobs(pending_jobs, cache_db, dst, run_log, verify=verify_copies,
+                             workers=workers, started_at=run_started_at, verify_source=True)
                 run_log.log("Resumed session complete")
                 emit_json("complete", status="finished", dest=dst)
                 return
             else:
                 if Confirm.ask("Resume where you left off?"):
-                    execute_jobs(pending_jobs, cache_db, dst, run_log, verify=verify_copies, workers=workers)
+                    execute_jobs(pending_jobs, cache_db, dst, run_log, verify=verify_copies,
+                                 workers=workers, started_at=run_started_at, verify_source=True)
                     console.print("[bold green]Queue complete![/bold green]")
                     run_log.log("Resumed session complete")
                     emit_json("complete", status="finished", dest=dst)
@@ -597,7 +676,9 @@ def main():
                             file_dates[path] = future.result()
                         except Exception:
                             try:
-                                file_dates[path] = datetime.fromtimestamp(os.path.getmtime(path))
+                                file_dates[path] = datetime.fromtimestamp(
+                                    os.path.getmtime(path), timezone.utc
+                                ).replace(tzinfo=None)
                             except OSError:
                                 file_dates[path] = None
                         done += 1
@@ -765,7 +846,9 @@ def main():
                 return
 
         cache_db.enqueue_jobs(jobs_to_insert)
-        rpath = execute_jobs(cache_db.get_pending_jobs(), cache_db, dst, run_log, verify=verify_copies, workers=workers)
+        rpath = execute_jobs(cache_db.get_pending_jobs(), cache_db, dst, run_log,
+                             verify=verify_copies, workers=workers,
+                             started_at=run_started_at, verify_source=True)
 
         run_log.log("Run complete")
         emit_json("complete", status="finished", dest=dst, report=rpath)
@@ -775,7 +858,18 @@ def main():
         cache_db.close()
 
 
-def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, workers=DEFAULT_WORKERS):
+def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False,
+                 workers=DEFAULT_WORKERS, started_at=None, verify_source=False):
+    """Execute queued copy jobs.
+
+    ``verify_source`` re-hashes each source file before the copy and skips
+    jobs whose source content has changed since the plan was built. The
+    production entry point in ``main()`` opts in to this so a photo editor
+    that saved a new version of the file mid-run is reported clearly. Defaults
+    to False so unit tests can exercise the copy machinery with synthetic
+    hashes.
+    """
+    started_at = started_at or datetime.now()
     console.print(f"\n[bold cyan]Copying {len(pending_jobs)} files...[/bold cyan]")
     dest_updates = []
 
@@ -812,6 +906,41 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, w
         _STATUS_BATCH_SIZE = 50
         for src_p, dst_p, h in pending_jobs:
             attempted_count = count + 1
+
+            # Confirm the source still has the planned hash before copying.
+            # A photo editor that saved a new version of the file after we
+            # built the plan would otherwise be silently rebadged as a
+            # verification failure. Distinguishing this case gives the user
+            # actionable information and does not consume the failure budget.
+            if verify_source:
+                try:
+                    current_src_hash = fast_hash(src_p)
+                except OSError as src_err:
+                    msg = f"Source unreadable, skipping: {src_p}: {src_err}"
+                    emit_json("warning", message=msg)
+                    if run_log:
+                        run_log.warn(msg)
+                    status_updates.append((src_p, 'SKIPPED'))
+                    progress.advance(task_id)
+                    count += 1
+                    if len(status_updates) >= _STATUS_BATCH_SIZE:
+                        cache_db.update_job_statuses_batch(status_updates)
+                        status_updates = []
+                    continue
+
+                if current_src_hash != h:
+                    msg = f"Source modified since planning, skipping: {src_p}"
+                    emit_json("warning", message=msg)
+                    if run_log:
+                        run_log.warn(msg)
+                    status_updates.append((src_p, 'SKIPPED'))
+                    progress.advance(task_id)
+                    count += 1
+                    if len(status_updates) >= _STATUS_BATCH_SIZE:
+                        cache_db.update_job_statuses_batch(status_updates)
+                        status_updates = []
+                    continue
+
             try:
                 result = safe_copy_atomic(src_p, dst_p)
                 if verify:
@@ -902,6 +1031,7 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False, w
     return generate_audit_receipt(
         executed_log,
         dst_root,
+        started_at=started_at,
         status="ABORTED" if abort_reason else "COMPLETED",
         abort_reason=abort_reason,
         attempted_count=attempted_count,

@@ -427,6 +427,38 @@ class TestCacheDB(TempDirMixin, unittest.TestCase):
 
         db.close()
 
+    def test_concurrent_reads_and_writes_do_not_raise(self):
+        """Read methods must be lock-guarded so a concurrent write commit
+        cannot leave a cursor mid-iteration in an indeterminate state."""
+        import threading
+        db = CacheDB(os.path.join(self.tmpdir, "concurrent.db"))
+        errors = []
+
+        def writer():
+            for i in range(50):
+                try:
+                    db.save_batch(1, [(f"/src/{i}", f"3_h{i}", 3, 0.0)])
+                    db.enqueue_jobs([(f"/src/job{i}", f"/dst/job{i}", f"3_h{i}", "PENDING")])
+                except Exception as exc:  # noqa: BLE001 — test wants to surface anything
+                    errors.append(exc)
+
+        def reader():
+            for _ in range(50):
+                try:
+                    db.get_cache_dict(1)
+                    db.get_pending_jobs()
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(exc)
+
+        threads = [threading.Thread(target=writer) for _ in range(3)]
+        threads += [threading.Thread(target=reader) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        db.close()
+        self.assertEqual(errors, [])
+
 
 # ════════════════════════════════════════════════════════════════════════════
 # Metadata — get_date_from_filename
@@ -530,13 +562,17 @@ class TestGetFileDate(TempDirMixin, unittest.TestCase):
 
 
 class TestMDLSParsing(unittest.TestCase):
-    def test_mdls_timezone_offset(self):
+    def test_mdls_timezone_offset_normalizes_to_utc(self):
+        """+0000 stays the same wall-clock; -0800 advances 8 hours into UTC."""
         from chronoframe.metadata import parse_mdls_creation_date
-        # test mapping +0000 UTC output properly
-        dt = parse_mdls_creation_date("2024-06-15 12:00:00 +0000")
-        self.assertIsNotNone(dt)
-        # We don't strictly test the timezone offset size because it's localized to the test runner,
-        # but the parsing sequence shouldn't raise a ValueError.
+        self.assertEqual(
+            parse_mdls_creation_date("2024-06-15 12:00:00 +0000"),
+            datetime(2024, 6, 15, 12, 0, 0),
+        )
+        self.assertEqual(
+            parse_mdls_creation_date("2024-06-15 04:00:00 -0800"),
+            datetime(2024, 6, 15, 12, 0, 0),
+        )
 
 class TestRetryableError(unittest.TestCase):
     def test_permission_errors_are_not_retryable(self):
@@ -812,6 +848,29 @@ class TestAuditReceipt(TempDirMixin, unittest.TestCase):
         generate_audit_receipt([("/a", "/b", "h")], self.tmpdir)
         self.assertTrue(os.path.isdir(os.path.join(self.tmpdir, ".organize_logs")))
 
+    def test_started_at_and_finished_at_reflect_run_duration(self):
+        """When started_at is provided, the receipt records distinct timestamps."""
+        from datetime import datetime, timedelta
+        started = datetime.now() - timedelta(seconds=10)
+        path = generate_audit_receipt(
+            [("/a", "/b", "h")],
+            self.tmpdir,
+            started_at=started,
+        )
+        with open(path) as f:
+            data = json.load(f)
+        self.assertEqual(data["startedAt"], started.isoformat())
+        self.assertNotEqual(data["startedAt"], data["finishedAt"])
+        self.assertLess(data["startedAt"], data["finishedAt"])
+
+    def test_started_at_defaults_to_finished_at_for_legacy_callers(self):
+        """Without started_at, both timestamps equal — matches historical behaviour."""
+        path = generate_audit_receipt([("/a", "/b", "h")], self.tmpdir)
+        with open(path) as f:
+            data = json.load(f)
+        self.assertEqual(data["startedAt"], data["finishedAt"])
+
+
 class TestAuditReceiptReturnValue(TempDirMixin, unittest.TestCase):
     def test_returns_receipt_path(self):
         path = generate_audit_receipt([("/a", "/b", "h")], self.tmpdir)
@@ -967,6 +1026,36 @@ class TestRunLogger(TempDirMixin, unittest.TestCase):
         logger.open()  # Should not crash
         logger.log("message")  # Should not crash
         logger.close()
+
+    def test_rotates_when_log_exceeds_size_cap(self):
+        """When an existing log is past MAX_LOG_BYTES, the next open rotates it."""
+        log_path = os.path.join(self.tmpdir, "organize_log.txt")
+        # Pre-seed the log past the cap with a single big write.
+        with open(log_path, "wb") as f:
+            f.write(b"x" * (RunLogger.MAX_LOG_BYTES + 1024))
+
+        logger = RunLogger(log_path)
+        logger.open()
+        logger.log("post-rotation entry")
+        logger.close()
+
+        # Old contents should now live in <log>.1, fresh log starts small.
+        rotated = log_path + ".1"
+        self.assertTrue(os.path.exists(rotated))
+        self.assertGreater(os.path.getsize(rotated), RunLogger.MAX_LOG_BYTES)
+        self.assertLess(os.path.getsize(log_path), 1024)
+        with open(log_path) as f:
+            self.assertIn("post-rotation entry", f.read())
+
+    def test_does_not_rotate_under_cap(self):
+        log_path = os.path.join(self.tmpdir, "small.log")
+        with open(log_path, "w") as f:
+            f.write("small\n")
+        logger = RunLogger(log_path)
+        logger.open()
+        logger.log("appended")
+        logger.close()
+        self.assertFalse(os.path.exists(log_path + ".1"))
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1387,6 +1476,60 @@ class TestExecuteJobs(TempDirMixin, unittest.TestCase):
         # No crash with run_log=None
         execute_jobs(pending, db, dst_dir, run_log=None)
         self.assertTrue(os.path.exists(dst_path))
+        db.close()
+
+    def test_verify_source_skips_when_source_modified_after_planning(self):
+        """verify_source must catch files that were edited between plan and execute."""
+        from chronoframe.core import execute_jobs
+        from chronoframe.io import fast_hash as real_fast_hash
+        src_dir, dst_dir, db = self._setup_env()
+
+        src = os.path.join(src_dir, "photo.jpg")
+        with open(src, 'wb') as f:
+            f.write(b"original content")
+        planned_hash = real_fast_hash(src)
+
+        # Simulate a third-party app overwriting the file before execute reaches it.
+        with open(src, 'wb') as f:
+            f.write(b"modified content with different size and bytes")
+
+        dst_path = os.path.join(dst_dir, "2024-01-15_001.jpg")
+        db.enqueue_jobs([(src, dst_path, planned_hash, "PENDING")])
+        pending = db.get_pending_jobs()
+
+        execute_jobs(pending, db, dst_dir, verify_source=True)
+
+        # Job is SKIPPED — not FAILED — and no destination file was produced.
+        self.assertFalse(os.path.exists(dst_path),
+                         "Skipped jobs must not write to the destination")
+        cur = db.conn.execute(
+            "SELECT status FROM CopyJobs WHERE src_path = ?", (src,)
+        )
+        self.assertEqual(cur.fetchone()[0], "SKIPPED")
+        db.close()
+
+    def test_verify_source_skips_when_source_disappears_after_planning(self):
+        """If the source file is deleted between plan and execute, skip cleanly."""
+        from chronoframe.core import execute_jobs
+        from chronoframe.io import fast_hash as real_fast_hash
+        src_dir, dst_dir, db = self._setup_env()
+
+        src = os.path.join(src_dir, "photo.jpg")
+        with open(src, 'wb') as f:
+            f.write(b"original")
+        planned_hash = real_fast_hash(src)
+        os.remove(src)
+
+        dst_path = os.path.join(dst_dir, "2024-01-15_001.jpg")
+        db.enqueue_jobs([(src, dst_path, planned_hash, "PENDING")])
+        pending = db.get_pending_jobs()
+
+        execute_jobs(pending, db, dst_dir, verify_source=True)
+
+        cur = db.conn.execute(
+            "SELECT status FROM CopyJobs WHERE src_path = ?", (src,)
+        )
+        self.assertEqual(cur.fetchone()[0], "SKIPPED")
         db.close()
 
 
@@ -1870,13 +2013,21 @@ class TestExifreadParsing(TempDirMixin, unittest.TestCase):
 
 class TestMdlsParsing(TempDirMixin, unittest.TestCase):
 
-    def test_mdls_valid_date(self):
-        result = parse_mdls_creation_date("2023-06-15 10:30:00 +0000")
-        dt_utc = datetime.strptime("2023-06-15 10:30:00 +0000", '%Y-%m-%d %H:%M:%S %z')
-        from datetime import timezone
-        dt_local = dt_utc.astimezone()
-        expected = dt_local.replace(tzinfo=None)
-        self.assertEqual(result, expected)
+    def test_mdls_valid_date_returns_utc_naive(self):
+        """mdls timestamps are normalized to UTC-naive for tz-stable bucketing.
+
+        Structural guard: a regression that re-introduces `.astimezone()` (local
+        tz) would only pass the +0000 case. The non-zero offset case is the
+        teeth — it asserts UTC normalization across timezones.
+        """
+        self.assertEqual(
+            parse_mdls_creation_date("2023-06-15 10:30:00 +0000"),
+            datetime(2023, 6, 15, 10, 30, 0),
+        )
+        self.assertEqual(
+            parse_mdls_creation_date("2023-06-15 02:30:00 -0800"),
+            datetime(2023, 6, 15, 10, 30, 0),
+        )
 
     def test_mdls_null_result(self):
         result = parse_mdls_creation_date("(null)")
@@ -2055,24 +2206,24 @@ class TestFindProfilesYaml(unittest.TestCase):
 
 class TestCleanupTmpFiles(TempDirMixin, unittest.TestCase):
 
-    def test_removes_tmp_files(self):
-        self._mkfile("photo.jpg.tmp", b"partial write")
-        self._mkfile("video.mov.tmp", b"partial write")
+    def test_removes_chronoframe_tmp_files(self):
+        self._mkfile("2024-01-15_001.jpg.tmp", b"partial write")
+        self._mkfile("2024-01-15_002.mov.tmp", b"partial write")
         count = cleanup_tmp_files(self.tmpdir)
         self.assertEqual(count, 2)
-        self.assertFalse(os.path.exists(os.path.join(self.tmpdir, "photo.jpg.tmp")))
-        self.assertFalse(os.path.exists(os.path.join(self.tmpdir, "video.mov.tmp")))
+        self.assertFalse(os.path.exists(os.path.join(self.tmpdir, "2024-01-15_001.jpg.tmp")))
+        self.assertFalse(os.path.exists(os.path.join(self.tmpdir, "2024-01-15_002.mov.tmp")))
 
     def test_ignores_non_tmp_files(self):
-        self._mkfile("photo.jpg", b"complete file")
-        self._mkfile("video.mp4", b"complete file")
+        self._mkfile("2024-01-15_001.jpg", b"complete file")
+        self._mkfile("2024-01-15_002.mp4", b"complete file")
         count = cleanup_tmp_files(self.tmpdir)
         self.assertEqual(count, 0)
-        self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "photo.jpg")))
+        self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "2024-01-15_001.jpg")))
 
     def test_returns_correct_count(self):
         for i in range(5):
-            self._mkfile(f"file_{i}.jpg.tmp", b"data")
+            self._mkfile(f"2024-01-15_{i+1:03d}.jpg.tmp", b"data")
         count = cleanup_tmp_files(self.tmpdir)
         self.assertEqual(count, 5)
 
@@ -2081,14 +2232,14 @@ class TestCleanupTmpFiles(TempDirMixin, unittest.TestCase):
         self.assertEqual(count, 0)
 
     def test_nested_tmp_files(self):
-        self._mkfile("a/b/photo.jpg.tmp", b"partial")
-        self._mkfile("x/y/z/video.mp4.tmp", b"partial")
+        self._mkfile("a/b/2024-01-15_001.jpg.tmp", b"partial")
+        self._mkfile("x/y/z/2024-02-20_005.mp4.tmp", b"partial")
         count = cleanup_tmp_files(self.tmpdir)
         self.assertEqual(count, 2)
 
     def test_skips_dotdirs(self):
         """Files inside hidden directories (e.g. .organize_logs) are not touched."""
-        path = os.path.join(self.tmpdir, ".organize_logs", "something.tmp")
+        path = os.path.join(self.tmpdir, ".organize_logs", "2024-01-15_001.jpg.tmp")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'wb') as f:
             f.write(b"data")
@@ -2098,10 +2249,42 @@ class TestCleanupTmpFiles(TempDirMixin, unittest.TestCase):
 
     def test_unremovable_tmp_silently_skipped(self):
         """If os.remove raises (e.g. permissions), the error is silenced and count stays 0."""
-        self._mkfile("stuck.jpg.tmp", b"data")
+        self._mkfile("2024-01-15_001.jpg.tmp", b"data")
         with patch('chronoframe.io.os.remove', side_effect=OSError("permission denied")):
             count = cleanup_tmp_files(self.tmpdir)
         self.assertEqual(count, 0)
+
+    def test_does_not_delete_foreign_tmp_files(self):
+        """External .tmp files (e.g. from DaVinci Resolve) must survive cleanup."""
+        external = self._mkfile("Timeline_Export.tmp", b"resolve scratch")
+        editor_scratch = self._mkfile("autosave.tmp", b"editor scratch")
+        chrono = self._mkfile("2024-01-15_001.jpg.tmp", b"interrupted copy")
+
+        count = cleanup_tmp_files(self.tmpdir)
+
+        self.assertEqual(count, 1)
+        self.assertTrue(os.path.exists(external))
+        self.assertTrue(os.path.exists(editor_scratch))
+        self.assertFalse(os.path.exists(chrono))
+
+    def test_handles_unknown_date_tmp(self):
+        self._mkfile("Unknown_003.heic.tmp", b"partial")
+        count = cleanup_tmp_files(self.tmpdir)
+        self.assertEqual(count, 1)
+
+    def test_handles_collision_tmp(self):
+        self._mkfile("2024-03-10_005_collision_2.jpg.tmp", b"partial")
+        count = cleanup_tmp_files(self.tmpdir)
+        self.assertEqual(count, 1)
+
+    def test_handles_swift_uuid_suffix_tmp(self):
+        """Swift TransferExecutor uses an extra UUID segment for some retries."""
+        self._mkfile(
+            "2024-03-10_005.jpg.8F3A2C1D-8F3A-2C1D-8F3A-2C1D8F3A2C1D.tmp",
+            b"partial",
+        )
+        count = cleanup_tmp_files(self.tmpdir)
+        self.assertEqual(count, 1)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -2816,6 +2999,81 @@ class TestRevertReceiptErrorHandling(TempDirMixin, unittest.TestCase):
 
         self.assertTrue(os.path.exists(copied))
 
+    def test_revert_refuses_path_outside_destination(self):
+        """A crafted receipt referencing files outside the dest tree must be refused."""
+        # Layout: dest tree at <tmpdir>/dest/, receipt inside dest/.organize_logs/.
+        # An "outside" file lives in a separate tempdir.
+        dest_root = os.path.join(self.tmpdir, "dest")
+        logs_dir = os.path.join(dest_root, ".organize_logs")
+        os.makedirs(logs_dir)
+
+        outside_root = tempfile.mkdtemp()
+        try:
+            outside_file = os.path.join(outside_root, "tax_return.pdf")
+            with open(outside_file, "wb") as f:
+                f.write(b"important data")
+            outside_hash = fast_hash(outside_file)
+
+            receipt_path = os.path.join(logs_dir, "audit_receipt_crafted.json")
+            with open(receipt_path, "w") as f:
+                json.dump(
+                    {"transfers": [{"source": "/dev/null", "dest": outside_file, "hash": outside_hash}]},
+                    f,
+                )
+
+            revert_receipt(receipt_path)
+
+            self.assertTrue(
+                os.path.exists(outside_file),
+                "File outside destination must not be deleted by revert",
+            )
+        finally:
+            shutil.rmtree(outside_root, ignore_errors=True)
+
+    def test_revert_inside_destination_still_works(self):
+        """Sanity check: with the new boundary, valid receipts behave unchanged."""
+        dest_root = os.path.join(self.tmpdir, "dest")
+        logs_dir = os.path.join(dest_root, ".organize_logs")
+        os.makedirs(logs_dir)
+        inside = os.path.join(dest_root, "2024", "01", "15", "2024-01-15_001.jpg")
+        os.makedirs(os.path.dirname(inside))
+        with open(inside, "wb") as f:
+            f.write(b"content")
+
+        receipt_path = os.path.join(logs_dir, "audit_receipt_valid.json")
+        with open(receipt_path, "w") as f:
+            json.dump(
+                {"transfers": [{"source": "/camera/foo.jpg", "dest": inside, "hash": fast_hash(inside)}]},
+                f,
+            )
+
+        revert_receipt(receipt_path)
+
+        self.assertFalse(os.path.exists(inside))
+
+    def test_revert_with_dest_override_accepts_moved_receipt(self):
+        """If the receipt has been moved, --dest can supply the original boundary."""
+        # Destination tree
+        dest_root = os.path.join(self.tmpdir, "real_dest")
+        inside = os.path.join(dest_root, "2024", "01", "15", "2024-01-15_001.jpg")
+        os.makedirs(os.path.dirname(inside))
+        with open(inside, "wb") as f:
+            f.write(b"content")
+
+        # Receipt placed somewhere else (e.g. moved to a downloads folder)
+        moved_logs = os.path.join(self.tmpdir, "downloaded")
+        os.makedirs(moved_logs)
+        receipt_path = os.path.join(moved_logs, "audit_receipt_moved.json")
+        with open(receipt_path, "w") as f:
+            json.dump(
+                {"transfers": [{"source": "/camera/foo.jpg", "dest": inside, "hash": fast_hash(inside)}]},
+                f,
+            )
+
+        revert_receipt(receipt_path, dest_root_override=dest_root)
+
+        self.assertFalse(os.path.exists(inside))
+
 
 class TestEventSubpath(unittest.TestCase):
     def test_event_subpath_returnsImmediateParentBelowSourceRoot(self):
@@ -2828,6 +3086,24 @@ class TestEventSubpath(unittest.TestCase):
     def test_event_subpathTreatsRelpathErrorsAsNoEvent(self):
         with patch("chronoframe.core.os.path.relpath", side_effect=ValueError("different drives")):
             self.assertEqual(_event_subpath("/photos/IMG_0001.JPG", "/photos"), "")
+
+    def test_event_subpath_sanitizes_cross_platform_unsafe_chars(self):
+        """Folder names with characters illegal on FAT32/NTFS/SMB are replaced with _."""
+        self.assertEqual(
+            _event_subpath("/photos/2024:Hawaii/IMG_0001.JPG", "/photos"),
+            "2024_Hawaii",
+        )
+        self.assertEqual(
+            _event_subpath('/photos/A?B*C<D>E|F"G\\H/IMG_0001.JPG', "/photos"),
+            "A_B_C_D_E_F_G_H",
+        )
+
+    def test_event_subpath_preserves_safe_chars(self):
+        """Common safe characters (spaces, hyphens, dots, accents) survive untouched."""
+        self.assertEqual(
+            _event_subpath("/photos/2024-08 Mom's Birthday/IMG_0001.JPG", "/photos"),
+            "2024-08 Mom's Birthday",
+        )
 
 
 # ════════════════════════════════════════════════════════════════════════════

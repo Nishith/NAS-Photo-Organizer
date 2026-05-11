@@ -1,5 +1,6 @@
 import errno
 import os
+import re
 import stat as stat_module
 import shutil
 import hashlib
@@ -7,6 +8,15 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 HASH_CHUNK_SIZE = 8 * 1024 * 1024
 MAX_COLLISIONS = 9999
+
+# Matches Chronoframe's own .tmp files only — covers every variant our copy
+# pipelines produce. Update both sides if filename conventions change:
+#   - chronoframe/io.py: safe_copy_atomic() temp name (line ~119)
+#   - ui/Sources/ChronoframeCore/TransferExecutor.swift: chronoframeTmpPattern
+_CHRONOFRAME_TMP_RE = re.compile(
+    r'^(?:\d{4}-\d{2}-\d{2}|Unknown)_\d+(?:_collision_\d+)?'
+    r'\.[a-zA-Z0-9]+(?:\.[0-9a-fA-F-]{36})?\.tmp$'
+)
 
 
 def fast_hash(path, known_size=None):
@@ -53,12 +63,17 @@ def check_disk_space(src_path, dst_dir):
 
 
 def cleanup_tmp_files(dst_dir):
-    """Remove orphaned .tmp files left by interrupted copies. Returns count removed."""
+    """Remove Chronoframe's own orphaned .tmp files from interrupted copies.
+
+    Only files matching Chronoframe's destination naming pattern are removed.
+    Foreign .tmp files (from other applications using the same directory) are
+    left alone.
+    """
     cleaned = 0
     for root, dirs, fnames in os.walk(dst_dir):
         dirs[:] = [d for d in dirs if not d.startswith('.')]
         for fname in fnames:
-            if fname.endswith('.tmp'):
+            if _CHRONOFRAME_TMP_RE.match(fname):
                 path = os.path.join(root, fname)
                 try:
                     os.remove(path)

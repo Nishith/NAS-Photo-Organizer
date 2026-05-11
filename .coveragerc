@@ -1,0 +1,18 @@
+[run]
+source = chronoframe
+branch = True
+omit =
+    chronoframe/__main__.py
+    tests/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError
+    def __repr__
+show_missing = True
+skip_covered = False
+
+[xml]
+output = coverage.xml

@@ -45,8 +45,13 @@ class CacheDB:
             self.conn.commit()
 
     def get_cache_dict(self, type_id):
-        cur = self.conn.execute("SELECT path, hash, size, mtime FROM FileCache WHERE id = ?", (type_id,))
-        return {row[0]: {"hash": row[1], "size": row[2], "mtime": row[3]} for row in cur}
+        with self._lock:
+            cur = self.conn.execute(
+                "SELECT path, hash, size, mtime FROM FileCache WHERE id = ?",
+                (type_id,),
+            )
+            rows = cur.fetchall()
+        return {row[0]: {"hash": row[1], "size": row[2], "mtime": row[3]} for row in rows}
 
     def save_batch(self, type_id, updates):
         if not updates:
@@ -70,8 +75,11 @@ class CacheDB:
             self.conn.commit()
 
     def get_pending_jobs(self):
-        cur = self.conn.execute("SELECT src_path, dst_path, hash FROM CopyJobs WHERE status = 'PENDING'")
-        return cur.fetchall()
+        with self._lock:
+            cur = self.conn.execute(
+                "SELECT src_path, dst_path, hash FROM CopyJobs WHERE status = 'PENDING'"
+            )
+            return cur.fetchall()
 
     def update_job_status(self, src_path, status):
         with self._lock:

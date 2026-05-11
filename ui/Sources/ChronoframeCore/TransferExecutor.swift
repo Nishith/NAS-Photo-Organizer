@@ -76,6 +76,8 @@ struct TransferFileCopyStrategy: Sendable {
 }
 
 public final class PersistentRunLogger: @unchecked Sendable {
+    public static let maxLogBytes: UInt64 = 5 * 1024 * 1024
+
     public let logURL: URL
 
     // OSAllocatedUnfairLock guards all access to `handle`, making concurrent
@@ -95,6 +97,18 @@ public final class PersistentRunLogger: @unchecked Sendable {
             at: logURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+
+        // Rotate when the existing log is past the cap so the file stays bounded.
+        // We keep at most one prior generation as <log>.1 to mirror the Python
+        // RunLogger behaviour.
+        if FileManager.default.fileExists(atPath: logURL.path),
+           let attrs = try? FileManager.default.attributesOfItem(atPath: logURL.path),
+           let size = attrs[.size] as? UInt64,
+           size > Self.maxLogBytes {
+            let rotatedURL = logURL.appendingPathExtension("1")
+            try? FileManager.default.removeItem(at: rotatedURL)
+            try? FileManager.default.moveItem(at: logURL, to: rotatedURL)
+        }
 
         if !FileManager.default.fileExists(atPath: logURL.path) {
             FileManager.default.createFile(atPath: logURL.path, contents: Data())
@@ -150,6 +164,12 @@ public struct TransferExecutor: Sendable {
     public static let safetyBufferBytes: Int64 = 10 * 1024 * 1024
     public static let maxCollisionCount = 9_999
     public static let destinationCacheBatchSize = 256
+
+    // Matches Chronoframe's own .tmp files only. Update both sides if the
+    // filename convention changes (see chronoframe/io.py _CHRONOFRAME_TMP_RE).
+    private static let chronoframeTmpPattern: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"^(?:\d{4}-\d{2}-\d{2}|Unknown)_\d+(?:_collision_\d+)?\.[a-zA-Z0-9]+(?:\.[0-9a-fA-F-]{36})?\.tmp$"#
+    )
 
     public var fileHasher: FileIdentityHasher
     public var retryPolicy: RetryPolicy
@@ -210,9 +230,12 @@ public struct TransferExecutor: Sendable {
 
         var cleanedCount = 0
         for case let fileURL as URL in enumerator {
-            guard fileURL.lastPathComponent.hasSuffix(Self.orphanedTemporarySuffix) else {
-                continue
-            }
+            let filename = fileURL.lastPathComponent
+            guard filename.hasSuffix(Self.orphanedTemporarySuffix) else { continue }
+            guard let pattern = Self.chronoframeTmpPattern else { continue }
+
+            let range = NSRange(filename.startIndex..<filename.endIndex, in: filename)
+            guard pattern.firstMatch(in: filename, range: range) != nil else { continue }
 
             do {
                 try FileManager.default.removeItem(at: fileURL)

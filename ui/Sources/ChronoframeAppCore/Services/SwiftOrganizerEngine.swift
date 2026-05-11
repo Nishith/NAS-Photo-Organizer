@@ -144,6 +144,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                 let result = revertExecutor.revert(
                     receipt: receipt,
                     observer: observer,
+                    destinationBoundary: URL(fileURLWithPath: destinationRoot, isDirectory: true),
                     isCancelled: { isCancelledRef.isCancelled }
                 )
 

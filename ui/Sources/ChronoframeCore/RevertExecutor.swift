@@ -148,10 +148,17 @@ public struct RevertExecutor: Sendable {
     /// `chronoframe.core.revert_receipt`: a destination file is removed only when
     /// its current BLAKE2b identity still matches the value recorded at copy time.
     /// Modified or replaced files are left in place.
+    ///
+    /// When `destinationBoundary` is supplied, any transfer whose `dest` path
+    /// resolves outside that directory is refused even if the hash matches.
+    /// Production callers should always pass the run's destination root so a
+    /// crafted or accidentally edited receipt cannot reach files outside the
+    /// organized library.
     @discardableResult
     public func revert(
         receipt: RevertReceipt,
         observer: RevertExecutionObserver = RevertExecutionObserver(),
+        destinationBoundary: URL? = nil,
         isCancelled: @escaping @Sendable () -> Bool = { false }
     ) -> RevertExecutionResult {
         let transfers = receipt.transfers
@@ -161,6 +168,10 @@ public struct RevertExecutor: Sendable {
         var skippedCount = 0
         var missingCount = 0
 
+        let boundaryPath: String? = destinationBoundary.map {
+            $0.standardizedFileURL.path
+        }
+
         for transfer in transfers {
             if isCancelled() {
                 break
@@ -168,6 +179,23 @@ public struct RevertExecutor: Sendable {
 
             let destinationPath = transfer.dest
             let destinationURL = URL(fileURLWithPath: destinationPath)
+
+            if let boundaryPath {
+                let resolvedPath = destinationURL.standardizedFileURL.path
+                let isInside = resolvedPath == boundaryPath
+                    || resolvedPath.hasPrefix(boundaryPath + "/")
+                if !isInside {
+                    skippedCount += 1
+                    observer.onIssue(
+                        RunIssue(
+                            severity: .warning,
+                            message: "Refusing to revert path outside destination: \(destinationPath)"
+                        )
+                    )
+                    observer.onTaskProgress(revertedCount + skippedCount, transfers.count)
+                    continue
+                }
+            }
 
             if !fileManager.fileExists(atPath: destinationPath) {
                 // Python parity: missing destination is counted as trivially reverted

@@ -39,9 +39,11 @@ def parse_mdls_creation_date(raw_value):
         return None
 
     try:
+        # mdls emits tz-aware strings like "2024-06-15 19:00:00 +0000".
+        # Normalize to UTC and strip tz so date buckets are timezone-stable
+        # and match Swift's MediaDateResolver (which uses UTC throughout).
         dt = datetime.strptime(val, '%Y-%m-%d %H:%M:%S %z')
-        dt_local = dt.astimezone()
-        return dt_local.replace(tzinfo=None)
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
     except ValueError:
         pass
 
