@@ -15,6 +15,7 @@ struct DeduplicateView: View {
     @State private var focusedClusterID: UUID?
     @State private var focusedMemberPath: String?
     @State private var showingCommitConfirmation = false
+    @State private var showingCommitReviewedConfirmation = false
     @State private var showingRapidTriage = false
     @AppStorage("didOnboardDeduplicate") private var didOnboardDeduplicate = false
 
@@ -322,6 +323,27 @@ struct DeduplicateView: View {
         } message: {
             Text("Files will move to the macOS Trash. The dedupe receipt in Run History can revert this.")
         }
+        .confirmationDialog(
+            reviewedCommitDialogTitle,
+            isPresented: $showingCommitReviewedConfirmation
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                appState.commitReviewedDeduplicateDecisions()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Only groups you have fully reviewed will be affected. Unreviewed groups stay untouched. The dedupe receipt in Run History can revert this.")
+        }
+    }
+
+    private var reviewedCommitDialogTitle: String {
+        let plan = sessionStore.reviewedDeletionPlan()
+        let count = plan.count
+        let reviewed = sessionStore.reviewedClusters.count
+        if count == 0 {
+            return "No deletions in reviewed groups"
+        }
+        return "Move \(count) file\(count == 1 ? "" : "s") from \(reviewed) reviewed group\(reviewed == 1 ? "" : "s") to Trash?"
     }
 
     private func commitFooterWide(toDelete: Int, bytes: Int64, hardDelete: Bool) -> some View {
@@ -431,6 +453,15 @@ struct DeduplicateView: View {
                 .accessibilityLabel("Accept High-Confidence Clusters")
                 .accessibilityIdentifier("dedupeAcceptHighConfidenceButton")
                 .accessibilityHint("Accepts suggestions for all high-confidence clusters")
+            }
+
+            let reviewedCount = sessionStore.reviewedClusters.count
+            if reviewedCount > 0 {
+                Divider()
+                Button("Move Reviewed to Trash (\(reviewedCount) group\(reviewedCount == 1 ? "" : "s"))") {
+                    showingCommitReviewedConfirmation = true
+                }
+                .accessibilityIdentifier("dedupeCommitReviewedButton")
             }
         } label: {
             Label("Options", systemImage: "ellipsis.circle")

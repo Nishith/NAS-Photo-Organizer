@@ -94,6 +94,66 @@ public final class DeduplicateSessionStore: ObservableObject {
         currentDeletionPlan().count
     }
 
+    /// Clusters where every member has an explicit user decision.
+    public var reviewedClusters: [DuplicateCluster] {
+        clusters.filter { cluster in
+            cluster.members.allSatisfy { decisions.byPath[$0.path] != nil }
+        }
+    }
+
+    /// Deletion plan scoped to reviewed clusters only.
+    public func reviewedDeletionPlan() -> DeduplicationPlan {
+        guard let configuration = lastScanConfiguration else {
+            return DeduplicationPlan(items: [])
+        }
+        return DeduplicationPlanner.plan(
+            decisions: decisions,
+            clusters: reviewedClusters,
+            configuration: configuration
+        )
+    }
+
+    /// Commits delete decisions for reviewed clusters only; unreviewed clusters
+    /// remain in the session untouched.
+    public func commitReviewed(
+        configuration: DeduplicateConfiguration,
+        securityScope: SecurityScopedFolderAccess? = nil
+    ) {
+        cancelStream()
+        self.securityScope = securityScope
+        commitSummary = nil
+        isHandlingRevert = false
+        status = .committing
+        let commitConfiguration = lastScanConfiguration ?? configuration
+        activeCommitConfiguration = commitConfiguration
+        do {
+            let stream = try engine.commit(
+                decisions: decisions,
+                clusters: reviewedClusters,
+                configuration: commitConfiguration
+            )
+            streamTask = Task { [weak self] in
+                do {
+                    for try await event in stream {
+                        await MainActor.run { [weak self] in
+                            self?.consumeCommit(event)
+                        }
+                    }
+                } catch {
+                    await MainActor.run { [weak self] in
+                        self?.status = .failed(error.localizedDescription)
+                        self?.lastErrorMessage = error.localizedDescription
+                        self?.closeSecurityScope()
+                    }
+                }
+            }
+        } catch {
+            status = .failed(error.localizedDescription)
+            lastErrorMessage = error.localizedDescription
+            closeSecurityScope()
+        }
+    }
+
     public var hasPausedReview: Bool {
         status == .idle && !clusters.isEmpty && lastScanConfiguration != nil
     }
