@@ -185,10 +185,10 @@ struct ClusterDetailPane: View {
 
             Divider().padding(.vertical, 2)
 
-            metaRow("Quality", value: String(format: "%.2f", member.qualityScore))
-            metaRow("Sharpness", value: String(format: "%.2f", member.sharpness))
+            qualityRow("Quality", score: member.qualityScore)
+            sharpnessRow("Sharpness", score: member.sharpness)
             if let face = member.faceScore {
-                metaRow("Face score", value: String(format: "%.2f", face))
+                faceRow("Face", detected: face > 0.5)
             }
             if member.isRaw {
                 Label("RAW", systemImage: "camera.aperture")
@@ -224,6 +224,71 @@ struct ClusterDetailPane: View {
             Spacer()
             Text(value)
                 .font(.caption.monospacedDigit())
+        }
+    }
+
+    private func qualityRow(_ label: String, score: Double) -> some View {
+        let (filled, text) = Self.qualityLabel(score)
+        return HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            HStack(spacing: 3) {
+                ForEach(0..<5, id: \.self) { i in
+                    Circle()
+                        .fill(i < filled ? DesignTokens.ColorSystem.accentAction : DesignTokens.ColorSystem.hairline)
+                        .frame(width: 5, height: 5)
+                }
+            }
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+        }
+        .help(String(format: "Raw score: %.2f", score))
+    }
+
+    private func sharpnessRow(_ label: String, score: Double) -> some View {
+        let text = Self.sharpnessLabel(score)
+        return HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+        }
+        .help(String(format: "Raw score: %.2f", score))
+    }
+
+    private func faceRow(_ label: String, detected: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Label(detected ? "Detected" : "None", systemImage: detected ? "person.fill" : "person.slash")
+                .font(.caption)
+                .foregroundStyle(detected ? DesignTokens.ColorSystem.statusSuccess : DesignTokens.ColorSystem.inkMuted)
+        }
+    }
+
+    private static func qualityLabel(_ score: Double) -> (Int, String) {
+        switch score {
+        case 0.8...: return (5, "Excellent")
+        case 0.6..<0.8: return (4, "Good")
+        case 0.4..<0.6: return (3, "Fair")
+        case 0.2..<0.4: return (2, "Poor")
+        default: return (1, "Very poor")
+        }
+    }
+
+    private static func sharpnessLabel(_ score: Double) -> String {
+        switch score {
+        case 0.5...: return "Sharp"
+        case 0.25..<0.5: return "Soft"
+        default: return "Motion blur"
         }
     }
 

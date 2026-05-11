@@ -401,19 +401,19 @@ struct DeduplicateView: View {
         highCount: Int,
         density: CommitFooterButtonDensity
     ) -> some View {
-        Button(density.changeFolderTitle) {
-            abandonReview()
-        }
-        .accessibilityIdentifier("dedupeReviewChangeFolderButton")
-        .accessibilityHint("Abandons this review and returns to Deduplicate setup")
+        Menu {
+            Button("Change Folder") {
+                abandonReview()
+            }
+            .accessibilityIdentifier("dedupeReviewChangeFolderButton")
 
-        Button(density.settingsTitle) {
-            pauseReviewAndOpenSettings()
-        }
-        .accessibilityIdentifier("dedupeReviewSettingsButton")
-        .accessibilityHint("Keeps this scan available and opens Deduplicate settings")
+            Button("Adjust Settings") {
+                pauseReviewAndOpenSettings()
+            }
+            .accessibilityIdentifier("dedupeReviewSettingsButton")
 
-        Menu("Review") {
+            Divider()
+
             Button("Quick Review") {
                 showingRapidTriage = true
             }
@@ -428,6 +428,8 @@ struct DeduplicateView: View {
                 .accessibilityIdentifier("dedupeAcceptHighConfidenceButton")
                 .accessibilityHint("Accepts suggestions for all high-confidence clusters")
             }
+        } label: {
+            Label("Options", systemImage: "ellipsis.circle")
         }
         .accessibilityIdentifier("dedupeReviewActionsMenu")
         .sheet(isPresented: $showingRapidTriage) {
@@ -458,7 +460,9 @@ struct DeduplicateView: View {
         .accessibilityIdentifier("dedupeAcceptAllSuggestionsButton")
         .accessibilityHint("Marks every cluster's suggested keeper as keep and the rest as delete")
 
-        Button(density.commitTitle, role: .destructive) {
+        Spacer().frame(width: DesignTokens.Spacing.lg)
+
+        Button(density.commitTitle(fileCount: toDelete), role: .destructive) {
             showingCommitConfirmation = true
         }
         .keyboardShortcut(.return, modifiers: .command)
@@ -697,10 +701,12 @@ private enum CommitFooterButtonDensity {
         }
     }
 
-    var commitTitle: String {
+    func commitTitle(fileCount: Int) -> String {
         switch self {
-        case .full: return "Move Duplicates to Trash"
-        case .compact: return "Move to Trash"
+        case .full:
+            return fileCount > 0 ? "Move \(fileCount) File\(fileCount == 1 ? "" : "s") to Trash" : "Move to Trash"
+        case .compact:
+            return "Move to Trash"
         }
     }
 }

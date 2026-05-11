@@ -256,9 +256,13 @@ struct RunHistoryView: View {
     private func transferredSourceRow(for record: TransferredSourceRecord) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.md) {
             VStack(alignment: .leading, spacing: 4) {
+                Text(URL(fileURLWithPath: record.sourcePath).lastPathComponent)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+                    .lineLimit(1)
                 Text(record.sourcePath)
                     .font(DesignTokens.Typography.mono)
-                    .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
                     .lineLimit(1)
                     .truncationMode(.middle)
 

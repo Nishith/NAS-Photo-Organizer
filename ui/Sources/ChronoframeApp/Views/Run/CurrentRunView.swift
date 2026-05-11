@@ -42,20 +42,24 @@ struct CurrentRunView: View {
                     )
                 }
 
-                RunTimelineView(model: model)
+                if model.isBlankIdle {
+                    RunIdleOnboardingCard()
+                } else {
+                    RunTimelineView(model: model)
 
-                if showsNowCopying {
-                    NowCopyingCard(model: model)
+                    if showsNowCopying {
+                        NowCopyingCard(model: model)
+                    }
+
+                    RunTickerSection(model: model)
+
+                    RunWorkspaceShell(
+                        model: model,
+                        workspaceTab: $workspaceTab,
+                        appState: appState,
+                        previewReviewStore: previewReviewStore
+                    )
                 }
-
-                RunTickerSection(model: model)
-
-                RunWorkspaceShell(
-                    model: model,
-                    workspaceTab: $workspaceTab,
-                    appState: appState,
-                    previewReviewStore: previewReviewStore
-                )
             }
             .padding(DesignTokens.Layout.contentPadding)
             .frame(maxWidth: DesignTokens.Layout.contentMaxWidth, alignment: .leading)

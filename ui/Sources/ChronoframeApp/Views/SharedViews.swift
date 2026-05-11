@@ -509,6 +509,8 @@ struct EmptyStateView: View {
     let title: String
     let message: String
     let systemImage: String
+    var actionLabel: String? = nil
+    var action: (() -> Void)? = nil
 
     var body: some View {
         MeridianSurfaceCard(style: .standard) {
@@ -521,6 +523,12 @@ struct EmptyStateView: View {
                     .font(DesignTokens.Typography.subtitle)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+                if let actionLabel, let action {
+                    Button(actionLabel, action: action)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.regular)
+                        .padding(.top, 4)
+                }
             }
             .frame(maxWidth: .infinity, minHeight: 160)
         }

@@ -10,6 +10,18 @@ struct SetupHeroSection: View {
     let scrollToSource: () -> Void
     let scrollToDestination: () -> Void
 
+    private var heroSystemImage: String {
+        switch model.heroTone {
+        case .ready: return "checkmark.circle.fill"
+        case .warning: return "folder.badge.plus"
+        default: return "photo.on.rectangle.angled"
+        }
+    }
+
+    private var useBrandMark: Bool {
+        model.heroTone == .idle
+    }
+
     var body: some View {
         DetailHeroCard(
             title: "Setup",
@@ -17,8 +29,8 @@ struct SetupHeroSection: View {
             badgeTitle: model.heroBadgeTitle,
             badgeSystemImage: model.heroBadgeSymbol,
             tint: model.heroTone.color,
-            systemImage: "photo.on.rectangle.angled",
-            usesBrandMark: true
+            systemImage: heroSystemImage,
+            usesBrandMark: useBrandMark
         ) {
             VStack(alignment: .leading, spacing: 12) {
                 SummaryLine(title: "Source", value: model.sourceSummaryValue, valueColor: model.sourceStepState.tone.color, onTap: scrollToSource)
@@ -166,6 +178,11 @@ struct SetupSourceStepSection: View {
     let dropZone: SetupDropZone
     let chooseSource: () -> Void
 
+    private var sourceIsReady: Bool {
+        if case .ready = model.sourceStepState { return true }
+        return false
+    }
+
     var body: some View {
         setupStepCard(
             stepTitle: "1. Source",
@@ -173,7 +190,11 @@ struct SetupSourceStepSection: View {
             stepState: model.sourceStepState
         ) {
             VStack(alignment: .leading, spacing: 12) {
-                dropZone
+                if !sourceIsReady {
+                    dropZone
+                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                        .animation(Motion.filmic, value: sourceIsReady)
+                }
 
                 MeridianSurfaceCard(style: .inner, tint: model.sourceStepState.tone.color) {
                     ViewThatFits(in: .horizontal) {

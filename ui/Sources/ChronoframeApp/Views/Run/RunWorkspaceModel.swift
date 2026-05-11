@@ -343,6 +343,12 @@ struct RunWorkspaceModel {
         context.currentPhase != nil || context.status == .running
     }
 
+    /// True when no run has ever completed and the session is idle —
+    /// used to replace empty placeholder sections with onboarding copy.
+    var isBlankIdle: Bool {
+        context.status == .idle && context.metrics.discoveredCount == 0
+    }
+
     var progressAccessibilityValue: String {
         if context.status == .running
             && context.progress == 0
