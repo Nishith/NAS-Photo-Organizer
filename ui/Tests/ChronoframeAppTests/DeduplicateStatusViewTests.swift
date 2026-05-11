@@ -102,13 +102,16 @@ final class DeduplicateStatusViewTests: XCTestCase {
 
     // MARK: - Breakpoint value guard (design-critique fix #3)
 
-    func testReviewLayoutBreakpointIs600SoHorizontalLayoutActivatesOnNarrowWindows() {
-        // The breakpoint was deliberately lowered from 840 → 600 so the
-        // HSplitView list+detail layout is the default at any practical
-        // content-area width (900pt window – 248pt sidebar ≈ 652pt).
-        XCTAssertEqual(DesignTokens.DeduplicateLayout.reviewWideBreakpoint, 600, accuracy: 0.5)
-        XCTAssertEqual(DeduplicateReviewLayout.mode(forWidth: 600), .wide)
-        XCTAssertEqual(DeduplicateReviewLayout.mode(forWidth: 599), .compact)
+    func testReviewLayoutBreakpointIs700SoHorizontalLayoutActivatesAboveColumnMinimums() {
+        // The breakpoint was lowered from 840 → 700. The HSplitView column
+        // minimums are 260 (list) + 420 (detail) = 680pt; 700 gives a safe
+        // margin while still activating wide layout on any window wider than
+        // the 900pt minimum (900 – 248pt sidebar = 652pt < 700 → compact).
+        XCTAssertEqual(DesignTokens.DeduplicateLayout.reviewWideBreakpoint, 700, accuracy: 0.5)
+        XCTAssertEqual(DeduplicateReviewLayout.mode(forWidth: 700), .wide)
+        XCTAssertEqual(DeduplicateReviewLayout.mode(forWidth: 699), .compact)
+        // Minimum window (652pt content) stays in compact — no column overflow
+        XCTAssertEqual(DeduplicateReviewLayout.mode(forWidth: 652), .compact)
     }
 
     // MARK: - Commit button density (design-critique fix #1)
