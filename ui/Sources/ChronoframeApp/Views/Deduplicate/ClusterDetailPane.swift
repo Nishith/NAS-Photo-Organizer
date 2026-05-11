@@ -147,10 +147,10 @@ struct ClusterDetailPane: View {
         HStack(alignment: .top, spacing: DesignTokens.Spacing.lg) {
             preview(for: focused)
                 .frame(minWidth: 160, maxWidth: .infinity, maxHeight: .infinity)
+                .layoutPriority(1)
             if let focused {
                 metadataPanel(for: focused, cluster: cluster)
-                    .frame(minWidth: 160, idealWidth: 240, maxWidth: 260)
-                    .layoutPriority(1)
+                    .frame(width: 200)
             }
         }
         .padding(DesignTokens.Spacing.lg)
