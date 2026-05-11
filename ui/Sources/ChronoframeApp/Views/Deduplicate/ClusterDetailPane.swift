@@ -121,7 +121,7 @@ struct ClusterDetailPane: View {
     }
 
     private func memberThumbnailStrip(cluster: DuplicateCluster, thumbnailSize: CGFloat) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal, showsIndicators: true) {
             HStack(spacing: 8) {
                 ForEach(cluster.members) { member in
                     memberThumb(member: member, cluster: cluster, thumbnailSize: thumbnailSize)
