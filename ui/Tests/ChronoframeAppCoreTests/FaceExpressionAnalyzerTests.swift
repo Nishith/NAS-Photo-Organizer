@@ -137,4 +137,58 @@ final class FaceExpressionAnalyzerTests: XCTestCase {
         let score = FaceExpressionAnalyzer.eyesOpenScore(leftPoints: leftPoints, rightPoints: rightPoints)
         XCTAssertGreaterThan(score, 0.8)
     }
+
+    func testEyeOpennessFewerThanSixPoints() {
+        let score = FaceExpressionAnalyzer.eyeOpenness(points: [CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 1)])
+        XCTAssertEqual(score, 0.5)
+    }
+
+    func testEyeOpennessZeroWidth() {
+        // All points share the same x — width collapses to 0, guard fires
+        let zeroWidthPoints = (0..<6).map { CGPoint(x: 5, y: Double($0)) }
+        let score = FaceExpressionAnalyzer.eyeOpenness(points: zeroWidthPoints)
+        XCTAssertEqual(score, 0.5)
+    }
+
+    func testSmileScoreFewerThanSixPoints() {
+        let score = FaceExpressionAnalyzer.smileScore(points: [CGPoint(x: 0, y: 0)])
+        XCTAssertEqual(score, 0.0)
+    }
+
+    func testSmileScoreZeroHeight() {
+        // All points at the same y — mouthHeight is 0, guard fires
+        let flatPoints = (0..<6).map { CGPoint(x: Double($0), y: 5.0) }
+        let score = FaceExpressionAnalyzer.smileScore(points: flatPoints)
+        XCTAssertEqual(score, 0.0)
+    }
+
+    func testLaplacianVarianceTinyImage() {
+        // 2×2 image triggers the `guard w > 2, h > 2` early return
+        let w = 2, h = 2
+        var pixels = [UInt8](repeating: 128, count: w * h)
+        let ctx = CGContext(
+            data: &pixels, width: w, height: h,
+            bitsPerComponent: 8, bytesPerRow: w,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        )!
+        let result = FaceExpressionAnalyzer.laplacianVariance(cgImage: ctx.makeImage()!)
+        XCTAssertEqual(result, 0.0)
+    }
+
+    func testResultDefaultInit() {
+        let r = FaceExpressionAnalyzer.Result()
+        XCTAssertEqual(r.eyesOpenConfidence, 0)
+        XCTAssertEqual(r.smileConfidence, 0)
+        XCTAssertEqual(r.subjectSharpness, 0)
+        XCTAssertEqual(r.subjectMotionBlur, 0)
+    }
+
+    func testResultEquality() {
+        let a = FaceExpressionAnalyzer.Result(eyesOpenConfidence: 0.9, smileConfidence: 0.5,
+                                               subjectSharpness: 0.8, subjectMotionBlur: 0.1)
+        let b = FaceExpressionAnalyzer.Result(eyesOpenConfidence: 0.9, smileConfidence: 0.5,
+                                               subjectSharpness: 0.8, subjectMotionBlur: 0.1)
+        XCTAssertEqual(a, b)
+    }
 }

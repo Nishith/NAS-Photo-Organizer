@@ -54,8 +54,31 @@ final class BackgroundDedupeMonitorTests: XCTestCase {
     func testBackgroundDedupeMonitorIncrementalScanError() async throws {
         let monitor = BackgroundDedupeMonitor()
         let config = DeduplicateConfiguration(destinationPath: "/non/existent/path")
-        
+
         // Direct call to trigger scanner error and catch block
         await monitor.runIncrementalScan(changedPaths: ["/non/existent/path/trigger.jpg"], configuration: config)
+    }
+
+    func testStartMonitoringWithAdditionalSources() {
+        let monitor = BackgroundDedupeMonitor()
+        let source = CrossFolderSource(path: "/tmp/extra_source")
+        let config = DeduplicateConfiguration(
+            destinationPath: "/tmp/dest",
+            additionalSources: [source]
+        )
+        monitor.startMonitoring(configuration: config)
+        XCTAssertTrue(monitor.isMonitoring)
+        monitor.stopMonitoring()
+        XCTAssertFalse(monitor.isMonitoring)
+    }
+
+    func testScheduleIncrementalScanCancelledOnStop() {
+        let monitor = BackgroundDedupeMonitor()
+        let config = DeduplicateConfiguration(destinationPath: "/tmp/fake")
+        monitor.startMonitoring(configuration: config)
+        // Queue a debounced scan then immediately stop — exercises the cancel path
+        monitor.scheduleIncrementalScan(changedPaths: ["/tmp/fake/photo.jpg"])
+        monitor.stopMonitoring()
+        XCTAssertFalse(monitor.isMonitoring)
     }
 }
