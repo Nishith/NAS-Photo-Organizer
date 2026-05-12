@@ -116,7 +116,7 @@ final class DryRunPlannerExtraTests: XCTestCase {
         
         let dbURL = destDir.appendingPathComponent(".organize_cache.db")
         let database = try OrganizerDatabase(url: dbURL)
-        
+
         let fakePath = destDir.appendingPathComponent("missing.jpg").path
         let fakeRecord = RawFileCacheRecord(
             namespace: .destination,
@@ -127,10 +127,10 @@ final class DryRunPlannerExtraTests: XCTestCase {
         )
         try database.saveRawCacheRecords([fakeRecord])
         database.close()
-        
+
         let planner = DryRunPlanner()
         _ = try planner.plan(sourceRoot: sourceDir, destinationRoot: destDir, fastDestination: true)
-        
+
         let dbAfter = try OrganizerDatabase(url: dbURL)
         defer { dbAfter.close() }
         var records = [RawFileCacheRecord]()
