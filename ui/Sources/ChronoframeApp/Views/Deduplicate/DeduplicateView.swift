@@ -49,12 +49,7 @@ struct DeduplicateView: View {
             }
         }
         .navigationTitle("Deduplicate")
-        .onDisappear { thumbnailLoader.cancelAll() }
-        .onChange(of: preferencesStore.dedupeAllowHardDelete) { allowHardDelete in
-            if !allowHardDelete {
-                hardDeleteForThisCommit = false
-            }
-        }
+
     }
 
     // MARK: - Idle
@@ -304,50 +299,11 @@ struct DeduplicateView: View {
         let plan = sessionStore.currentDeletionPlan()
         let toDelete = plan.count
         let bytes = plan.totalBytes
-<<<<<<< HEAD
         let hardDelete = false
         return ViewThatFits(in: .horizontal) {
             commitFooterWide(toDelete: toDelete, bytes: bytes, hardDelete: hardDelete)
             commitFooterMedium(toDelete: toDelete, bytes: bytes, hardDelete: hardDelete)
             commitFooterCompact(toDelete: toDelete, bytes: bytes, hardDelete: hardDelete)
-=======
-        let hardDelete = isHardDeleteSelected
-        return HStack(spacing: DesignTokens.Spacing.md) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(Self.commitFooterTitle(fileCount: toDelete, hardDelete: hardDelete))
-                    .font(.subheadline.weight(.semibold))
-                Text(Self.commitFooterDetail(byteCount: bytes, hardDelete: hardDelete))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if preferencesStore.dedupeAllowHardDelete {
-                Menu {
-                    Toggle("Permanently delete (skip Trash)", isOn: $hardDeleteForThisCommit)
-                } label: {
-                    Label("Options", systemImage: "ellipsis.circle")
-                        .accessibilityLabel("Commit options")
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("Commit options, including whether selected files move to Trash or are permanently deleted")
-            }
-            Button("Accept All Suggestions") {
-                sessionStore.acceptAllSuggestions()
-            }
-            .keyboardShortcut(.return, modifiers: [.command, .shift])
-            .accessibilityHint("Marks every cluster's suggested keeper as keep and the rest as delete")
-            Button("Commit", role: .destructive) {
-                showingCommitConfirmation = true
-            }
-            .keyboardShortcut(.return, modifiers: .command)
-            .buttonStyle(.borderedProminent)
-            .disabled(toDelete == 0 || sessionStore.status == .committing)
-            .accessibilityHint(hardDelete
-                ? "Permanently deletes the selected files after confirmation"
-                : "Moves the selected files to the Trash after confirmation")
->>>>>>> origin/codex/dedupe-ux-review-fixes
         }
         .padding(DesignTokens.Spacing.md)
         .frame(maxWidth: .infinity)
@@ -355,36 +311,18 @@ struct DeduplicateView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("dedupeCommitFooter")
         .confirmationDialog(
-<<<<<<< HEAD
             "Move \(toDelete) file\(toDelete == 1 ? "" : "s") to Trash?",
             isPresented: $showingCommitConfirmation
         ) {
             Button("Move to Trash", role: .destructive) {
                 sessionStore.decisions = DedupeDecisions(
                     byPath: sessionStore.decisions.byPath
-=======
-            hardDelete
-                ? "Permanently delete \(toDelete) file\(toDelete == 1 ? "" : "s")?"
-                : "Move \(toDelete) file\(toDelete == 1 ? "" : "s") to Trash?",
-            isPresented: $showingCommitConfirmation
-        ) {
-            Button(hardDelete ? "Permanently Delete" : "Move to Trash", role: .destructive) {
-                sessionStore.decisions = DedupeDecisions(
-                    byPath: sessionStore.decisions.byPath,
-                    hardDelete: hardDelete
->>>>>>> origin/codex/dedupe-ux-review-fixes
                 )
                 appState.commitDeduplicateDecisions()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-<<<<<<< HEAD
             Text("Files will move to the macOS Trash. The dedupe receipt in Run History can revert this.")
-=======
-            Text(hardDelete
-                ? "Files will be unlinked from disk immediately and cannot be recovered."
-                : "Files will move to the macOS Trash. The dedupe receipt in Run History can revert this.")
->>>>>>> origin/codex/dedupe-ux-review-fixes
         }
         .confirmationDialog(
             reviewedCommitDialogTitle,
@@ -655,7 +593,6 @@ struct DeduplicateView: View {
         }
     }
 
-<<<<<<< HEAD
     private func advanceToNextCluster() {
         let clusters = sessionStore.clusters
         guard let currentID = focusedClusterID,
@@ -678,20 +615,11 @@ struct DeduplicateView: View {
     }
 
     private func startScan() {
-=======
-    private var isHardDeleteSelected: Bool {
-        preferencesStore.dedupeAllowHardDelete && hardDeleteForThisCommit
-    }
-
-    private func startScan() {
-        hardDeleteForThisCommit = false
->>>>>>> origin/codex/dedupe-ux-review-fixes
         didOnboardDeduplicate = true
         appState.startDeduplicateScan()
     }
 
     private func resetDeduplicate() {
-<<<<<<< HEAD
         appState.resetDeduplicate()
     }
 
@@ -712,12 +640,6 @@ struct DeduplicateView: View {
         ensureInitialFocus()
     }
 
-=======
-        hardDeleteForThisCommit = false
-        appState.resetDeduplicate()
-    }
-
->>>>>>> origin/codex/dedupe-ux-review-fixes
     private func formattedDuration(_ seconds: TimeInterval) -> String {
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.minute, .second]
@@ -740,22 +662,12 @@ struct DeduplicateStatusCopy: Equatable {
 
 extension DeduplicateView {
     static func commitFooterTitle(fileCount: Int, hardDelete: Bool) -> String {
-<<<<<<< HEAD
         "\(fileCount) file\(fileCount == 1 ? "" : "s") will be moved to Trash"
-=======
-        "\(fileCount) file\(fileCount == 1 ? "" : "s") will be \(hardDelete ? "permanently deleted" : "moved to Trash")"
->>>>>>> origin/codex/dedupe-ux-review-fixes
     }
 
     static func commitFooterDetail(byteCount: Int64, hardDelete: Bool) -> String {
         let formattedBytes = statusByteCountFormatter.string(fromByteCount: byteCount)
-<<<<<<< HEAD
         return "≈ \(formattedBytes) recoverable"
-=======
-        return hardDelete
-            ? "≈ \(formattedBytes) will be permanently removed"
-            : "≈ \(formattedBytes) recoverable"
->>>>>>> origin/codex/dedupe-ux-review-fixes
     }
 
     static func completedStatusCopy(for summary: DeduplicateCommitSummary?) -> DeduplicateStatusCopy {
@@ -792,7 +704,6 @@ extension DeduplicateView {
     }
 }
 
-<<<<<<< HEAD
 enum DeduplicateReviewLayout {
     enum Mode: Equatable {
         case wide
@@ -846,8 +757,6 @@ enum CommitFooterButtonDensity {
     }
 }
 
-=======
->>>>>>> origin/codex/dedupe-ux-review-fixes
 /// Content of the Deduplicate destination card. Hosted twice inside a
 /// `ViewThatFits` (horizontal vs vertical) so the layout adapts to a
 /// narrow main column. The `Reveal` and `Use Organize Destination`
