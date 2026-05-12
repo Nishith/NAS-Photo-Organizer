@@ -268,6 +268,7 @@ struct DeduplicateView: View {
         ClusterListPane(
             clusters: sessionStore.clusters,
             decisions: sessionStore.decisions,
+            approvedClusterIDs: sessionStore.approvedClusterIDs,
             deletionPlan: sessionStore.currentDeletionPlan(),
             focusedClusterID: $focusedClusterID,
             focusedMemberPath: $focusedMemberPath,

@@ -38,8 +38,23 @@ final class RunHistoryIndexerExtraTests: XCTestCase {
         let complexJson = logsDir.appendingPathComponent("complex_name-test.json")
         try Data("{}".utf8).write(to: complexJson)
         
+        let reorgReceipt = logsDir.appendingPathComponent("reorganize_audit_receipt_123.json")
+        try Data("{}".utf8).write(to: reorgReceipt)
+        
+        let csvFolder = logsDir.appendingPathComponent("folder.csv")
+        try FileManager.default.createDirectory(at: csvFolder, withIntermediateDirectories: true)
+        
+        let exactTime = Date()
+        let fileA = logsDir.appendingPathComponent("a.csv")
+        let fileB = logsDir.appendingPathComponent("b.csv")
+        try Data("a".utf8).write(to: fileA)
+        try Data("b".utf8).write(to: fileB)
+        try FileManager.default.setAttributes([.modificationDate: exactTime], ofItemAtPath: fileA.path)
+        try FileManager.default.setAttributes([.modificationDate: exactTime], ofItemAtPath: fileB.path)
+        
         let results = try indexer.index(destinationRoot: temporaryDirectory.path)
-        XCTAssertEqual(results.count, 5) // log, db, jsonFile, csvFile, complexJson
+        // log, db, jsonFile, csvFile, complexJson, reorgReceipt, a.csv, b.csv (8 total)
+        XCTAssertEqual(results.count, 8) 
         
         // Test with a path that is a file (should handle gracefully via resourceValues)
         _ = try indexer.index(destinationRoot: logFile.path)

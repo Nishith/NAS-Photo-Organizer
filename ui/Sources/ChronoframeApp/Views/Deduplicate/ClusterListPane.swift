@@ -10,6 +10,7 @@ import SwiftUI
 struct ClusterListPane: View {
     let clusters: [DuplicateCluster]
     let decisions: DedupeDecisions
+    let approvedClusterIDs: Set<DuplicateCluster.ID>
     let deletionPlan: DeduplicationPlan
     @Binding var focusedClusterID: UUID?
     @Binding var focusedMemberPath: String?
@@ -81,6 +82,7 @@ struct ClusterListPane: View {
                             ClusterRow(
                                 cluster: cluster,
                                 decisions: decisions,
+                                isApproved: approvedClusterIDs.contains(cluster.id),
                                 recoverableBytes: recoverableBytes(for: cluster),
                                 thumbnailLoader: thumbnailLoader,
                                 onKeepAll: { onKeepAll(cluster) },
@@ -112,6 +114,7 @@ struct ClusterListPane: View {
 private struct ClusterRow: View {
     let cluster: DuplicateCluster
     let decisions: DedupeDecisions
+    let isApproved: Bool
     let recoverableBytes: Int64
     @ObservedObject var thumbnailLoader: DedupeThumbnailLoader
     var onKeepAll: () -> Void = {}
@@ -177,7 +180,7 @@ private struct ClusterRow: View {
                         .foregroundStyle(.orange)
                 }
                 Spacer()
-                if isFullyReviewed {
+                if isApproved {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.caption)
                         .foregroundStyle(DesignTokens.ColorSystem.statusSuccess)
@@ -236,10 +239,6 @@ private struct ClusterRow: View {
 
     private func decisionFor(_ member: PhotoCandidate) -> DedupeDecision {
         decisions.byPath[member.path] ?? (isSuggestedKeeper(member) ? .keep : .delete)
-    }
-
-    private var isFullyReviewed: Bool {
-        cluster.members.allSatisfy { decisions.byPath[$0.path] != nil }
     }
 
     private var hasWarnings: Bool {

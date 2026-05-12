@@ -56,6 +56,15 @@ final class CoveragePushTests: XCTestCase {
         XCTAssertThrowsError(try MediaDiscovery.walkEntries(at: url, isCancelled: { true })) { error in
             XCTAssertTrue(error is CancellationError)
         }
+        
+        // Test default closures
+        let tempEmptyDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Empty-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tempEmptyDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempEmptyDir) }
+        
+        // This exercises the { false } default parameter for isCancelled
+        _ = try? MediaDiscovery.discoverMediaFiles(at: tempEmptyDir)
+        _ = try? MediaDiscovery.walkEntries(at: tempEmptyDir)
     }
     
     func testCopyPlanBuilderHistogramEdgeCases() {
@@ -75,5 +84,50 @@ final class CoveragePushTests: XCTestCase {
         let histogram = CopyPlanBuilder.dateHistogram(fromDestinationPaths: paths, namingRules: naming)
         
         XCTAssertGreaterThanOrEqual(histogram.count, 0)
+    }
+    
+    func testDedupeFeatureCacheWithNullValues() throws {
+        let tempEmptyDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("DedupeNull-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tempEmptyDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempEmptyDir) }
+        
+        let dbURL = tempEmptyDir.appendingPathComponent("dedupe_null.db")
+        let database = try OrganizerDatabase(url: dbURL)
+        defer { database.close() }
+        
+        try database.ensureDedupeFeaturesSchema()
+
+        let record = DedupeFeatureRecord(
+            path: "/path/null",
+            size: 100,
+            modificationTime: 1.0,
+            dhash: nil,
+            featurePrintData: nil,
+            sharpness: 0.0,
+            faceScore: nil,
+            pixelWidth: nil,
+            pixelHeight: nil,
+            captureDate: nil,
+            pairedPath: nil,
+            eyesOpenScore: nil,
+            smileScore: nil,
+            subjectSharpness: nil,
+            subjectMotionBlur: nil,
+            folderRoot: nil
+        )
+
+        try database.saveDedupeFeatureRecords([record])
+
+        let loaded = try database.loadDedupeFeatureRecords()
+        XCTAssertEqual(loaded["/path/null"]?.faceScore, nil)
+
+        let loadedMeta = try database.loadDedupeFeatureMetadataRecords()
+        XCTAssertEqual(loadedMeta["/path/null"]?.faceScore, nil)
+        
+        let emptyPrints = try database.loadDedupeFeaturePrintData(for: [])
+        XCTAssertTrue(emptyPrints.isEmpty)
+        
+        let allPrints = try database.loadAllDedupeFeaturePrintData()
+        XCTAssertTrue(allPrints.isEmpty)
     }
 }

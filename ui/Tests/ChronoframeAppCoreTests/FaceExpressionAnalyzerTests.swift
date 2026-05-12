@@ -1,4 +1,5 @@
 import XCTest
+import Vision
 @testable import ChronoframeCore
 
 final class FaceExpressionAnalyzerTests: XCTestCase {
@@ -81,6 +82,19 @@ final class FaceExpressionAnalyzerTests: XCTestCase {
         let cgImage = context.makeImage()!
         
         let result = FaceExpressionAnalyzer.analyze(cgImage: cgImage, faceObservations: [])
+        XCTAssertNil(result)
+    }
+
+    func testAnalyzeWithInvalidObservation() {
+        let width = 10
+        let height = 10
+        var pixels = [UInt8](repeating: 128, count: width * height * 4)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let context = CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        let cgImage = context.makeImage()!
+        
+        let observation = VNFaceObservation(boundingBox: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let result = FaceExpressionAnalyzer.analyze(cgImage: cgImage, faceObservations: [observation])
         XCTAssertNil(result)
     }
 

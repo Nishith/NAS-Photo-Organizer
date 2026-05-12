@@ -34,6 +34,7 @@ public final class DeduplicateSessionStore: ObservableObject {
     @Published public private(set) var issues: [DeduplicateIssue] = []
     @Published public private(set) var runHistory: [DeduplicateFolderHistoryRecord]
     @Published public var decisions: DedupeDecisions = DedupeDecisions()
+    @Published public var approvedClusterIDs: Set<DuplicateCluster.ID> = []
 
     private let engine: any DeduplicateEngine
     private let runHistoryStore: any DeduplicateRunHistoryStoring
@@ -183,6 +184,7 @@ public final class DeduplicateSessionStore: ObservableObject {
         phaseTotal = 0
         lastScanConfiguration = configuration
         decisions = DedupeDecisions(byPath: [:])
+        approvedClusterIDs = []
 
         do {
             let stream = try engine.scan(configuration)
@@ -304,6 +306,7 @@ public final class DeduplicateSessionStore: ObservableObject {
             byPath[path] = decision
         }
         decisions = DedupeDecisions(byPath: byPath)
+        approvedClusterIDs.insert(cluster.id)
     }
 
     public func keepAllInCluster(_ cluster: DuplicateCluster) {
@@ -312,6 +315,7 @@ public final class DeduplicateSessionStore: ObservableObject {
             byPath[member.path] = .keep
         }
         decisions = DedupeDecisions(byPath: byPath)
+        approvedClusterIDs.insert(cluster.id)
     }
 
     public func deleteAllInCluster(_ cluster: DuplicateCluster) {
@@ -320,6 +324,7 @@ public final class DeduplicateSessionStore: ObservableObject {
             byPath[member.path] = .delete
         }
         decisions = DedupeDecisions(byPath: byPath)
+        approvedClusterIDs.insert(cluster.id)
     }
 
     public func acceptAllSuggestions() {
@@ -388,6 +393,7 @@ public final class DeduplicateSessionStore: ObservableObject {
         isHandlingRevert = false
         activeCommitConfiguration = nil
         decisions = DedupeDecisions(byPath: [:])
+        approvedClusterIDs = []
         closeSecurityScope()
     }
 
