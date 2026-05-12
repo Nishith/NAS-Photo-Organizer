@@ -230,12 +230,6 @@ def run_scenario(manifest_path: Path) -> dict[str, Any]:
         shutil.rmtree(temp_root, ignore_errors=True)
 
 
-def write_expected_outputs(scenario_dir: Path) -> None:
-    output = run_scenario(scenario_dir / "manifest.json")
-    expected_path = scenario_dir / "expected.json"
-    with expected_path.open("w", encoding="utf-8") as handle:
-        json.dump(output, handle, indent=2)
-        handle.write("\n")
 
 
 def scenario_dirs() -> list[Path]:

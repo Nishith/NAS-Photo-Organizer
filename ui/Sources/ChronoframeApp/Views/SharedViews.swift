@@ -535,13 +535,3 @@ struct EmptyStateView: View {
     }
 }
 
-// MARK: - Hairline divider
-
-/// A 0.5pt hairline divider using the Darkroom line token.
-struct HairlineDivider: View {
-    var body: some View {
-        Rectangle()
-            .fill(DesignTokens.ColorSystem.hairline)
-            .frame(height: 0.5)
-    }
-}

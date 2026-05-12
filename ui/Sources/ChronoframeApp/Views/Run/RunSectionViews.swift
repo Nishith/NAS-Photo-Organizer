@@ -223,25 +223,6 @@ struct RunPreviewReviewSection: View {
     }
 }
 
-struct RunMetricsGridSection: View {
-    let model: RunWorkspaceModel
-
-    var body: some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: DesignTokens.Layout.metricMinWidth, maximum: 240), spacing: 12)],
-            spacing: 12
-        ) {
-            ForEach(model.metrics) { metric in
-                MetricTile(
-                    title: metric.title,
-                    value: metric.value,
-                    caption: metric.caption,
-                    tint: metric.tone.color
-                )
-            }
-        }
-    }
-}
 
 struct RunTickerSection: View {
     let model: RunWorkspaceModel

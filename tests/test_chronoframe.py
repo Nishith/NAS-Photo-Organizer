@@ -16,7 +16,6 @@ import json
 import csv
 import re
 import sqlite3
-import time
 import runpy
 import types
 from datetime import datetime
@@ -888,9 +887,8 @@ class TestAuditReceiptReturnValue(TempDirMixin, unittest.TestCase):
         self.assertEqual(data["status"], "COMPLETED")
 
 class TestRevertReceipt(TempDirMixin, unittest.TestCase):
-    @patch('chronoframe.core.emit_json')
     @patch('chronoframe.io.fast_hash')
-    def test_revert_receipt_success(self, mock_fast_hash, mock_emit):
+    def test_revert_receipt_success(self, mock_fast_hash):
         from chronoframe.core import revert_receipt
         dst_path = os.path.join(self.tmpdir, "to_revert.jpg")
         with open(dst_path, "w") as f: f.write("data")
@@ -907,9 +905,8 @@ class TestRevertReceipt(TempDirMixin, unittest.TestCase):
             
         self.assertFalse(os.path.exists(dst_path), "Destination file should be deleted on revert!")
 
-    @patch('chronoframe.core.emit_json')
     @patch('chronoframe.io.fast_hash')
-    def test_revert_receipt_hash_mismatch(self, mock_fast_hash, mock_emit):
+    def test_revert_receipt_hash_mismatch(self, mock_fast_hash):
         from chronoframe.core import revert_receipt
         dst_path = os.path.join(self.tmpdir, "to_revert.jpg")
         with open(dst_path, "w") as f: f.write("data")
@@ -2440,10 +2437,10 @@ class TestBuildDestIndexFastDest(TempDirMixin, unittest.TestCase):
         db = CacheDB(os.path.join(self.tmpdir, "test.db"))
 
         # Full scan first — populates cache
-        hi_full, seq_full, dup_full = build_dest_index(dst, db)
+        hi_full, seq_full, _dup_full = build_dest_index(dst, db)
 
         # Fast mode — reads from cache only
-        hi_fast, seq_fast, dup_fast = build_dest_index(dst, db, fast_dest=True)
+        hi_fast, seq_fast, _dup_fast = build_dest_index(dst, db, fast_dest=True)
 
         self.assertEqual(hi_full, hi_fast)
         self.assertEqual(dict(seq_full), dict(seq_fast))

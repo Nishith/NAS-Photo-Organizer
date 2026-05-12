@@ -108,17 +108,13 @@
 		AA0000000000000000000900 /* ClusterAnnotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000800 /* ClusterAnnotation.swift */; };
 		AA0000000000000000000901 /* ClusterAnnotator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000801 /* ClusterAnnotator.swift */; };
 		AA0000000000000000000902 /* ClusterConfidenceScorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000802 /* ClusterConfidenceScorer.swift */; };
-		AA0000000000000000000903 /* EditVariantDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000803 /* EditVariantDetector.swift */; };
 		AA0000000000000000000904 /* FaceExpressionAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000804 /* FaceExpressionAnalyzer.swift */; };
 		AA0000000000000000000905 /* FileSystemMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000805 /* FileSystemMonitor.swift */; };
 		AA0000000000000000000906 /* FingerprintIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000806 /* FingerprintIndex.swift */; };
-		AA0000000000000000000907 /* ImportDuplicateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000807 /* ImportDuplicateChecker.swift */; };
 		AA0000000000000000000908 /* SafetyWarningDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000808 /* SafetyWarningDetector.swift */; };
-		AA0000000000000000000909 /* BackgroundDedupeMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000809 /* BackgroundDedupeMonitor.swift */; };
 		AA000000000000000000090A /* ComparisonOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000080A /* ComparisonOverlayView.swift */; };
 		AA000000000000000000090B /* DifferenceImageGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000080B /* DifferenceImageGenerator.swift */; };
 		AA000000000000000000090C /* MatchReasonFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000080C /* MatchReasonFormatter.swift */; };
-		AA000000000000000000090D /* MetadataComparisonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000080D /* MetadataComparisonView.swift */; };
 		AA000000000000000000090E /* RapidTriageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000080E /* RapidTriageView.swift */; };
 /* End PBXBuildFile section */
 
@@ -244,17 +240,13 @@
 		AA0000000000000000000800 /* ClusterAnnotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterAnnotation.swift; sourceTree = "<group>"; };
 		AA0000000000000000000801 /* ClusterAnnotator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterAnnotator.swift; sourceTree = "<group>"; };
 		AA0000000000000000000802 /* ClusterConfidenceScorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterConfidenceScorer.swift; sourceTree = "<group>"; };
-		AA0000000000000000000803 /* EditVariantDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditVariantDetector.swift; sourceTree = "<group>"; };
 		AA0000000000000000000804 /* FaceExpressionAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaceExpressionAnalyzer.swift; sourceTree = "<group>"; };
 		AA0000000000000000000805 /* FileSystemMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSystemMonitor.swift; sourceTree = "<group>"; };
 		AA0000000000000000000806 /* FingerprintIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FingerprintIndex.swift; sourceTree = "<group>"; };
-		AA0000000000000000000807 /* ImportDuplicateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportDuplicateChecker.swift; sourceTree = "<group>"; };
 		AA0000000000000000000808 /* SafetyWarningDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyWarningDetector.swift; sourceTree = "<group>"; };
-		AA0000000000000000000809 /* BackgroundDedupeMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundDedupeMonitor.swift; sourceTree = "<group>"; };
 		AA000000000000000000080A /* ComparisonOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComparisonOverlayView.swift; sourceTree = "<group>"; };
 		AA000000000000000000080B /* DifferenceImageGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DifferenceImageGenerator.swift; sourceTree = "<group>"; };
 		AA000000000000000000080C /* MatchReasonFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchReasonFormatter.swift; sourceTree = "<group>"; };
-		AA000000000000000000080D /* MetadataComparisonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataComparisonView.swift; sourceTree = "<group>"; };
 		AA000000000000000000080E /* RapidTriageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RapidTriageView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -428,7 +420,6 @@
 			isa = PBXGroup;
 			children = (
 				AA000000000000000000010C /* Exports.swift */,
-				AA0000000000000000000809 /* BackgroundDedupeMonitor.swift */,
 				AA0000000000000000000015 /* Services */,
 				AA0000000000000000000016 /* Stores */,
 				AA0000000000000000000017 /* Support */,
@@ -491,11 +482,9 @@
 				AA0000000000000000000800 /* ClusterAnnotation.swift */,
 				AA0000000000000000000801 /* ClusterAnnotator.swift */,
 				AA0000000000000000000802 /* ClusterConfidenceScorer.swift */,
-				AA0000000000000000000803 /* EditVariantDetector.swift */,
 				AA0000000000000000000804 /* FaceExpressionAnalyzer.swift */,
 				AA0000000000000000000805 /* FileSystemMonitor.swift */,
 				AA0000000000000000000806 /* FingerprintIndex.swift */,
-				AA0000000000000000000807 /* ImportDuplicateChecker.swift */,
 				AA0000000000000000000808 /* SafetyWarningDetector.swift */,
 				AA000000000000000000019A /* LibraryHealthScanner.swift */,
 				AA000000000000000000012D /* MediaDateResolver.swift */,
@@ -596,7 +585,6 @@
 				AA000000000000000000080A /* ComparisonOverlayView.swift */,
 				AA000000000000000000080B /* DifferenceImageGenerator.swift */,
 				AA000000000000000000080C /* MatchReasonFormatter.swift */,
-				AA000000000000000000080D /* MetadataComparisonView.swift */,
 				AA000000000000000000080E /* RapidTriageView.swift */,
 				AA0000000000000000000197 /* DeduplicateStatusView.swift */,
 			);
@@ -815,16 +803,13 @@
 				AA0000000000000000000900 /* ClusterAnnotation.swift in Sources */,
 				AA0000000000000000000901 /* ClusterAnnotator.swift in Sources */,
 				AA0000000000000000000902 /* ClusterConfidenceScorer.swift in Sources */,
-				AA0000000000000000000903 /* EditVariantDetector.swift in Sources */,
 				AA0000000000000000000904 /* FaceExpressionAnalyzer.swift in Sources */,
 				AA0000000000000000000905 /* FileSystemMonitor.swift in Sources */,
 				AA0000000000000000000906 /* FingerprintIndex.swift in Sources */,
-				AA0000000000000000000907 /* ImportDuplicateChecker.swift in Sources */,
 				AA0000000000000000000908 /* SafetyWarningDetector.swift in Sources */,
 				AA000000000000000000025E /* DeduplicationPlanner.swift in Sources */,
 				AA000000000000000000025F /* ThumbnailRenderer.swift in Sources */,
 				AA0000000000000000000257 /* DeduplicateEngine.swift in Sources */,
-				AA0000000000000000000909 /* BackgroundDedupeMonitor.swift in Sources */,
 				AA0000000000000000000258 /* DeduplicateSessionStore.swift in Sources */,
 				AA0000000000000000000259 /* OrganizeContainerView.swift in Sources */,
 				AA000000000000000000025A /* DeduplicateView.swift in Sources */,
@@ -834,7 +819,6 @@
 				AA000000000000000000090A /* ComparisonOverlayView.swift in Sources */,
 				AA000000000000000000090B /* DifferenceImageGenerator.swift in Sources */,
 				AA000000000000000000090C /* MatchReasonFormatter.swift in Sources */,
-				AA000000000000000000090D /* MetadataComparisonView.swift in Sources */,
 				AA000000000000000000090E /* RapidTriageView.swift in Sources */,
 				AA0000000000000000000261 /* DeduplicateStatusView.swift in Sources */,
 				AA0000000000000000000263 /* PreviewReviewModels.swift in Sources */,

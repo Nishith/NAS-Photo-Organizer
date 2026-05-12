@@ -723,54 +723,6 @@ private final class AnalysisResults: @unchecked Sendable {
     }
 }
 
-final class LazyDedupeFeaturePrintStore: @unchecked Sendable {
-    private let lock = NSLock()
-    private let database: OrganizerDatabase
-    private var cache: [String: Data] = [:]
-    private var missing: Set<String> = []
-
-    init(database: OrganizerDatabase) {
-        self.database = database
-    }
-
-    func featurePrintData(for path: String) -> Data? {
-        let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
-
-        lock.lock()
-        if let cached = cache[path] {
-            lock.unlock()
-            return cached
-        }
-        if let cached = cache[standardizedPath] {
-            lock.unlock()
-            return cached
-        }
-        if missing.contains(path) {
-            lock.unlock()
-            return nil
-        }
-        if missing.contains(standardizedPath) {
-            lock.unlock()
-            return nil
-        }
-        lock.unlock()
-
-        let lookupPaths = standardizedPath == path ? [path] : [path, standardizedPath]
-        let rows = (try? database.loadDedupeFeaturePrintData(for: lookupPaths)) ?? [:]
-        let data = rows[path] ?? rows[standardizedPath]
-
-        lock.lock()
-        if let data {
-            cache[path] = data
-            cache[standardizedPath] = data
-        } else {
-            missing.insert(path)
-            missing.insert(standardizedPath)
-        }
-        lock.unlock()
-        return data
-    }
-}
 
 /// Lock-free atomic Bool wrapper (uses OSAllocatedUnfairLock under the hood).
 /// Used to signal cancellation across the detached scan task.
