@@ -77,8 +77,12 @@ public enum FaceExpressionAnalyzer {
         guard let leftEye = landmarks.leftEye, let rightEye = landmarks.rightEye else {
             return 0.5
         }
-        let leftOpenness = eyeOpenness(points: leftEye.normalizedPoints)
-        let rightOpenness = eyeOpenness(points: rightEye.normalizedPoints)
+        return eyesOpenScore(leftPoints: leftEye.normalizedPoints, rightPoints: rightEye.normalizedPoints)
+    }
+
+    static func eyesOpenScore(leftPoints: [CGPoint], rightPoints: [CGPoint]) -> Double {
+        let leftOpenness = eyeOpenness(points: leftPoints)
+        let rightOpenness = eyeOpenness(points: rightPoints)
         return (leftOpenness + rightOpenness) / 2.0
     }
 
@@ -103,7 +107,10 @@ public enum FaceExpressionAnalyzer {
 
     static func smileScore(landmarks: VNFaceLandmarks2D, boundingBox: CGRect) -> Double {
         guard let outerLips = landmarks.outerLips else { return 0.0 }
-        let points = outerLips.normalizedPoints
+        return smileScore(points: outerLips.normalizedPoints)
+    }
+
+    static func smileScore(points: [CGPoint]) -> Double {
         guard points.count >= 6 else { return 0.0 }
 
         let xs = points.map(\.x)

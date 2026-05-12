@@ -65,7 +65,7 @@ public final class BackgroundDedupeMonitor: ObservableObject {
 
     // MARK: - Private
 
-    private func scheduleIncrementalScan(changedPaths: [String]) {
+    internal func scheduleIncrementalScan(changedPaths: [String]) {
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(5))
@@ -75,7 +75,7 @@ public final class BackgroundDedupeMonitor: ObservableObject {
         }
     }
 
-    private func runIncrementalScan(changedPaths: [String], configuration: DeduplicateConfiguration) async {
+    internal func runIncrementalScan(changedPaths: [String], configuration: DeduplicateConfiguration) async {
         let stream = scanner.scan(configuration: configuration)
         do {
             for try await event in stream {
