@@ -445,7 +445,7 @@ struct ClusterDetailPane: View {
         switch level {
         case .high: return DesignTokens.ColorSystem.statusSuccess
         case .medium: return DesignTokens.ColorSystem.statusWarning
-        case .low: return DesignTokens.ColorSystem.statusWarning
+        case .low: return DesignTokens.ColorSystem.statusDanger
         }
     }
 
