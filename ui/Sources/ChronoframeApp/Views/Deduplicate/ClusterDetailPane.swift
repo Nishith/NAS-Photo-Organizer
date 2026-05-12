@@ -65,7 +65,10 @@ struct ClusterDetailPane: View {
             VStack(spacing: 0) {
                 VStack(spacing: 0) {
                     warningBanner(for: cluster)
-                    detailContentWide(focused: focused, cluster: cluster)
+                    ViewThatFits(in: .horizontal) {
+                        detailContentWide(focused: focused, cluster: cluster)
+                        detailContentCompact(focused: focused, cluster: cluster)
+                    }
                 }
                 .frame(height: previewHeight)
 
@@ -137,6 +140,17 @@ struct ClusterDetailPane: View {
         .accessibilityIdentifier("dedupeAcceptClusterSuggestionButton")
         .accessibilityLabel("Confirm and move to next group")
         .accessibilityHint("Confirms keep and delete choices for this group, then selects the next group")
+    }
+
+    private func detailContentCompact(focused: PhotoCandidate?, cluster: DuplicateCluster) -> some View {
+        VStack(spacing: DesignTokens.Spacing.md) {
+            preview(for: focused)
+                .frame(maxWidth: .infinity, minHeight: 200, maxHeight: .infinity)
+            if let focused {
+                metadataPanel(for: focused, cluster: cluster)
+            }
+        }
+        .padding(DesignTokens.Spacing.md)
     }
 
     private func detailContentWide(focused: PhotoCandidate?, cluster: DuplicateCluster) -> some View {
