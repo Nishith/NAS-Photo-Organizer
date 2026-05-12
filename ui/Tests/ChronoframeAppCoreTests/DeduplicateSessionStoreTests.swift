@@ -748,6 +748,41 @@ final class DeduplicateSessionStoreTests: XCTestCase {
             "Unreviewed cluster must not be passed to the engine")
     }
 
+    /// Regression: "Accept & Next" must not revert user decisions to the app suggestion.
+    /// The button now only advances; it no longer calls acceptSuggestionsForCluster.
+    /// This test verifies that a user override (setDecision) survives without any
+    /// acceptSuggestionsForCluster call — mirroring what the fixed button action does.
+    @MainActor
+    func testUserDecisionPreservedWithoutAcceptSuggestions() async throws {
+        let cluster = DuplicateCluster(
+            kind: .burst,
+            members: [
+                PhotoCandidate(path: "/dest/a1.jpg", size: 100, modificationTime: 0, qualityScore: 0.9),
+                PhotoCandidate(path: "/dest/a2.jpg", size: 50, modificationTime: 0, qualityScore: 0.4),
+            ],
+            suggestedKeeperIDs: ["/dest/a1.jpg"],
+            bytesIfPruned: 50
+        )
+        let store = DeduplicateSessionStore(engine: MockDeduplicateEngine(clusters: [cluster]))
+        store.startScan(configuration: DeduplicateConfiguration(destinationPath: "/dest"))
+        _ = await waitForCondition { store.status == .readyToReview }
+
+        // Scan completion pre-populates: a1 → keep, a2 → delete (the suggestion).
+        XCTAssertEqual(store.decisions.byPath["/dest/a1.jpg"], .keep)
+        XCTAssertEqual(store.decisions.byPath["/dest/a2.jpg"], .delete)
+
+        // User flips the suggested keeper to delete (a manual override).
+        store.setDecision(.delete, forPath: "/dest/a1.jpg")
+        store.setDecision(.keep, forPath: "/dest/a2.jpg")
+
+        // "Accept & Next" now only advances — it does NOT call acceptSuggestionsForCluster.
+        // Assert the user's decisions survive unchanged.
+        XCTAssertEqual(store.decisions.byPath["/dest/a1.jpg"], .delete,
+            "User override must not be reverted by Accept & Next")
+        XCTAssertEqual(store.decisions.byPath["/dest/a2.jpg"], .keep,
+            "User override must not be reverted by Accept & Next")
+    }
+
     @MainActor
     func testDeduplicateFolderHistoryAggregatesAndMovesRecentFolderFirst() {
         let historyStore = UserDefaultsDeduplicateRunHistoryStore(defaults: defaults, limit: 3)

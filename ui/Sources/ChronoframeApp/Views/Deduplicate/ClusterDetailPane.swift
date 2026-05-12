@@ -130,14 +130,13 @@ struct ClusterDetailPane: View {
 
     private func acceptSuggestionButton(for cluster: DuplicateCluster) -> some View {
         Button("Accept & Next") {
-            sessionStore.acceptSuggestionsForCluster(cluster)
             onAcceptAndAdvance?()
         }
         .fixedSize()
         .keyboardShortcut(.return, modifiers: [])
         .accessibilityIdentifier("dedupeAcceptClusterSuggestionButton")
-        .accessibilityLabel("Accept suggestion and move to next group")
-        .accessibilityHint("Confirms the suggested keep and delete choices for this group, then selects the next group")
+        .accessibilityLabel("Confirm and move to next group")
+        .accessibilityHint("Confirms keep and delete choices for this group, then selects the next group")
     }
 
     private func detailContentWide(focused: PhotoCandidate?, cluster: DuplicateCluster) -> some View {
