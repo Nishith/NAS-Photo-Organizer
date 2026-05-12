@@ -44,6 +44,12 @@ It is also built for caution. Chronoframe does not ask you to trust a black box.
 - **Deduplicate defaults to Trash.** Hard delete is available only behind an explicit Settings toggle and confirmation.
 - **Pair handling is conservative.** RAW+JPEG and Live Photo HEIC+MOV pairs can be treated as units, and keep decisions win.
 
+## System Requirements
+
+- **macOS 13.0** or later (works on Intel and Apple Silicon)
+- Sufficient disk space for your organized library (roughly the size of your source folder)
+- Read/write access to source and destination folders
+
 ## Install
 
 1. Download `Chronoframe.zip` from the [Releases page](https://github.com/Nishith/Chronoframe/releases).
@@ -52,6 +58,12 @@ It is also built for caution. Chronoframe does not ask you to trust a black box.
 4. Open the app.
 
 If macOS blocks the app on first launch, right-click `Chronoframe.app`, choose **Open**, then confirm.
+
+## Quick Start
+
+**New to Chronoframe?** Start with the [Quick Start Guide](docs/QUICK_START.md) for a 5-minute walkthrough.
+
+**Questions or stuck?** Check the [FAQ](docs/FAQ.md) or [Troubleshooting](docs/TROUBLESHOOTING.md) guide.
 
 ## First Run
 

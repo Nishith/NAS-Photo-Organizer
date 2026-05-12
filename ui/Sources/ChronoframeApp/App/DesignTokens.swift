@@ -170,6 +170,12 @@ enum DesignTokens {
             light: NSColor.black.withAlphaComponent(0.10),
             dark: NSColor.black.withAlphaComponent(0.42)
         )
+
+        // Divider emphasis (visible over images in comparisons)
+        static let dividerEmphasis = dynamicColor(
+            light: NSColor.white,
+            dark: NSColor.white
+        )
     }
 
     // MARK: - Legacy Color namespace (backward-compatible aliases)

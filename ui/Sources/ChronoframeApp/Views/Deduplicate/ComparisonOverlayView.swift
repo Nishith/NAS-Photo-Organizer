@@ -102,7 +102,7 @@ private struct SliderComparisonView: View {
                         )
                 }
                 Rectangle()
-                    .fill(Color.white)
+                    .fill(DesignTokens.ColorSystem.dividerEmphasis)
                     .frame(width: 2)
                     .position(x: geometry.size.width * position, y: geometry.size.height / 2)
                     .shadow(radius: 2)
