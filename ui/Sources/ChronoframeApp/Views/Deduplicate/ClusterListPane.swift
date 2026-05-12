@@ -256,9 +256,9 @@ private struct ClusterRow: View {
 
     private func confidenceColor(_ level: ConfidenceLevel) -> Color {
         switch level {
-        case .high: return .green
-        case .medium: return .yellow
-        case .low: return .orange
+        case .high: return DesignTokens.ColorSystem.statusSuccess
+        case .medium: return DesignTokens.ColorSystem.statusWarning
+        case .low: return DesignTokens.ColorSystem.statusDanger
         }
     }
 
