@@ -445,7 +445,7 @@ public struct TransferExecutor: Sendable {
         return try context.finish(attemptedJobs: attemptedJobs)
     }
 
-    fileprivate func abortReason(
+    func abortReason(
         consecutiveFailures: Int,
         totalFailures: Int,
         attemptedJobs: Int
@@ -472,7 +472,7 @@ public struct TransferExecutor: Sendable {
         }
     }
 
-    fileprivate func flushDestinationUpdates(
+    func flushDestinationUpdates(
         _ updates: [RawFileCacheRecord],
         database: OrganizerDatabase
     ) throws {
@@ -675,7 +675,7 @@ public struct TransferExecutor: Sendable {
         )
     }
 
-    private func collisionResolvedPath(for requestedPath: String) throws -> String {
+    func collisionResolvedPath(for requestedPath: String) throws -> String {
         if !FileManager.default.fileExists(atPath: requestedPath) {
             return requestedPath
         }
@@ -787,7 +787,7 @@ public struct TransferExecutor: Sendable {
         return !retryPolicy.nonRetryableErrnos.contains(Int32(code.rawValue))
     }
 
-    fileprivate func safeFileSize(atPath path: String) -> Int64? {
+    func safeFileSize(atPath path: String) -> Int64? {
         let attributes = try? FileManager.default.attributesOfItem(atPath: path)
         return (attributes?[.size] as? NSNumber)?.int64Value
     }

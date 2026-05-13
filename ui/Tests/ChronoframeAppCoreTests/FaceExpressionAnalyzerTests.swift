@@ -98,6 +98,55 @@ final class FaceExpressionAnalyzerTests: XCTestCase {
         XCTAssertNil(result)
     }
 
+    func testAnalyzeCombinesLandmarkMeasurements() throws {
+        let width = 32
+        let height = 32
+        var pixels = (0..<(width * height * 4)).map { UInt8($0 % 255) }
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let context = try XCTUnwrap(CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        let cgImage = try XCTUnwrap(context.makeImage())
+        let openEye = [
+            CGPoint(x: 0, y: 0.2), CGPoint(x: 0.25, y: 0.4), CGPoint(x: 0.5, y: 0.2),
+            CGPoint(x: 0.5, y: 0.2), CGPoint(x: 0.25, y: 0.0), CGPoint(x: 0, y: 0.2)
+        ]
+        let smilingMouth = [
+            CGPoint(x: 0, y: 0.5), CGPoint(x: 0.5, y: 0.56), CGPoint(x: 1, y: 0.5),
+            CGPoint(x: 1, y: 0.5), CGPoint(x: 0.5, y: 0.44), CGPoint(x: 0, y: 0.5)
+        ]
+        let measurements = [
+            FaceExpressionAnalyzer.LandmarkMeasurement(
+                boundingBox: CGRect(x: 0.2, y: 0.2, width: 0.5, height: 0.5),
+                leftEye: openEye,
+                rightEye: openEye,
+                outerLips: smilingMouth
+            ),
+            FaceExpressionAnalyzer.LandmarkMeasurement(
+                boundingBox: CGRect(x: 0.1, y: 0.1, width: 0.01, height: 0.01),
+                leftEye: nil,
+                rightEye: nil,
+                outerLips: nil
+            )
+        ]
+
+        let result = try XCTUnwrap(FaceExpressionAnalyzer.analyze(cgImage: cgImage, measurements: measurements))
+
+        XCTAssertGreaterThan(result.eyesOpenConfidence, 0.6)
+        XCTAssertLessThan(result.eyesOpenConfidence, 0.8)
+        XCTAssertGreaterThan(result.smileConfidence, 0)
+        XCTAssertGreaterThanOrEqual(result.subjectSharpness, 0)
+        XCTAssertGreaterThanOrEqual(result.subjectMotionBlur, 0)
+        XCTAssertLessThanOrEqual(result.subjectMotionBlur, 1)
+        XCTAssertNil(FaceExpressionAnalyzer.analyze(cgImage: cgImage, measurements: []))
+    }
+
     func testRegionSharpness() {
         let width = 128
         let height = 128

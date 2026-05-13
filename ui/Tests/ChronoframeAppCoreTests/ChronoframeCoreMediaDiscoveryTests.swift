@@ -68,6 +68,13 @@ final class ChronoframeCoreMediaDiscoveryTests: XCTestCase {
         )
     }
 
+    func testDirectoryIssueInitializerKeepsPathAndMessage() {
+        let issue = MediaDiscovery.DirectoryIssue(path: "/photos/raw", message: "Skipped unreadable folder")
+
+        XCTAssertEqual(issue.path, "/photos/raw")
+        XCTAssertEqual(issue.message, "Skipped unreadable folder")
+    }
+
     private func writeFile(_ relativePath: String) throws {
         let url = temporaryDirectoryURL.appendingPathComponent(relativePath)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
