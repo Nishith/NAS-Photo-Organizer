@@ -9,6 +9,7 @@ public final class FileSystemMonitor: @unchecked Sendable {
     private var streamRef: FSEventStreamRef?
     private let queue = DispatchQueue(label: "com.chronoframe.fsmonitor", qos: .utility)
     private var continuation: AsyncStream<[FileSystemEvent]>.Continuation?
+    private var pollingTask: Task<Void, Never>?
 
     public init(paths: [String], latency: TimeInterval = 2.0) {
         self.paths = paths
@@ -24,6 +25,7 @@ public final class FileSystemMonitor: @unchecked Sendable {
 
         return AsyncStream { continuation in
             self.continuation = continuation
+            self.startPollingFallback()
 
             let callback: FSEventStreamCallback = { _, clientInfo, numEvents, eventPaths, eventFlags, _ in
                 guard let clientInfo else { return }
@@ -85,6 +87,9 @@ public final class FileSystemMonitor: @unchecked Sendable {
     }
 
     public func stop() {
+        pollingTask?.cancel()
+        pollingTask = nil
+
         if let stream = streamRef {
             FSEventStreamStop(stream)
             FSEventStreamInvalidate(stream)
@@ -93,6 +98,77 @@ public final class FileSystemMonitor: @unchecked Sendable {
         }
         continuation?.finish()
         continuation = nil
+    }
+
+    private func startPollingFallback() {
+        var snapshot = Self.snapshot(paths: paths)
+        let interval = max(latency, 0.1)
+
+        pollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                guard let self else { return }
+
+                let nextSnapshot = Self.snapshot(paths: self.paths)
+                let oldPaths = Set(snapshot.keys)
+                let newPaths = Set(nextSnapshot.keys)
+
+                var events: [FileSystemEvent] = []
+                for path in newPaths.subtracting(oldPaths).sorted() {
+                    events.append(FileSystemEvent(
+                        path: path,
+                        isFile: nextSnapshot[path, default: false],
+                        isCreated: true
+                    ))
+                }
+
+                for path in oldPaths.subtracting(newPaths).sorted() {
+                    events.append(FileSystemEvent(
+                        path: path,
+                        isFile: snapshot[path, default: false],
+                        isRemoved: true
+                    ))
+                }
+
+                if !events.isEmpty {
+                    self.continuation?.yield(events)
+                }
+                snapshot = nextSnapshot
+            }
+        }
+    }
+
+    private static func snapshot(paths: [String]) -> [String: Bool] {
+        var snapshot: [String: Bool] = [:]
+        let fileManager = FileManager.default
+        let resourceKeys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey]
+
+        for rootPath in paths {
+            let rootURL = URL(fileURLWithPath: rootPath, isDirectory: true)
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: rootPath, isDirectory: &isDirectory) else {
+                continue
+            }
+
+            snapshot[rootURL.path] = !isDirectory.boolValue
+
+            guard isDirectory.boolValue,
+                  let enumerator = fileManager.enumerator(
+                    at: rootURL,
+                    includingPropertiesForKeys: resourceKeys,
+                    options: [.skipsPackageDescendants]
+                  )
+            else {
+                continue
+            }
+
+            for case let url as URL in enumerator {
+                let resourceValues = try? url.resourceValues(forKeys: Set(resourceKeys))
+                snapshot[url.path] = resourceValues?.isRegularFile ?? false
+            }
+        }
+
+        return snapshot
     }
 }
 

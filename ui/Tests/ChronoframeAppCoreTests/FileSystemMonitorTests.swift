@@ -12,10 +12,10 @@ final class FileSystemMonitorTests: XCTestCase {
         let stream = monitor.start()
 
         let fileURL = temporaryDirectory.appendingPathComponent("test.txt")
-        
+
         // Use a task to collect events
         let expectation = XCTestExpectation(description: "Wait for FS events")
-        
+
         actor EventCollector {
             var events: [FileSystemEvent] = []
             func append(_ newEvents: [FileSystemEvent]) { events.append(contentsOf: newEvents) }
@@ -24,7 +24,7 @@ final class FileSystemMonitorTests: XCTestCase {
             var isEmpty: Bool { events.isEmpty }
         }
         let collector = EventCollector()
-        
+
         let task = Task {
             for await events in stream {
                 await collector.append(events)
@@ -33,22 +33,24 @@ final class FileSystemMonitorTests: XCTestCase {
                 }
             }
         }
-        
+
+        try await Task.sleep(nanoseconds: 300_000_000)
+
         // Trigger event
         try Data("hello".utf8).write(to: fileURL)
-        
+
         await fulfillment(of: [expectation], timeout: 5.0)
-        
+
         let isEmpty = await collector.isEmpty
         XCTAssertFalse(isEmpty)
         let firstEvent = await collector.first(path: "test.txt")
         let event = try XCTUnwrap(firstEvent)
         XCTAssertTrue(event.isFile)
-        
+
         task.cancel()
         monitor.stop()
     }
-    
+
     func testFileSystemMonitorHandlesDeletion() async throws {
         let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("FSMonitorDeleteTest-\(UUID().uuidString)")
@@ -62,14 +64,14 @@ final class FileSystemMonitorTests: XCTestCase {
         let stream = monitor.start()
 
         let expectation = XCTestExpectation(description: "Wait for deletion event")
-        
+
         actor EventCollector {
             var events: [FileSystemEvent] = []
             func append(_ newEvents: [FileSystemEvent]) { events.append(contentsOf: newEvents) }
             func containsRemoved(path: String) -> Bool { events.contains { $0.path.contains(path) && $0.isRemoved } }
         }
         let collector = EventCollector()
-        
+
         let task = Task {
             for await events in stream {
                 await collector.append(events)
@@ -78,12 +80,14 @@ final class FileSystemMonitorTests: XCTestCase {
                 }
             }
         }
-        
+
+        try await Task.sleep(nanoseconds: 300_000_000)
+
         // Trigger deletion
         try FileManager.default.removeItem(at: fileURL)
-        
+
         await fulfillment(of: [expectation], timeout: 5.0)
-        
+
         task.cancel()
         monitor.stop()
     }
