@@ -1,5 +1,5 @@
 import XCTest
-import ChronoframeCore
+@testable import ChronoframeCore
 
 final class FileSystemMonitorTests: XCTestCase {
     func testFileSystemMonitorEmitsEventsOnCreation() async throws {
@@ -91,4 +91,63 @@ final class FileSystemMonitorTests: XCTestCase {
         task.cancel()
         monitor.stop()
     }
+
+    func testPollingSnapshotIncludesRootsAndNestedItems() throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("FSMonitorSnapshotTest-\(UUID().uuidString)")
+        let nestedDirectory = temporaryDirectory.appendingPathComponent("Nested", isDirectory: true)
+        let fileURL = nestedDirectory.appendingPathComponent("image.jpg")
+        let rootFileURL = temporaryDirectory.appendingPathComponent("loose.mov")
+        let missingURL = temporaryDirectory.appendingPathComponent("missing")
+
+        try FileManager.default.createDirectory(at: nestedDirectory, withIntermediateDirectories: true)
+        try Data("jpg".utf8).write(to: fileURL)
+        try Data("mov".utf8).write(to: rootFileURL)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let snapshot = FileSystemMonitor.pollingSnapshot(paths: [
+            temporaryDirectory.path,
+            rootFileURL.path,
+            missingURL.path
+        ])
+
+        XCTAssertEqual(snapshot[temporaryDirectory.path], false)
+        XCTAssertEqual(snapshot.first { $0.key.hasSuffix("/Nested") }?.value, false)
+        XCTAssertEqual(snapshot.first { $0.key.hasSuffix("/Nested/image.jpg") }?.value, true)
+        XCTAssertEqual(snapshot[rootFileURL.path], true)
+        XCTAssertNil(snapshot[missingURL.path])
+    }
+
+    func testPollingEventsReportsCreatedAndRemovedPathsInStableOrder() {
+        let previous = [
+            "/tmp/a-old-directory": false,
+            "/tmp/z-old-file": true
+        ]
+        let current = [
+            "/tmp/b-new-file": true,
+            "/tmp/c-new-directory": false
+        ]
+
+        let events = FileSystemMonitor.pollingEvents(previous: previous, current: current)
+
+        XCTAssertEqual(events.map(\.path), [
+            "/tmp/b-new-file",
+            "/tmp/c-new-directory",
+            "/tmp/a-old-directory",
+            "/tmp/z-old-file"
+        ])
+        XCTAssertEqual(events.map(\.isCreated), [true, true, false, false])
+        XCTAssertEqual(events.map(\.isRemoved), [false, false, true, true])
+        XCTAssertEqual(events.map(\.isFile), [true, false, false, true])
+    }
+
+    func testPollingEventsReturnsNoEventsForUnchangedSnapshot() {
+        let snapshot = [
+            "/tmp/folder": false,
+            "/tmp/folder/photo.heic": true
+        ]
+
+        XCTAssertTrue(FileSystemMonitor.pollingEvents(previous: snapshot, current: snapshot).isEmpty)
+    }
+
 }

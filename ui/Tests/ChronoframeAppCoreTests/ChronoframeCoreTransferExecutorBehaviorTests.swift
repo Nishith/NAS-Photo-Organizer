@@ -610,6 +610,74 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
         XCTAssertEqual(temporaryFilesUnder(destinationRoot), [])
     }
 
+    func testExecuteQueuedJobsUsesParallelPathWhenRequested() throws {
+        let env = try makeEnvironment(jobCount: 3)
+        let progress = Recorder<Int>()
+
+        let result = try TransferExecutor().executeQueuedJobs(
+            database: env.database,
+            destinationRoot: env.destinationRoot,
+            verifyCopies: false,
+            runLogger: env.logger,
+            maxConcurrentCopies: 2,
+            observer: TransferExecutionObserver(onPhaseProgress: { completed, _, _, _ in
+                progress.append(completed)
+            })
+        )
+
+        XCTAssertEqual(result.copiedCount, 3)
+        XCTAssertEqual(result.failedCount, 0)
+        XCTAssertEqual(result.skippedCount, 0)
+        XCTAssertEqual(try env.database.loadQueuedJobs(orderByInsertion: true).map(\.status), [.copied, .copied, .copied])
+        XCTAssertTrue(progress.values.contains(3))
+    }
+
+    func testCollisionResolvedPathHandlesExtensionlessAndExtensionNames() throws {
+        let destinationRoot = temporaryDirectoryURL.appendingPathComponent("collisions", isDirectory: true)
+        try FileManager.default.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+        let executor = TransferExecutor()
+
+        let plainURL = destinationRoot.appendingPathComponent("2024-01-01_001")
+        XCTAssertEqual(try executor.collisionResolvedPath(for: plainURL.path), plainURL.path)
+        try Data("taken".utf8).write(to: plainURL)
+        try Data("taken".utf8).write(to: destinationRoot.appendingPathComponent("2024-01-01_001_collision_1"))
+        XCTAssertEqual(
+            try executor.collisionResolvedPath(for: plainURL.path),
+            destinationRoot.appendingPathComponent("2024-01-01_001_collision_2").path
+        )
+
+        let jpegURL = destinationRoot.appendingPathComponent("2024-01-01_002.jpg")
+        try Data("taken".utf8).write(to: jpegURL)
+        XCTAssertEqual(
+            try executor.collisionResolvedPath(for: jpegURL.path),
+            destinationRoot.appendingPathComponent("2024-01-01_002_collision_1.jpg").path
+        )
+    }
+
+    func testTransferExecutorHelpersReportAbortAndFileSizes() throws {
+        let executor = TransferExecutor(failureThresholds: FailureThresholds(consecutive: 2, total: 4))
+        XCTAssertEqual(
+            executor.abortReason(consecutiveFailures: 2, totalFailures: 2, attemptedJobs: 3),
+            "Aborting: 2 consecutive failures (out of 3 attempted)"
+        )
+        XCTAssertEqual(
+            executor.abortReason(consecutiveFailures: 1, totalFailures: 4, attemptedJobs: 5),
+            "Aborting: 4 total failures (out of 5 attempted)"
+        )
+        XCTAssertNil(executor.abortReason(consecutiveFailures: 1, totalFailures: 3, attemptedJobs: 4))
+
+        let fileURL = temporaryDirectoryURL.appendingPathComponent("size-check.bin")
+        try Data("12345".utf8).write(to: fileURL)
+        XCTAssertEqual(executor.safeFileSize(atPath: fileURL.path), 5)
+        XCTAssertNil(executor.safeFileSize(atPath: temporaryDirectoryURL.appendingPathComponent("missing.bin").path))
+    }
+
+    func testFlushDestinationUpdatesIgnoresEmptyBatches() throws {
+        let env = try makeEnvironment(jobCount: 0)
+        try TransferExecutor().flushDestinationUpdates([], database: env.database)
+        XCTAssertEqual(try env.database.loadRawCacheRecords(namespace: .destination), [])
+    }
+
     // MARK: - Verify cleanup
 
     /// When `verifyCopies` is true and the queued hash doesn't match the

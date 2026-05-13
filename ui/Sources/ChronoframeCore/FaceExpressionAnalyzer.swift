@@ -24,31 +24,53 @@ public enum FaceExpressionAnalyzer {
         }
     }
 
+    struct LandmarkMeasurement {
+        var boundingBox: CGRect
+        var leftEye: [CGPoint]?
+        var rightEye: [CGPoint]?
+        var outerLips: [CGPoint]?
+    }
+
     /// Analyze expression traits from existing face observations.
     /// Returns `nil` if no faces have usable landmarks.
     public static func analyze(
         cgImage: CGImage,
         faceObservations: [VNFaceObservation]
     ) -> Result? {
-        let facesWithLandmarks = faceObservations.filter { $0.landmarks != nil }
-        guard !facesWithLandmarks.isEmpty else { return nil }
+        let measurements = faceObservations.compactMap { face -> LandmarkMeasurement? in
+            guard let landmarks = face.landmarks else { return nil }
+            return LandmarkMeasurement(
+                boundingBox: face.boundingBox,
+                leftEye: landmarks.leftEye?.normalizedPoints,
+                rightEye: landmarks.rightEye?.normalizedPoints,
+                outerLips: landmarks.outerLips?.normalizedPoints
+            )
+        }
+        return analyze(cgImage: cgImage, measurements: measurements)
+    }
 
+    static func analyze(cgImage: CGImage, measurements: [LandmarkMeasurement]) -> Result? {
+        guard !measurements.isEmpty else { return nil }
         var totalEyesOpen = 0.0
         var totalSmile = 0.0
         var totalSubjectSharpness = 0.0
         var count = 0
 
-        for face in facesWithLandmarks {
-            guard let landmarks = face.landmarks else { continue }
+        for measurement in measurements {
             count += 1
 
-            totalEyesOpen += eyesOpenScore(landmarks: landmarks)
-            totalSmile += smileScore(landmarks: landmarks, boundingBox: face.boundingBox)
+            if let leftEye = measurement.leftEye, let rightEye = measurement.rightEye {
+                totalEyesOpen += eyesOpenScore(leftPoints: leftEye, rightPoints: rightEye)
+            } else {
+                totalEyesOpen += 0.5
+            }
+            if let outerLips = measurement.outerLips {
+                totalSmile += smileScore(points: outerLips)
+            }
 
-            let bbox = face.boundingBox
             let faceSharpness = regionSharpness(
                 cgImage: cgImage,
-                normalizedRect: bbox
+                normalizedRect: measurement.boundingBox
             )
             totalSubjectSharpness += faceSharpness
         }
@@ -72,13 +94,6 @@ public enum FaceExpressionAnalyzer {
     }
 
     // MARK: - Eyes-open detection
-
-    static func eyesOpenScore(landmarks: VNFaceLandmarks2D) -> Double {
-        guard let leftEye = landmarks.leftEye, let rightEye = landmarks.rightEye else {
-            return 0.5
-        }
-        return eyesOpenScore(leftPoints: leftEye.normalizedPoints, rightPoints: rightEye.normalizedPoints)
-    }
 
     static func eyesOpenScore(leftPoints: [CGPoint], rightPoints: [CGPoint]) -> Double {
         let leftOpenness = eyeOpenness(points: leftPoints)
@@ -104,11 +119,6 @@ public enum FaceExpressionAnalyzer {
     }
 
     // MARK: - Smile detection
-
-    static func smileScore(landmarks: VNFaceLandmarks2D, boundingBox: CGRect) -> Double {
-        guard let outerLips = landmarks.outerLips else { return 0.0 }
-        return smileScore(points: outerLips.normalizedPoints)
-    }
 
     static func smileScore(points: [CGPoint]) -> Double {
         guard points.count >= 6 else { return 0.0 }

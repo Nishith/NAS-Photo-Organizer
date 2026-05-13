@@ -101,7 +101,7 @@ public final class FileSystemMonitor: @unchecked Sendable {
     }
 
     private func startPollingFallback() {
-        var snapshot = Self.snapshot(paths: paths)
+        var snapshot = Self.pollingSnapshot(paths: paths)
         let interval = max(latency, 0.1)
 
         pollingTask = Task { [weak self] in
@@ -109,27 +109,8 @@ public final class FileSystemMonitor: @unchecked Sendable {
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 guard let self else { return }
 
-                let nextSnapshot = Self.snapshot(paths: self.paths)
-                let oldPaths = Set(snapshot.keys)
-                let newPaths = Set(nextSnapshot.keys)
-
-                var events: [FileSystemEvent] = []
-                for path in newPaths.subtracting(oldPaths).sorted() {
-                    events.append(FileSystemEvent(
-                        path: path,
-                        isFile: nextSnapshot[path, default: false],
-                        isCreated: true
-                    ))
-                }
-
-                for path in oldPaths.subtracting(newPaths).sorted() {
-                    events.append(FileSystemEvent(
-                        path: path,
-                        isFile: snapshot[path, default: false],
-                        isRemoved: true
-                    ))
-                }
-
+                let nextSnapshot = Self.pollingSnapshot(paths: self.paths)
+                let events = Self.pollingEvents(previous: snapshot, current: nextSnapshot)
                 if !events.isEmpty {
                     self.continuation?.yield(events)
                 }
@@ -138,7 +119,31 @@ public final class FileSystemMonitor: @unchecked Sendable {
         }
     }
 
-    private static func snapshot(paths: [String]) -> [String: Bool] {
+    static func pollingEvents(previous: [String: Bool], current: [String: Bool]) -> [FileSystemEvent] {
+        let oldPaths = Set(previous.keys)
+        let newPaths = Set(current.keys)
+
+        var events: [FileSystemEvent] = []
+        for path in newPaths.subtracting(oldPaths).sorted() {
+            events.append(FileSystemEvent(
+                path: path,
+                isFile: current[path, default: false],
+                isCreated: true
+            ))
+        }
+
+        for path in oldPaths.subtracting(newPaths).sorted() {
+            events.append(FileSystemEvent(
+                path: path,
+                isFile: previous[path, default: false],
+                isRemoved: true
+            ))
+        }
+
+        return events
+    }
+
+    static func pollingSnapshot(paths: [String]) -> [String: Bool] {
         var snapshot: [String: Bool] = [:]
         let fileManager = FileManager.default
         let resourceKeys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey]
