@@ -62,11 +62,13 @@ struct ClusterDetailPane: View {
                 0,
                 geometry.size.height - stripHeight - DeduplicateDetailPreviewLayout.resizeHandleHeight
             )
+            let isWideLayout = geometry.size.width >= 450
             VStack(spacing: 0) {
                 VStack(spacing: 0) {
                     warningBanner(for: cluster)
-                    ViewThatFits(in: .horizontal) {
+                    if isWideLayout {
                         detailContentWide(focused: focused, cluster: cluster)
+                    } else {
                         detailContentCompact(focused: focused, cluster: cluster)
                     }
                 }
