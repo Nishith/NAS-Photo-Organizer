@@ -3518,5 +3518,52 @@ class TestMainCopyCancellation(TempDirMixin, unittest.TestCase):
         db.close()
 
 
+class TestConcurrentWorkerExceptionHandling(TempDirMixin, unittest.TestCase):
+    """Test exception handling in concurrent worker scenarios."""
+
+    def test_build_dest_index_worker_exception(self):
+        """Test build_dest_index handles worker exceptions gracefully."""
+        dst_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(dst_dir)
+        db_path = os.path.join(dst_dir, ".organize_cache.db")
+        db = CacheDB(db_path)
+
+        # Create some files
+        for i in range(3):
+            file_path = os.path.join(dst_dir, f"file{i}.jpg")
+            with open(file_path, "wb") as f:
+                f.write(b"data")
+
+        # Mock process_single_file to raise exception for one file
+        from chronoframe import core as core_module
+        original_process = core_module.process_single_file
+
+        def process_with_error(path, cache):
+            if "file1" in path:
+                raise IOError("Read error")
+            return original_process(path, cache)
+
+        with patch("chronoframe.core.process_single_file", side_effect=process_with_error):
+            hi, seq, _ = build_dest_index(dst_dir, db, workers=2)
+
+        # Should still get hash_index with the successful files
+        self.assertGreater(len(hi), 0)
+
+        db.close()
+
+    def test_profile_loading_with_environment_override(self):
+        """Test load_profile respects CHRONOFRAME_PROFILES_PATH environment variable."""
+        from chronoframe.core import load_profile
+
+        profiles_path = os.path.join(self.tmpdir, "custom_profiles.yaml")
+        with open(profiles_path, "w") as f:
+            f.write("env_profile:\n  source: /env/src\n  dest: /env/dst\n")
+
+        with patch.dict(os.environ, {"CHRONOFRAME_PROFILES_PATH": profiles_path}):
+            src, dest = load_profile("env_profile")
+            self.assertEqual(src, "/env/src")
+            self.assertEqual(dest, "/env/dst")
+
+
 if __name__ == '__main__':
     unittest.main()

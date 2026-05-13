@@ -131,32 +131,272 @@ class TestCoreExtra(unittest.TestCase):
         os.makedirs(dst_dir)
         db_path = os.path.join(dst_dir, ".organize_cache.db")
         db = CacheDB(db_path)
-        
+
         file_path = os.path.join(dst_dir, "test.jpg")
         with open(file_path, "wb") as f:
             f.write(b"data")
-        
+
         # Seed cache with correct data
         st = os.stat(file_path)
         db.save_batch(2, [(file_path, "hash1", st.st_size, st.st_mtime)])
-        
+
         # Modify file to trigger invalidation
         with open(file_path, "wb") as f:
             f.write(b"modified data")
-        
+
         # Run with fast_dest
         hi, seq, _ = build_dest_index(dst_dir, db, fast_dest=True)
-        
+
         # Hash should be updated
         self.assertIn(file_path, db.get_cache_dict(2))
         self.assertNotEqual(db.get_cache_dict(2)[file_path]["hash"], "hash1")
-        
+
         # Test file removal
         os.remove(file_path)
         hi, seq, _ = build_dest_index(dst_dir, db, fast_dest=True)
         self.assertNotIn(file_path, db.get_cache_dict(2))
-        
+
         db.close()
+
+    def test_run_logger_remove_failure(self):
+        """Test RunLogger gracefully handles os.remove failure during rotation."""
+        log_path = os.path.join(self.tmpdir, "test.log")
+
+        # Create a large log file
+        with open(log_path, "w") as f:
+            f.write("A" * (RunLogger.MAX_LOG_BYTES + 100))
+
+        logger = RunLogger(log_path)
+
+        # Mock os.remove to raise OSError
+        with patch("os.remove", side_effect=OSError("Permission denied")):
+            logger.open()
+            logger.log("test message")
+            logger.close()
+
+        # Should still have created the file handle and logged
+        self.assertTrue(os.path.exists(log_path))
+
+    def test_run_logger_rename_failure(self):
+        """Test RunLogger gracefully handles os.rename failure during rotation."""
+        log_path = os.path.join(self.tmpdir, "test.log")
+
+        # Create a large log file
+        with open(log_path, "w") as f:
+            f.write("A" * (RunLogger.MAX_LOG_BYTES + 100))
+
+        logger = RunLogger(log_path)
+
+        # Mock os.rename to raise OSError
+        with patch("os.rename", side_effect=OSError("Cross-device link")):
+            logger.open()
+            logger.log("test message")
+            logger.close()
+
+        self.assertTrue(os.path.exists(log_path))
+
+    def test_build_dest_index_symlink_handling(self):
+        """Test fast_dest path handles symlinks correctly."""
+        dst_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(dst_dir)
+        db_path = os.path.join(dst_dir, ".organize_cache.db")
+        db = CacheDB(db_path)
+
+        # Create a regular file and a symlink to it
+        real_file = os.path.join(dst_dir, "real.jpg")
+        with open(real_file, "wb") as f:
+            f.write(b"data")
+
+        link_path = os.path.join(dst_dir, "link.jpg")
+        os.symlink(real_file, link_path)
+
+        # Run with fast_dest - symlinks should be skipped
+        hi, seq, _ = build_dest_index(dst_dir, db, fast_dest=True)
+
+        # Symlink should not be in hash_index
+        self.assertNotIn(link_path, hi)
+
+        db.close()
+
+    def test_build_dest_index_directory_handling(self):
+        """Test fast_dest path handles directories correctly."""
+        dst_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(dst_dir)
+        db_path = os.path.join(dst_dir, ".organize_cache.db")
+        db = CacheDB(db_path)
+
+        # Create a regular file and a directory
+        real_file = os.path.join(dst_dir, "file.jpg")
+        with open(real_file, "wb") as f:
+            f.write(b"data")
+
+        subdir = os.path.join(dst_dir, "subdir")
+        os.makedirs(subdir)
+
+        # Run with fast_dest
+        hi, seq, _ = build_dest_index(dst_dir, db, fast_dest=True)
+
+        # Directory should not be in hash_index
+        self.assertNotIn(subdir, hi)
+
+        db.close()
+
+    def test_revert_receipt_path_boundary_validation(self):
+        """Test revert_receipt refuses paths outside destination boundary."""
+        dest_dir = os.path.join(self.tmpdir, "dest")
+        outside_dir = os.path.join(self.tmpdir, "outside")
+        os.makedirs(dest_dir)
+        os.makedirs(outside_dir)
+
+        # Create a receipt
+        receipt_path = os.path.join(dest_dir, ".organize_logs", "receipt.json")
+        os.makedirs(os.path.dirname(receipt_path), exist_ok=True)
+
+        # Create receipt with path outside boundary
+        outside_file = os.path.join(outside_dir, "file.jpg")
+        receipt_data = {
+            "transfers": [{"dest": outside_file, "hash": "somehash"}]
+        }
+        with open(receipt_path, "w") as f:
+            json.dump(receipt_data, f)
+
+        # Create the outside file so hash matches
+        with open(outside_file, "wb") as f:
+            f.write(b"data")
+
+        with patch("chronoframe.core.console.print") as mock_print:
+            with patch("chronoframe.core.emit_json"):
+                revert_receipt(receipt_path)
+
+        # Should have printed refusal message
+        self.assertTrue(any("outside" in str(call) for call in mock_print.call_args_list))
+
+    def test_revert_receipt_hash_mismatch(self):
+        """Test revert_receipt skips files with mismatched hashes."""
+        dest_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(dest_dir)
+
+        # Create destination file
+        dest_file = os.path.join(dest_dir, "file.jpg")
+        with open(dest_file, "wb") as f:
+            f.write(b"current data")
+
+        # Create receipt with different hash
+        receipt_path = os.path.join(dest_dir, ".organize_logs", "receipt.json")
+        os.makedirs(os.path.dirname(receipt_path), exist_ok=True)
+
+        receipt_data = {
+            "transfers": [{"dest": dest_file, "hash": "expected_hash_that_wont_match"}]
+        }
+        with open(receipt_path, "w") as f:
+            json.dump(receipt_data, f)
+
+        with patch("chronoframe.core.console.print"):
+            with patch("chronoframe.core.emit_json"):
+                revert_receipt(receipt_path)
+
+        # File should still exist (not deleted due to hash mismatch)
+        self.assertTrue(os.path.exists(dest_file))
+
+    def test_revert_receipt_missing_destination_file(self):
+        """Test revert_receipt handles missing destination files gracefully."""
+        dest_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(dest_dir)
+
+        missing_file = os.path.join(dest_dir, "missing.jpg")
+
+        # Create receipt
+        receipt_path = os.path.join(dest_dir, ".organize_logs", "receipt.json")
+        os.makedirs(os.path.dirname(receipt_path), exist_ok=True)
+
+        receipt_data = {
+            "transfers": [{"dest": missing_file, "hash": "somehash"}]
+        }
+        with open(receipt_path, "w") as f:
+            json.dump(receipt_data, f)
+
+        with patch("chronoframe.core.console.print"):
+            with patch("chronoframe.core.emit_json"):
+                revert_receipt(receipt_path)
+
+        # Should complete without error (missing files are trivially reverted)
+        self.assertFalse(os.path.exists(missing_file))
+
+    def test_event_subpath_cross_device_error(self):
+        """Test _event_subpath handles relpath ValueError."""
+        # This tests the exception handler for ValueError from relpath
+        # when trying to get relative path across drives on Windows
+        with patch("os.path.relpath", side_effect=ValueError("paths on different drives")):
+            result = _event_subpath("/some/path/file.jpg", "/different/root")
+            self.assertEqual(result, "")
+
+    def test_walk_error_handler_with_json_mode(self):
+        """Test _walk_error_handler emits JSON warnings."""
+        from chronoframe.core import _walk_error_handler
+
+        handler = _walk_error_handler(run_log=None)
+        error = OSError("Permission denied")
+        error.filename = "/some/folder"
+
+        with patch("chronoframe.core.emit_json") as mock_emit:
+            handler(error)
+            mock_emit.assert_called()
+            call_args = mock_emit.call_args
+            self.assertEqual(call_args[0][0], "warning")
+
+    def test_walk_error_handler_with_logging(self):
+        """Test _walk_error_handler logs to run_log when provided."""
+        from chronoframe.core import _walk_error_handler
+
+        mock_log = MagicMock()
+        handler = _walk_error_handler(run_log=mock_log)
+        error = OSError("Permission denied")
+        error.filename = "/some/folder"
+
+        with patch("chronoframe.core.emit_json"):
+            handler(error)
+            mock_log.warn.assert_called()
+
+    def test_profile_loading_missing_file(self):
+        """Test load_profile with missing profiles.yaml."""
+        from chronoframe.core import load_profile
+
+        with patch("chronoframe.core._find_profiles_yaml", return_value="/nonexistent/profiles.yaml"):
+            with patch("chronoframe.core.console.print") as mock_print:
+                with self.assertRaises(SystemExit):
+                    load_profile("test_profile")
+                mock_print.assert_called()
+                args = mock_print.call_args[0]
+                self.assertTrue("not found" in args[0])
+
+    def test_profile_loading_invalid_profile_name(self):
+        """Test load_profile with invalid profile name."""
+        from chronoframe.core import load_profile
+
+        profiles_path = os.path.join(self.tmpdir, "profiles.yaml")
+        with open(profiles_path, "w") as f:
+            f.write("valid_profile:\n  source: /src\n  dest: /dst\n")
+
+        with patch("chronoframe.core._find_profiles_yaml", return_value=profiles_path):
+            with patch("chronoframe.core.console.print") as mock_print:
+                with self.assertRaises(SystemExit):
+                    load_profile("nonexistent_profile")
+                mock_print.assert_called()
+                args = mock_print.call_args[0]
+                self.assertTrue("not defined" in args[0])
+
+    def test_profile_loading_missing_keys(self):
+        """Test load_profile with missing source/dest keys."""
+        from chronoframe.core import load_profile
+
+        profiles_path = os.path.join(self.tmpdir, "profiles.yaml")
+        with open(profiles_path, "w") as f:
+            f.write("incomplete_profile:\n  source: /src\n")
+
+        with patch("chronoframe.core._find_profiles_yaml", return_value=profiles_path):
+            src, dest = load_profile("incomplete_profile")
+            self.assertEqual(src, "/src")
+            self.assertIsNone(dest)
 
 if __name__ == "__main__":
     unittest.main()
