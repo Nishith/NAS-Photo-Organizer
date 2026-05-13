@@ -111,7 +111,13 @@ public struct DryRunPlanner: Sendable {
 
         try Self.throwIfCancelled(isCancelled)
         onEvent?(.phaseStarted(phase: .discovery, total: nil))
-        let sourcePaths = try MediaDiscovery.discoverMediaFiles(at: sourceRoot, isCancelled: isCancelled)
+        let sourcePaths = try MediaDiscovery.discoverMediaFiles(
+            at: sourceRoot,
+            isCancelled: isCancelled,
+            onDirectoryIssue: { issue in
+                onEvent?(.issue(RunIssue(severity: .warning, message: issue.message)))
+            }
+        )
         let discoveredSourceCount = sourcePaths.count
         onEvent?(.phaseCompleted(phase: .discovery, result: RunPhaseResult(found: discoveredSourceCount)))
         try Self.throwIfCancelled(isCancelled)
@@ -533,7 +539,13 @@ public struct DryRunPlanner: Sendable {
         var snapshotBuilder = DestinationIndexSnapshotBuilder(namingRules: namingRules)
         var indexedFileCount = 0
 
-        let destinationPaths = try MediaDiscovery.discoverMediaFiles(at: destinationRoot, isCancelled: isCancelled)
+        let destinationPaths = try MediaDiscovery.discoverMediaFiles(
+            at: destinationRoot,
+            isCancelled: isCancelled,
+            onDirectoryIssue: { issue in
+                onEvent?(.issue(RunIssue(severity: .warning, message: issue.message)))
+            }
+        )
         onEvent?(.phaseStarted(phase: .destinationIndexing, total: destinationPaths.count))
         let destinationCheckpoint = FileCacheCheckpointWriter(namespace: .destination, database: database)
         let destinationResults = try processFiles(

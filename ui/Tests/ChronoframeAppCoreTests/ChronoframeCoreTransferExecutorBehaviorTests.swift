@@ -49,9 +49,9 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
         }
     }
 
-    /// Copies whose source path doesn't exist must fail without leaving an
+    /// Copies whose source path doesn't exist must be skipped without leaving an
     /// orphaned `.tmp` file in the destination directory.
-    func testFailedCopyCleansUpTemporaryFile() throws {
+    func testUnreadableSourceSkipsWithoutTemporaryFile() throws {
         let destinationRoot = temporaryDirectoryURL.appendingPathComponent("dest", isDirectory: true)
         try FileManager.default.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
 
@@ -81,9 +81,33 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
         )
 
         XCTAssertEqual(result.copiedCount, 0)
-        XCTAssertEqual(result.failedCount, 1)
+        XCTAssertEqual(result.failedCount, 0)
+        XCTAssertEqual(result.skippedCount, 1)
         XCTAssertFalse(FileManager.default.fileExists(atPath: plannedDestination + ".tmp"))
         XCTAssertFalse(FileManager.default.fileExists(atPath: plannedDestination))
+    }
+
+    func testModifiedSourceAfterPlanningSkipsWithoutDestinationCopy() throws {
+        let env = try makeEnvironment(jobCount: 1)
+        let job = env.jobs[0]
+        try Data("edited after planning".utf8).write(to: URL(fileURLWithPath: job.sourcePath))
+        let issues = Recorder<RunIssue>()
+
+        let result = try TransferExecutor().execute(
+            queuedJobs: [job],
+            database: env.database,
+            destinationRoot: env.destinationRoot,
+            verifyCopies: false,
+            runLogger: env.logger,
+            observer: TransferExecutionObserver(onIssue: { issues.append($0) })
+        )
+
+        XCTAssertEqual(result.copiedCount, 0)
+        XCTAssertEqual(result.failedCount, 0)
+        XCTAssertEqual(result.skippedCount, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: job.destinationPath))
+        XCTAssertEqual(try env.database.loadQueuedJobs().first?.status, .skipped)
+        XCTAssertTrue(issues.values.first?.message.contains("Source modified since planning") == true)
     }
 
     /// When the requested destination already holds a different file, the
@@ -323,13 +347,12 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
         )
 
         XCTAssertEqual(result.copiedCount, 0)
-        XCTAssertEqual(result.failedCount, 2, "executor must stop processing once consecutive=2 is reached")
+        XCTAssertEqual(result.failedCount, 0)
+        XCTAssertEqual(result.skippedCount, 5, "unreadable sources should not count toward failure thresholds")
 
         let queueAfterAbort = try database.loadQueuedJobs(orderByInsertion: true)
-        let failedRows = queueAfterAbort.filter { $0.status == .failed }
-        let pendingRows = queueAfterAbort.filter { $0.status == .pending }
-        XCTAssertEqual(failedRows.count, 2)
-        XCTAssertEqual(pendingRows.count, 3, "remaining jobs must stay PENDING for resume")
+        XCTAssertEqual(queueAfterAbort.filter { $0.status == .failed }.count, 0)
+        XCTAssertEqual(queueAfterAbort.filter { $0.status == .skipped }.count, 5)
     }
 
     func testRunAbortsAfterTotalFailureThresholdEvenWhenSuccessesResetConsecutiveFailures() throws {
@@ -378,19 +401,20 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
             runLogger: env.logger
         )
 
-        XCTAssertEqual(result.copiedCount, 2)
-        XCTAssertEqual(result.failedCount, 3)
+        XCTAssertEqual(result.copiedCount, 3)
+        XCTAssertEqual(result.failedCount, 0)
+        XCTAssertEqual(result.skippedCount, 3)
         XCTAssertEqual(
             try env.database.loadQueuedJobs(orderByInsertion: true).map(\.status),
-            [.failed, .copied, .failed, .copied, .failed, .pending]
+            [.skipped, .copied, .skipped, .copied, .skipped, .copied]
         )
 
         let payload = try readAuditPayload(in: env.destinationRoot)
-        XCTAssertEqual(payload["status"] as? String, "ABORTED")
-        XCTAssertEqual(payload["attempted_jobs"] as? Int, 5)
-        XCTAssertEqual(payload["failed_jobs"] as? Int, 3)
-        XCTAssertTrue((payload["abortReason"] as? String)?.contains("total failures") == true)
-        XCTAssertEqual((payload["transfers"] as? [[String: Any]])?.count, 2)
+        XCTAssertEqual(payload["status"] as? String, "COMPLETED")
+        XCTAssertEqual(payload["attempted_jobs"] as? Int, 6)
+        XCTAssertEqual(payload["failed_jobs"] as? Int, 0)
+        XCTAssertNil(payload["abortReason"] as? String)
+        XCTAssertEqual((payload["transfers"] as? [[String: Any]])?.count, 3)
     }
 
     func testCancellationBeforeFirstJobWritesAbortedReceiptAndKeepsQueuePending() throws {
@@ -574,14 +598,15 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
             maxConcurrentCopies: 4
         )
 
-        XCTAssertEqual(result.copiedCount, 0)
-        XCTAssertEqual(result.failedCount, 2)
+        XCTAssertEqual(result.copiedCount, 2)
+        XCTAssertEqual(result.failedCount, 0)
+        XCTAssertEqual(result.skippedCount, 2)
 
         let queueRows = try database.loadQueuedJobs(orderByInsertion: true)
-        XCTAssertEqual(queueRows.filter { $0.status == .failed }.count, 2)
-        XCTAssertEqual(queueRows.filter { $0.status == .pending }.count, 2)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: jobs[2].destinationPath))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: jobs[3].destinationPath))
+        XCTAssertEqual(queueRows.filter { $0.status == .skipped }.count, 2)
+        XCTAssertEqual(queueRows.filter { $0.status == .copied }.count, 2)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jobs[2].destinationPath))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jobs[3].destinationPath))
         XCTAssertEqual(temporaryFilesUnder(destinationRoot), [])
     }
 

@@ -131,6 +131,24 @@ final class ChronoframeCoreDatabaseTests: XCTestCase {
         XCTAssertEqual(try database.loadCopyJobs(status: .copied).map(\.sourcePath), ["/src/a.jpg"])
     }
 
+    func testEnqueueReplacesStaleRowsForFreshPlans() throws {
+        let database = try OrganizerDatabase(url: temporaryDirectoryURL.appendingPathComponent(".organize_cache.db"))
+        defer { database.close() }
+
+        try database.enqueueQueuedJobs([
+            QueuedCopyJob(sourcePath: "/src/a.jpg", destinationPath: "/dst/old.jpg", hash: "old", status: .copied),
+        ])
+        try database.enqueueQueuedJobs([
+            QueuedCopyJob(sourcePath: "/src/a.jpg", destinationPath: "/dst/new.jpg", hash: "new", status: .pending),
+        ])
+
+        let jobs = try database.loadQueuedJobs()
+        XCTAssertEqual(jobs.count, 1)
+        XCTAssertEqual(jobs[0].destinationPath, "/dst/new.jpg")
+        XCTAssertEqual(jobs[0].hash, "new")
+        XCTAssertEqual(jobs[0].status, .pending)
+    }
+
     func testReviewOverridesRoundTripAndDeleteWhenEmpty() throws {
         let database = try OrganizerDatabase(url: temporaryDirectoryURL.appendingPathComponent(".organize_cache.db"))
         defer { database.close() }

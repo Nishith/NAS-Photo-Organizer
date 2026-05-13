@@ -1,5 +1,28 @@
 import Foundation
 
+public enum SafePathContainment {
+    public static func isContained(_ candidateURL: URL, in rootURL: URL) -> Bool {
+        let rootPath = resolvedPath(for: rootURL, treatAsDirectory: true)
+        let candidatePath = resolvedPath(for: candidateURL, treatAsDirectory: false)
+        return candidatePath == rootPath || candidatePath.hasPrefix(rootPath + "/")
+    }
+
+    public static func resolvedPath(for url: URL, treatAsDirectory: Bool) -> String {
+        let standardized = url.standardizedFileURL
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: standardized.path) {
+            return standardized.resolvingSymlinksInPath().standardizedFileURL.path
+        }
+        if treatAsDirectory {
+            return standardized.resolvingSymlinksInPath().standardizedFileURL.path
+        }
+        let parent = standardized.deletingLastPathComponent()
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        return parent.appendingPathComponent(standardized.lastPathComponent).path
+    }
+}
+
 // MARK: - Receipt model (decoded from audit_receipt_*.json)
 
 public struct RevertReceiptTransfer: Equatable, Codable, Sendable {
@@ -169,7 +192,7 @@ public struct RevertExecutor: Sendable {
         var missingCount = 0
 
         let boundaryPath: String? = destinationBoundary.map {
-            $0.standardizedFileURL.path
+            SafePathContainment.resolvedPath(for: $0, treatAsDirectory: true)
         }
 
         for transfer in transfers {
@@ -181,7 +204,7 @@ public struct RevertExecutor: Sendable {
             let destinationURL = URL(fileURLWithPath: destinationPath)
 
             if let boundaryPath {
-                let resolvedPath = destinationURL.standardizedFileURL.path
+                let resolvedPath = SafePathContainment.resolvedPath(for: destinationURL, treatAsDirectory: false)
                 let isInside = resolvedPath == boundaryPath
                     || resolvedPath.hasPrefix(boundaryPath + "/")
                 if !isInside {

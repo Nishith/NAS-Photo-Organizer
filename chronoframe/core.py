@@ -205,7 +205,7 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
         futures = {}
 
         # Submit hashing jobs while walking — overlaps tree traversal with I/O
-        for root, dirs, fnames in os.walk(dst_dir):
+        for root, dirs, fnames in os.walk(dst_dir, onerror=_walk_error_handler()):
             dirs[:] = [
                 d for d in dirs
                 if not d.startswith('.') and not os.path.islink(os.path.join(root, d))
@@ -356,7 +356,8 @@ def revert_receipt(receipt_path, dest_root_override=None):
         receipt_abs = os.path.abspath(receipt_path)
         logs_dir = os.path.dirname(receipt_abs)
         dest_root = os.path.dirname(logs_dir)
-    dest_prefix = os.path.normpath(dest_root) + os.sep
+    dest_root_real = os.path.realpath(dest_root)
+    dest_prefix = os.path.normpath(dest_root_real) + os.sep
 
     transfers = data.get("transfers", [])
     if not transfers:
@@ -387,8 +388,8 @@ def revert_receipt(receipt_path, dest_root_override=None):
             # Refuse paths outside the destination boundary, even if the
             # hash matches. A crafted receipt cannot escape <dest>/.
             if dst:
-                dst_abs = os.path.normpath(os.path.abspath(dst))
-                if not dst_abs.startswith(dest_prefix):
+                dst_abs = os.path.normpath(os.path.realpath(dst))
+                if dst_abs != dest_root_real and not dst_abs.startswith(dest_prefix):
                     console.print(
                         f"[red]Refusing to revert path outside destination:[/red] {dst}"
                     )
@@ -458,6 +459,16 @@ def _event_subpath(src_path, src_root):
     if rel in ("", "."):
         return ""
     return _UNSAFE_PATH_CHARS.sub('_', os.path.basename(rel))
+
+
+def _walk_error_handler(run_log=None):
+    def handle(error):
+        path = getattr(error, "filename", "") or "unknown folder"
+        msg = f"Chronoframe could not read this folder, so it was skipped: {path}"
+        emit_json("warning", message=msg)
+        if run_log:
+            run_log.warn(msg)
+    return handle
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
@@ -540,7 +551,7 @@ def main():
                 execute_jobs(pending_jobs, cache_db, dst, run_log, verify=verify_copies,
                              workers=workers, started_at=run_started_at, verify_source=True)
                 run_log.log("Resumed session complete")
-                emit_json("complete", status="finished", dest=dst)
+                emit_json("complete", status=getattr(execute_jobs, "last_status", "finished"), dest=dst)
                 return
             else:
                 if Confirm.ask("Resume where you left off?"):
@@ -548,7 +559,7 @@ def main():
                                  workers=workers, started_at=run_started_at, verify_source=True)
                     console.print("[bold green]Queue complete![/bold green]")
                     run_log.log("Resumed session complete")
-                    emit_json("complete", status="finished", dest=dst)
+                    emit_json("complete", status=getattr(execute_jobs, "last_status", "finished"), dest=dst)
                     return
                 else:
                     if Confirm.ask("[red]Flush the pending queue?[/red] (No files will be deleted)"):
@@ -560,7 +571,7 @@ def main():
         src_files = []
         emit_json("task_start", task="discovery")
         with console.status("[bold blue]Scanning source directories...", spinner="dots"):
-            for root, dirs, fnames in os.walk(src):
+            for root, dirs, fnames in os.walk(src, onerror=_walk_error_handler(run_log)):
                 dirs[:] = sorted(
                     d for d in dirs
                     if not d.startswith('.') and not os.path.islink(os.path.join(root, d))
@@ -851,7 +862,7 @@ def main():
                              started_at=run_started_at, verify_source=True)
 
         run_log.log("Run complete")
-        emit_json("complete", status="finished", dest=dst, report=rpath)
+        emit_json("complete", status=getattr(execute_jobs, "last_status", "finished"), dest=dst, report=rpath)
 
     finally:
         run_log.close()
@@ -1028,11 +1039,13 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False,
     if verify and verify_failures > 0:
         console.print(f"[bold yellow]{verify_failures} files failed verification![/bold yellow]")
 
+    receipt_status = "ABORTED" if abort_reason else "COMPLETED"
+    execute_jobs.last_status = "aborted" if abort_reason else "finished"
     return generate_audit_receipt(
         executed_log,
         dst_root,
         started_at=started_at,
-        status="ABORTED" if abort_reason else "COMPLETED",
+        status=receipt_status,
         abort_reason=abort_reason,
         attempted_count=attempted_count,
         failed_count=total_fail,

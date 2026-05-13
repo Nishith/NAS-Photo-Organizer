@@ -71,7 +71,17 @@ class CacheDB:
         if not jobs:
             return
         with self._lock:
-            self.conn.executemany("INSERT OR IGNORE INTO CopyJobs (src_path, dst_path, hash, status) VALUES (?, ?, ?, ?)", jobs)
+            self.conn.executemany(
+                """
+                INSERT INTO CopyJobs (src_path, dst_path, hash, status)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(src_path) DO UPDATE SET
+                    dst_path = excluded.dst_path,
+                    hash = excluded.hash,
+                    status = excluded.status
+                """,
+                jobs,
+            )
             self.conn.commit()
 
     def get_pending_jobs(self):

@@ -37,8 +37,18 @@ jobs:
         with:
           languages: swift
           build-mode: manual
-      - name: Build Swift packages
-        run: cd ui && swift build
+      - name: Build Xcode project
+        run: |
+          xcodebuild \
+            -project ui/Chronoframe.xcodeproj \
+            -scheme Chronoframe \
+            -configuration Debug \
+            -derivedDataPath "$RUNNER_TEMP/ChronoframeDerivedData" \
+            -destination "generic/platform=macOS" \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=x86_64 \
+            ONLY_ACTIVE_ARCH=YES \
+            build
       - uses: github/codeql-action/analyze@v4
         with:
           category: "/language:swift"

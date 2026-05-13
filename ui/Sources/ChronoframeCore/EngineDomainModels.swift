@@ -113,6 +113,7 @@ public enum CopyJobStatus: String, Codable, CaseIterable, Sendable {
     case pending = "PENDING"
     case copied = "COPIED"
     case failed = "FAILED"
+    case skipped = "SKIPPED"
 }
 
 public struct CopyJobRecord: Equatable, Codable, Sendable {

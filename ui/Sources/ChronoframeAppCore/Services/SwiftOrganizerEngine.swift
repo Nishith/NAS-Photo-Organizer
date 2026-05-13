@@ -632,11 +632,13 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
             )
         )
         runLogger.log("Run complete")
+        let completedStatus: RunStatus = executionResult.status == "COMPLETED" ? .finished : .failed
+        let completedTitle = executionResult.status == "COMPLETED" ? "Done" : "Transfer stopped"
         continuation.yield(
             .complete(
                 RunSummary(
-                    status: .finished,
-                    title: "Done",
+                    status: completedStatus,
+                    title: completedTitle,
                     metrics: RunMetrics(
                         discoveredCount: result.discoveredSourceCount,
                         plannedCount: result.transferCount,
@@ -648,6 +650,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                         errorCount: errorCounter.value,
                         bytesCopied: executionResult.bytesCopied,
                         bytesTotal: executionResult.bytesTotal,
+                        skippedCount: executionResult.skippedCount,
                         dateHistogram: result.dateHistogram
                     ),
                     artifacts: executionResult.artifacts
@@ -744,8 +747,8 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
         continuation.yield(
             .complete(
                 RunSummary(
-                    status: .finished,
-                    title: "Done",
+                    status: executionResult.status == "COMPLETED" ? .finished : .failed,
+                    title: executionResult.status == "COMPLETED" ? "Done" : "Transfer stopped",
                     metrics: RunMetrics(
                         plannedCount: pendingJobCount,
                         copiedCount: executionResult.copiedCount,
@@ -753,6 +756,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                         errorCount: errorCounter.value,
                         bytesCopied: executionResult.bytesCopied,
                         bytesTotal: executionResult.bytesTotal,
+                        skippedCount: executionResult.skippedCount,
                         dateHistogram: resumedHistogram
                     ),
                     artifacts: executionResult.artifacts

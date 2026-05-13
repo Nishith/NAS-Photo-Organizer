@@ -624,8 +624,6 @@ public struct ReorganizeExecutor: Sendable {
     }
 
     private static func isContained(_ url: URL, in rootURL: URL) -> Bool {
-        let rootPath = rootURL.standardizedFileURL.path
-        let path = url.standardizedFileURL.path
-        return path == rootPath || path.hasPrefix(rootPath + "/")
+        SafePathContainment.isContained(url, in: rootURL)
     }
 }

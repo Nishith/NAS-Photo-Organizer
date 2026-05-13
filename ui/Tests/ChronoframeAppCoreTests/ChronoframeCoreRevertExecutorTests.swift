@@ -429,6 +429,38 @@ final class ChronoframeCoreRevertExecutorTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: insideURL.path))
     }
 
+    func testRevertRefusesSymlinkEscapedPathInsideDestinationBoundary() throws {
+        let destinationRoot = temporaryDirectoryURL.appendingPathComponent("dest", isDirectory: true)
+        let outsideRoot = temporaryDirectoryURL.appendingPathComponent("outside", isDirectory: true)
+        try FileManager.default.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outsideRoot, withIntermediateDirectories: true)
+
+        let outsideURL = outsideRoot.appendingPathComponent("photo.jpg")
+        try Data("outside".utf8).write(to: outsideURL)
+        let linkURL = destinationRoot.appendingPathComponent("linked")
+        try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: outsideRoot)
+        let escapedReceiptPath = linkURL.appendingPathComponent("photo.jpg")
+        let identity = try FileIdentityHasher().hashIdentity(at: escapedReceiptPath)
+
+        let receipt = RevertReceipt(
+            transfers: [
+                RevertReceiptTransfer(source: "/src/photo.jpg", dest: escapedReceiptPath.path, hash: identity.rawValue),
+            ]
+        )
+        let issues = Recorder<RunIssue>()
+
+        let result = RevertExecutor().revert(
+            receipt: receipt,
+            observer: RevertExecutionObserver(onIssue: { issues.append($0) }),
+            destinationBoundary: destinationRoot
+        )
+
+        XCTAssertEqual(result.revertedCount, 0)
+        XCTAssertEqual(result.skippedCount, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outsideURL.path))
+        XCTAssertTrue(issues.values.first?.message.contains("outside destination") == true)
+    }
+
     func testRevertWithoutBoundaryPreservesLegacyBehavior() throws {
         // When the boundary is nil (legacy/test callers), behavior is unchanged
         // — the hash check is the only guard.

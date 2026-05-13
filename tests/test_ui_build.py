@@ -10,6 +10,26 @@ import tempfile
 import unittest
 
 
+class TestXcodeProjectMembership(unittest.TestCase):
+    def test_swift_app_sources_are_listed_in_xcode_project(self):
+        repo_root = os.path.dirname(os.path.dirname(__file__))
+        project_file = os.path.join(repo_root, "ui", "Chronoframe.xcodeproj", "project.pbxproj")
+        sources_root = os.path.join(repo_root, "ui", "Sources")
+
+        with open(project_file, "r", encoding="utf-8") as handle:
+            project = handle.read()
+
+        missing = []
+        for root, _, filenames in os.walk(sources_root):
+            if ".build" in root.split(os.sep):
+                continue
+            for filename in filenames:
+                if filename.endswith(".swift") and filename not in project:
+                    missing.append(os.path.relpath(os.path.join(root, filename), repo_root))
+
+        self.assertEqual(missing, [])
+
+
 @unittest.skipUnless(sys.platform == "darwin", "macOS build smoke requires macOS")
 class TestUIBuildPipeline(unittest.TestCase):
     def test_build_script_stages_bundle_with_icon_and_backend(self):

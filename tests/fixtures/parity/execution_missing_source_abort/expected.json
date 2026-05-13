@@ -1,6 +1,6 @@
 {
   "scenario": "execution_missing_source_abort",
-  "description": "Missing sources fail fast, trigger the consecutive failure abort threshold, and leave later queued jobs pending for resume.",
+  "description": "Missing sources are skipped without counting toward failure thresholds.",
   "runner": "execute_jobs",
   "events": null,
   "queue_rows": [
@@ -8,37 +8,37 @@
       "src": "source/missing/photo_01.jpg",
       "dst": "dest/out/photo_01.jpg",
       "hash": "missing_hash_01",
-      "status": "FAILED"
+      "status": "SKIPPED"
     },
     {
       "src": "source/missing/photo_02.jpg",
       "dst": "dest/out/photo_02.jpg",
       "hash": "missing_hash_02",
-      "status": "FAILED"
+      "status": "SKIPPED"
     },
     {
       "src": "source/missing/photo_03.jpg",
       "dst": "dest/out/photo_03.jpg",
       "hash": "missing_hash_03",
-      "status": "FAILED"
+      "status": "SKIPPED"
     },
     {
       "src": "source/missing/photo_04.jpg",
       "dst": "dest/out/photo_04.jpg",
       "hash": "missing_hash_04",
-      "status": "FAILED"
+      "status": "SKIPPED"
     },
     {
       "src": "source/missing/photo_05.jpg",
       "dst": "dest/out/photo_05.jpg",
       "hash": "missing_hash_05",
-      "status": "FAILED"
+      "status": "SKIPPED"
     },
     {
       "src": "source/missing/photo_06.jpg",
       "dst": "dest/out/photo_06.jpg",
       "hash": "missing_hash_06",
-      "status": "PENDING"
+      "status": "SKIPPED"
     }
   ],
   "dest_cache_rows": [],
@@ -46,11 +46,11 @@
   "audit_receipt": {
     "present": true,
     "total_jobs": 0,
-    "status": "ABORTED",
+    "status": "COMPLETED",
     "transfers": []
   },
   "log_markers": {
-    "Copy failed": true,
-    "Aborting: 5 consecutive failures": true
+    "Copy failed": false,
+    "Aborting: 5 consecutive failures": false
   }
 }

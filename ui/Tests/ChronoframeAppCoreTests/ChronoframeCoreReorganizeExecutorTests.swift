@@ -653,6 +653,41 @@ final class ChronoframeCoreReorganizeExecutorTests: XCTestCase {
         XCTAssertTrue(issues.values.first?.message.contains("escaped") == true)
     }
 
+    func testRevertSkipsSymlinkEscapedReceiptPathsInsideRoot() throws {
+        let outsideRoot = temporaryDirectoryURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("outside-reorg-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: outsideRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outsideRoot) }
+
+        let outsideURL = outsideRoot.appendingPathComponent("outside.jpg")
+        try Data("outside".utf8).write(to: outsideURL)
+        let linkURL = temporaryDirectoryURL.appendingPathComponent("linked")
+        try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: outsideRoot)
+        let escapedReceiptPath = linkURL.appendingPathComponent("outside.jpg")
+
+        let receiptURL = try writeReceipt(
+            items: [
+                ReorganizeAuditReceipt.Item(
+                    sourcePath: temporaryDirectoryURL.appendingPathComponent("original.jpg").path,
+                    destinationPath: escapedReceiptPath.path,
+                    hash: "7_outside",
+                    completed: true
+                ),
+            ]
+        )
+        let issues = Recorder<RunIssue>()
+
+        let result = try ReorganizeExecutor().revert(
+            receiptURL: receiptURL,
+            observer: ReorganizeExecutionObserver(onIssue: { issues.append($0) })
+        )
+
+        XCTAssertEqual(result.skippedCount, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outsideURL.path))
+        XCTAssertTrue(issues.values.first?.message.contains("escaped") == true)
+    }
+
     func testRevertSkipsMissingMovedFile() throws {
         let receiptURL = try writeReceipt(
             items: [

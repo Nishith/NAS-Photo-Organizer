@@ -41,7 +41,7 @@ from chronoframe.core import (
     build_dest_index, generate_dry_run_report, generate_audit_receipt,
     load_profile, RunLogger, SEQ_WIDTH, MAX_CONSECUTIVE_FAILURES,
     MAX_TOTAL_FAILURES, DEFAULT_WORKERS, parse_args, revert_receipt,
-    _event_subpath,
+    _event_subpath, _walk_error_handler,
 )
 
 
@@ -331,14 +331,13 @@ class TestCacheDB(TempDirMixin, unittest.TestCase):
         self.assertEqual(len(pending), 0)
         db.close()
 
-    def test_enqueue_ignores_duplicates(self):
+    def test_enqueue_replaces_stale_duplicate_source_rows(self):
         db = self._make_db()
-        db.enqueue_jobs([("/src/a.jpg", "/dst/a.jpg", "h1", "PENDING")])
-        db.enqueue_jobs([("/src/a.jpg", "/dst/a2.jpg", "h1", "PENDING")])
+        db.enqueue_jobs([("/src/a.jpg", "/dst/a.jpg", "h1", "COPIED")])
+        db.enqueue_jobs([("/src/a.jpg", "/dst/a2.jpg", "h2", "PENDING")])
         pending = db.get_pending_jobs()
         self.assertEqual(len(pending), 1)
-        # Original dst_path preserved
-        self.assertEqual(pending[0][1], "/dst/a.jpg")
+        self.assertEqual(pending[0], ("/src/a.jpg", "/dst/a2.jpg", "h2"))
         db.close()
 
     def test_empty_enqueue_is_noop(self):
@@ -747,6 +746,15 @@ class TestBuildDestIndex(TempDirMixin, unittest.TestCase):
         hi, _, _ = build_dest_index(dst, db)
         self.assertEqual(len(hi), 1)
         db.close()
+
+    def test_walk_error_handler_reports_unreadable_directory(self):
+        warnings = []
+        with patch("chronoframe.core.emit_json", lambda event, **payload: warnings.append((event, payload))):
+            _walk_error_handler()(OSError(errno.EACCES, "permission denied", "/blocked"))
+
+        self.assertEqual(warnings[0][0], "warning")
+        self.assertIn("/blocked", warnings[0][1]["message"])
+        self.assertIn("skipped", warnings[0][1]["message"])
 
 
 # ════════════════════════════════════════════════════════════════════════════

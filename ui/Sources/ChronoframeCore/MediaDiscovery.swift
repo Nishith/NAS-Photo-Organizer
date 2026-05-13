@@ -11,12 +11,34 @@ public struct MediaDiscoveryEntry: Equatable, Sendable {
 }
 
 public enum MediaDiscovery {
+    public struct DirectoryIssue: Equatable, Sendable {
+        public var path: String
+        public var message: String
+
+        public init(path: String, message: String) {
+            self.path = path
+            self.message = message
+        }
+    }
+
+    private struct DropManifest: Decodable {
+        var items: [Item]
+
+        struct Item: Decodable {
+            var path: String
+            var isDirectory: Bool
+        }
+    }
+
+    private static let dropManifestFilename = ".chronoframe_drop_manifest.json"
+
     public static func discoverMediaFiles(
         at rootURL: URL,
-        isCancelled: @Sendable () -> Bool = { false }
+        isCancelled: @Sendable () -> Bool = { false },
+        onDirectoryIssue: (@Sendable (DirectoryIssue) -> Void)? = nil
     ) throws -> [String] {
         var results: [String] = []
-        try enumerateMediaFiles(at: rootURL, isCancelled: isCancelled) { path in
+        try enumerateMediaFiles(at: rootURL, isCancelled: isCancelled, onDirectoryIssue: onDirectoryIssue) { path in
             results.append(path)
         }
         return results
@@ -25,9 +47,14 @@ public enum MediaDiscovery {
     public static func enumerateMediaFiles(
         at rootURL: URL,
         isCancelled: @Sendable () -> Bool = { false },
+        onDirectoryIssue: (@Sendable (DirectoryIssue) -> Void)? = nil,
         _ body: (String) throws -> Void
     ) throws {
-        try walk(directoryURL: rootURL, isCancelled: isCancelled, visitFilePath: body)
+        if let manifest = dropManifest(at: rootURL) {
+            try enumerateManifest(manifest, isCancelled: isCancelled, onDirectoryIssue: onDirectoryIssue, visitFilePath: body)
+            return
+        }
+        try walk(directoryURL: rootURL, isCancelled: isCancelled, onDirectoryIssue: onDirectoryIssue, visitFilePath: body)
     }
 
     public static func walkEntries(
@@ -42,10 +69,11 @@ public enum MediaDiscovery {
     private static func walk(
         directoryURL: URL,
         isCancelled: @Sendable () -> Bool,
+        onDirectoryIssue: (@Sendable (DirectoryIssue) -> Void)?,
         visitFilePath: (String) throws -> Void
     ) throws {
         try throwIfCancelled(isCancelled)
-        let partition = try partitionedChildren(of: directoryURL)
+        let partition = try partitionedChildren(of: directoryURL, onDirectoryIssue: onDirectoryIssue)
 
         for child in partition.files {
             try throwIfCancelled(isCancelled)
@@ -71,7 +99,7 @@ public enum MediaDiscovery {
 
         for child in partition.directories {
             try throwIfCancelled(isCancelled)
-            try walk(directoryURL: child, isCancelled: isCancelled, visitFilePath: visitFilePath)
+            try walk(directoryURL: child, isCancelled: isCancelled, onDirectoryIssue: onDirectoryIssue, visitFilePath: visitFilePath)
         }
     }
 
@@ -81,7 +109,7 @@ public enum MediaDiscovery {
         entries: inout [MediaDiscoveryEntry]
     ) throws {
         try throwIfCancelled(isCancelled)
-        let children = try sortedChildren(of: directoryURL)
+        let children = try sortedChildren(of: directoryURL, onDirectoryIssue: nil)
         for child in children {
             try throwIfCancelled(isCancelled)
             let name = child.lastPathComponent
@@ -108,7 +136,10 @@ public enum MediaDiscovery {
         }
     }
 
-    private static func partitionedChildren(of directoryURL: URL) throws -> (directories: [URL], files: [URL]) {
+    private static func partitionedChildren(
+        of directoryURL: URL,
+        onDirectoryIssue: (@Sendable (DirectoryIssue) -> Void)?
+    ) throws -> (directories: [URL], files: [URL]) {
         let children: [URL]
         do {
             children = try FileManager.default.contentsOfDirectory(
@@ -117,6 +148,12 @@ public enum MediaDiscovery {
                 options: []
             )
         } catch {
+            onDirectoryIssue?(
+                DirectoryIssue(
+                    path: directoryURL.path,
+                    message: "Chronoframe could not read this folder, so it was skipped: \(directoryURL.path)"
+                )
+            )
             return ([], [])
         }
 
@@ -153,8 +190,37 @@ public enum MediaDiscovery {
         return (directories.sorted(by: sorter), files.sorted(by: sorter))
     }
 
-    private static func sortedChildren(of directoryURL: URL) throws -> [URL] {
-        let partition = try partitionedChildren(of: directoryURL)
+    private static func sortedChildren(
+        of directoryURL: URL,
+        onDirectoryIssue: (@Sendable (DirectoryIssue) -> Void)?
+    ) throws -> [URL] {
+        let partition = try partitionedChildren(of: directoryURL, onDirectoryIssue: onDirectoryIssue)
         return partition.directories + partition.files
+    }
+
+    private static func dropManifest(at rootURL: URL) -> DropManifest? {
+        let manifestURL = rootURL.appendingPathComponent(dropManifestFilename)
+        guard let data = try? Data(contentsOf: manifestURL) else { return nil }
+        return try? JSONDecoder().decode(DropManifest.self, from: data)
+    }
+
+    private static func enumerateManifest(
+        _ manifest: DropManifest,
+        isCancelled: @Sendable () -> Bool,
+        onDirectoryIssue: (@Sendable (DirectoryIssue) -> Void)?,
+        visitFilePath: (String) throws -> Void
+    ) throws {
+        var seen = Set<String>()
+        for item in manifest.items {
+            try throwIfCancelled(isCancelled)
+            let url = URL(fileURLWithPath: item.path).standardizedFileURL
+            guard seen.insert(url.path).inserted else { continue }
+            if item.isDirectory {
+                try walk(directoryURL: url, isCancelled: isCancelled, onDirectoryIssue: onDirectoryIssue, visitFilePath: visitFilePath)
+            } else if !url.lastPathComponent.hasPrefix("."),
+                      MediaLibraryRules.isSupportedMediaFile(path: url.path) {
+                try visitFilePath(url.path)
+            }
+        }
     }
 }

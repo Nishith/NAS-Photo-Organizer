@@ -1534,6 +1534,154 @@ final class DeduplicateTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: fakeTrashURL.path))
     }
 
+    func testRevertRejectsWrongReceiptKind() async throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("DedupeWrongReceipt-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        var receipt = DeduplicateAuditReceipt(
+            operation: "organize",
+            status: "COMPLETED",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            destinationRoot: temporaryDirectory.path,
+            items: [],
+            bytesReclaimed: 0
+        )
+        receipt.kind = "transfer"
+        let receiptURL = temporaryDirectory.appendingPathComponent("not-dedupe.json")
+        try JSONEncoder.dedupe.encode(receipt).write(to: receiptURL)
+
+        do {
+            for try await _ in DeduplicateExecutor().revert(receiptURL: receiptURL) {}
+            XCTFail("Wrong receipt kind should fail before restoring")
+        } catch {
+            XCTAssertEqual(error as? DeduplicateReceiptValidationError, .invalidKind)
+        }
+    }
+
+    func testRevertRejectsUnknownReceiptStatus() async throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("DedupeBadStatus-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let receipt = DeduplicateAuditReceipt(
+            status: "MAYBE_DONE",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            destinationRoot: temporaryDirectory.path,
+            items: [],
+            bytesReclaimed: 0
+        )
+        let receiptURL = temporaryDirectory.appendingPathComponent("bad-status.json")
+        try JSONEncoder.dedupe.encode(receipt).write(to: receiptURL)
+
+        do {
+            for try await _ in DeduplicateExecutor().revert(receiptURL: receiptURL) {}
+            XCTFail("Unknown receipt status should fail before restoring")
+        } catch {
+            XCTAssertEqual(error as? DeduplicateReceiptValidationError, .invalidStatus("MAYBE_DONE"))
+        }
+    }
+
+    func testRevertRefusesOriginalPathOutsideDestinationRoot() async throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("DedupeOutsideOriginal-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let outsideOriginal = temporaryDirectory.deletingLastPathComponent()
+            .appendingPathComponent("outside-dedupe-\(UUID().uuidString).jpg")
+        let fakeTrashURL = temporaryDirectory.appendingPathComponent("fake-trash.jpg")
+        try Data([0xAB]).write(to: fakeTrashURL)
+        let receipt = DeduplicateAuditReceipt(
+            status: "COMPLETED",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            destinationRoot: temporaryDirectory.path,
+            items: [
+                DeduplicateAuditReceipt.Item(
+                    originalPath: outsideOriginal.path,
+                    sizeBytes: 1,
+                    trashURL: fakeTrashURL.absoluteString,
+                    method: .trash,
+                    clusterID: UUID(),
+                    clusterKind: .burst
+                ),
+            ],
+            bytesReclaimed: 1
+        )
+        let receiptURL = temporaryDirectory.appendingPathComponent("outside-original.json")
+        try JSONEncoder.dedupe.encode(receipt).write(to: receiptURL)
+
+        var failures: [String] = []
+        var summary: DeduplicateCommitSummary?
+        for try await event in DeduplicateExecutor().revert(receiptURL: receiptURL) {
+            switch event {
+            case let .itemFailed(path, message):
+                failures.append("\(URL(fileURLWithPath: path).lastPathComponent): \(message)")
+            case let .complete(revertSummary):
+                summary = revertSummary
+            default:
+                break
+            }
+        }
+
+        XCTAssertEqual(failures, [
+            "\(outsideOriginal.lastPathComponent): Receipt path is outside the dedupe destination.",
+        ])
+        XCTAssertEqual(summary?.failedCount, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fakeTrashURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outsideOriginal.path))
+    }
+
+    func testRevertRefusesExistingOriginalPath() async throws {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("DedupeExistingOriginal-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let original = temporaryDirectory.appendingPathComponent("photo.jpg")
+        let fakeTrashURL = temporaryDirectory.appendingPathComponent("fake-trash.jpg")
+        try Data([0x01]).write(to: original)
+        try Data([0x02]).write(to: fakeTrashURL)
+        let receipt = DeduplicateAuditReceipt(
+            status: "COMPLETED",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            destinationRoot: temporaryDirectory.path,
+            items: [
+                DeduplicateAuditReceipt.Item(
+                    originalPath: original.path,
+                    sizeBytes: 1,
+                    trashURL: fakeTrashURL.absoluteString,
+                    method: .trash,
+                    clusterID: UUID(),
+                    clusterKind: .burst
+                ),
+            ],
+            bytesReclaimed: 1
+        )
+        let receiptURL = temporaryDirectory.appendingPathComponent("existing-original.json")
+        try JSONEncoder.dedupe.encode(receipt).write(to: receiptURL)
+
+        var failures: [String] = []
+        var summary: DeduplicateCommitSummary?
+        for try await event in DeduplicateExecutor().revert(receiptURL: receiptURL) {
+            switch event {
+            case let .itemFailed(path, message):
+                failures.append("\(URL(fileURLWithPath: path).lastPathComponent): \(message)")
+            case let .complete(revertSummary):
+                summary = revertSummary
+            default:
+                break
+            }
+        }
+
+        XCTAssertEqual(failures, ["photo.jpg: Original path already exists. Chronoframe left it untouched."])
+        XCTAssertEqual(summary?.failedCount, 1)
+        XCTAssertEqual(try Data(contentsOf: original), Data([0x01]))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fakeTrashURL.path))
+    }
+
     func testRevertReportsHardDeletedItemsCannotBeRestored() async throws {
         let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("DedupeHardDeleteReceipt-\(UUID().uuidString)")

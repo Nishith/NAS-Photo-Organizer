@@ -21,21 +21,30 @@ public struct TransferExecutionObserver: Sendable {
 public struct TransferExecutionResult: Equatable, Sendable {
     public var copiedCount: Int
     public var failedCount: Int
+    public var skippedCount: Int
     public var bytesCopied: Int64
     public var bytesTotal: Int64
+    public var status: String
+    public var abortReason: String?
     public var artifacts: RunArtifactPaths
 
     public init(
         copiedCount: Int,
         failedCount: Int,
+        skippedCount: Int = 0,
         bytesCopied: Int64,
         bytesTotal: Int64,
+        status: String = "COMPLETED",
+        abortReason: String? = nil,
         artifacts: RunArtifactPaths
     ) {
         self.copiedCount = copiedCount
         self.failedCount = failedCount
+        self.skippedCount = skippedCount
         self.bytesCopied = bytesCopied
         self.bytesTotal = bytesTotal
+        self.status = status
+        self.abortReason = abortReason
         self.artifacts = artifacts
     }
 }
@@ -516,6 +525,17 @@ public struct TransferExecutor: Sendable {
         runLogger: PersistentRunLogger
     ) -> TransferJobOutcome {
         do {
+            let identity = try fileHasher.hashIdentity(at: URL(fileURLWithPath: job.sourcePath))
+            if isTrustedPlannedIdentity(job.hash), identity.rawValue != job.hash {
+                let message = "Source modified since planning, skipping: \(job.sourcePath)"
+                return .skipped(message: message, logMessage: message)
+            }
+        } catch {
+            let message = "Source unreadable, skipping: \(job.sourcePath): \(error.localizedDescription)"
+            return .skipped(message: message, logMessage: message)
+        }
+
+        do {
             let temporaryPath = try prepareAtomicCopy(
                 sourcePath: job.sourcePath,
                 requestedDestinationPath: job.destinationPath
@@ -829,6 +849,7 @@ fileprivate enum TransferJobOutcome: Sendable {
     case prepared(temporaryPath: String)
     case copied(destinationPath: String, size: Int64, modificationTime: TimeInterval)
     case failed(message: String, logMessage: String)
+    case skipped(message: String, logMessage: String)
 }
 
 private final class ParallelTransferOutcomes: @unchecked Sendable {
@@ -1017,6 +1038,7 @@ private final class TransferExecutionContext {
 
     private var copiedCount = 0
     private var failedCount = 0
+    private var skippedCount = 0
     private var consecutiveFailures = 0
     private var bytesCopied: Int64 = 0
     private var destinationUpdates: [RawFileCacheRecord]
@@ -1059,6 +1081,9 @@ private final class TransferExecutionContext {
     }
 
     func process(job: QueuedCopyJob, attemptedJobs: Int) throws -> Bool {
+        if let skippedOutcome = sourceSkipOutcomeIfNeeded(for: job) {
+            return try apply(outcome: skippedOutcome, for: job, attemptedJobs: attemptedJobs)
+        }
         let outcome = executor.performCopy(job: job, verifyCopies: verifyCopies, runLogger: runLogger)
         return try apply(outcome: outcome, for: job, attemptedJobs: attemptedJobs)
     }
@@ -1137,6 +1162,15 @@ private final class TransferExecutionContext {
                 runLogger.error(reason)
                 return false
             }
+
+        case let .skipped(message, logMessage):
+            try database.updateJobStatus(sourcePath: job.sourcePath, status: .skipped)
+
+            runLogger.warn(logMessage)
+            observer.onIssue(RunIssue(severity: .warning, message: message))
+            skippedCount += 1
+            observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal)
+            emittedProgress = true
         }
 
         guard let completedCopy else {
@@ -1173,6 +1207,20 @@ private final class TransferExecutionContext {
         return !isCancelled()
     }
 
+    private func sourceSkipOutcomeIfNeeded(for job: QueuedCopyJob) -> TransferJobOutcome? {
+        do {
+            let identity = try executor.fileHasher.hashIdentity(at: URL(fileURLWithPath: job.sourcePath))
+            if isTrustedPlannedIdentity(job.hash), identity.rawValue != job.hash {
+                let message = "Source modified since planning, skipping: \(job.sourcePath)"
+                return .skipped(message: message, logMessage: message)
+            }
+            return nil
+        } catch {
+            let message = "Source unreadable, skipping: \(job.sourcePath): \(error.localizedDescription)"
+            return .skipped(message: message, logMessage: message)
+        }
+    }
+
     func finish(attemptedJobs: Int) throws -> TransferExecutionResult {
         try executor.flushDestinationUpdates(destinationUpdates, database: database)
         if abortReason == nil, isCancelled(), attemptedJobs < totalJobs {
@@ -1196,9 +1244,21 @@ private final class TransferExecutionContext {
         return TransferExecutionResult(
             copiedCount: copiedCount,
             failedCount: failedCount,
+            skippedCount: skippedCount,
             bytesCopied: bytesCopied,
             bytesTotal: bytesTotal,
+            status: status,
+            abortReason: abortReason,
             artifacts: artifacts
         )
+    }
+}
+
+private func isTrustedPlannedIdentity(_ rawValue: String) -> Bool {
+    guard let identity = FileIdentity(rawValue: rawValue), identity.digest.count >= 64 else {
+        return false
+    }
+    return identity.digest.allSatisfy { character in
+        character.isHexDigit
     }
 }

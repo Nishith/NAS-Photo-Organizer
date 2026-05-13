@@ -41,7 +41,7 @@ It is also built for caution. Chronoframe does not ask you to trust a black box.
 - **Transfers are planned first.** Preview and transfer use the same override-aware planner path.
 - **Review edits make the preview stale.** Transfer is disabled until the preview is rebuilt.
 - **Revert verifies hashes.** Revert deletes only destination files whose current hash still matches the audit receipt.
-- **Deduplicate defaults to Trash.** Hard delete is available only behind an explicit Settings toggle and confirmation.
+- **Deduplicate uses Trash.** Hard delete is not available in the production app.
 - **Pair handling is conservative.** RAW+JPEG and Live Photo HEIC+MOV pairs can be treated as units, and keep decisions win.
 
 ## System Requirements
@@ -158,7 +158,7 @@ It can find:
 - RAW+JPEG pairs.
 - Live Photo HEIC+MOV pairs.
 
-Settings include strict, balanced, and loose similarity presets, dHash prefilter thresholds, burst-mode behavior, pair-as-unit toggles, exact-duplicate grouping, worker count, and the hard-delete safety toggle.
+Settings include strict, balanced, and loose similarity presets, dHash prefilter thresholds, burst-mode behavior, pair-as-unit toggles, exact-duplicate grouping, and worker count.
 
 Deduplicate caches feature prints, dHash values, dimensions, dates, and quality scores in `.organize_cache.db` so later scans are incremental. Commit writes a dedupe audit receipt before mutating anything, then moves selected files to Trash by default.
 

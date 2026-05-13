@@ -232,7 +232,7 @@ final class AppStateTests: XCTestCase {
     }
 
     @MainActor
-    func testUseDeduplicateHistoryFolderSelectsAvailableFolderAndClearsStaleBookmark() throws {
+    func testUseDeduplicateHistoryFolderSelectsAvailableFolderAndStoresBookmark() throws {
         let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("HistoryFolder-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
@@ -261,17 +261,49 @@ final class AppStateTests: XCTestCase {
         ))
 
         XCTAssertEqual(appState.deduplicateDestinationPath, temporaryDirectory.path)
-        XCTAssertNil(harness.preferencesStore.bookmark(for: "deduplicate.destination"))
+        XCTAssertEqual(harness.folderAccessService.bookmarkURLs.map(\.path), [temporaryDirectory.path])
+        XCTAssertEqual(harness.preferencesStore.bookmark(for: "deduplicate.destination")?.path, temporaryDirectory.path)
         XCTAssertNil(appState.transientErrorMessage)
+    }
+
+    @MainActor
+    func testUseDeduplicateHistoryFolderPreservesExistingFolderWhenBookmarkCreationFails() {
+        let harness = AppStateHarness()
+        harness.preferencesStore.lastDeduplicateDestinationPath = "/Volumes/ExistingDedupe"
+        harness.folderAccessService.bookmarkCreationFailures["deduplicate.destination"] =
+            AppTestFailure.expectedFailure("bookmark denied")
+        let appState = harness.makeAppState(performInitialBootstrap: false)
+
+        appState.useDeduplicateHistoryFolder(DeduplicateFolderHistoryRecord(
+            folderPath: "/Volumes/HistoryDedupe",
+            lastRunAt: Date(),
+            runCount: 1,
+            lastDeletedCount: 2,
+            lastFailedCount: 0,
+            lastBytesReclaimed: 1_024,
+            totalDeletedCount: 2,
+            totalFailedCount: 0,
+            totalBytesReclaimed: 1_024,
+            lastReceiptPath: nil,
+            lastHardDelete: false
+        ))
+
+        XCTAssertEqual(appState.deduplicateDestinationPath, "/Volumes/ExistingDedupe")
+        XCTAssertEqual(harness.preferencesStore.lastDeduplicateDestinationPath, "/Volumes/ExistingDedupe")
+        XCTAssertNil(harness.preferencesStore.bookmark(for: "deduplicate.destination"))
+        XCTAssertNotNil(appState.transientErrorMessage)
     }
 
     @MainActor
     func testUseDeduplicateHistoryFolderReportsMissingFolder() {
         let harness = AppStateHarness()
         let appState = harness.makeAppState(performInitialBootstrap: false)
+        let missingPath = "/Volumes/Missing-\(UUID().uuidString)"
+        harness.folderAccessService.validationFailures[missingPath] =
+            FolderValidationError.pathDoesNotExist(role: .destination, path: missingPath)
 
         appState.useDeduplicateHistoryFolder(DeduplicateFolderHistoryRecord(
-            folderPath: "/Volumes/Missing-\(UUID().uuidString)",
+            folderPath: missingPath,
             lastRunAt: Date(),
             runCount: 1,
             lastDeletedCount: 2,

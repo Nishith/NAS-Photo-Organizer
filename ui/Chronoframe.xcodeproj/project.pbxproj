@@ -24,6 +24,7 @@
 		AA000000000000000000020F /* OrganizerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010F /* OrganizerEngine.swift */; };
 		AA0000000000000000000210 /* ProfilesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000110 /* ProfilesRepository.swift */; };
 		AA0000000000000000000211 /* PythonOrganizerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000111 /* PythonOrganizerEngine.swift */; };
+		AA0000000000000000000241 /* HybridOrganizerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000014E /* HybridOrganizerEngine.swift */; };
 		AA0000000000000000000212 /* RunHistoryIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000112 /* RunHistoryIndexer.swift */; };
 		AA0000000000000000000213 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000113 /* HistoryStore.swift */; };
 		AA0000000000000000000214 /* PreferencesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000114 /* PreferencesStore.swift */; };
@@ -207,6 +208,7 @@
 			AA000000000000000000014B /* RevertExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevertExecutor.swift; sourceTree = "<group>"; };
 			AA000000000000000000014C /* ReorganizeExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorganizeExecutor.swift; sourceTree = "<group>"; };
 			AA000000000000000000014D /* UserFacingErrorMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserFacingErrorMessage.swift; sourceTree = "<group>"; };
+			AA000000000000000000014E /* HybridOrganizerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HybridOrganizerEngine.swift; sourceTree = "<group>"; };
 			AA0000000000000000000181 /* Chronoframe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Chronoframe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 			AA0000000000000000000182 /* ChronoframeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			AA0000000000000000000183 /* ChronoframeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoframeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -435,6 +437,7 @@
 				AA000000000000000000010F /* OrganizerEngine.swift */,
 				AA0000000000000000000110 /* ProfilesRepository.swift */,
 				AA0000000000000000000111 /* PythonOrganizerEngine.swift */,
+				AA000000000000000000014E /* HybridOrganizerEngine.swift */,
 				AA0000000000000000000127 /* SwiftOrganizerEngine.swift */,
 				AA0000000000000000000112 /* RunHistoryIndexer.swift */,
 				AA0000000000000000000134 /* TransferredSourcesLog.swift */,
@@ -744,6 +747,7 @@
 				AA000000000000000000020F /* OrganizerEngine.swift in Sources */,
 				AA0000000000000000000210 /* ProfilesRepository.swift in Sources */,
 				AA0000000000000000000211 /* PythonOrganizerEngine.swift in Sources */,
+				AA0000000000000000000241 /* HybridOrganizerEngine.swift in Sources */,
 				AA0000000000000000000221 /* SwiftOrganizerEngine.swift in Sources */,
 				AA0000000000000000000212 /* RunHistoryIndexer.swift in Sources */,
 				AA000000000000000000022E /* TransferredSourcesLog.swift in Sources */,

@@ -215,6 +215,7 @@ def run_execute_jobs_scenario(manifest: dict[str, Any], source_root: Path, dest_
                 str(dest_root),
                 run_log=run_log,
                 verify=manifest.get("verify", False),
+                verify_source=manifest.get("verify_source", False),
                 workers=1,
             )
         finally:

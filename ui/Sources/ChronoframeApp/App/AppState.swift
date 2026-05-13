@@ -325,15 +325,22 @@ final class AppState: ObservableObject {
         let path = record.folderPath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !path.isEmpty else { return }
 
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else {
+        let url = URL(fileURLWithPath: path, isDirectory: true)
+        do {
+            try folderAccessService.validateFolder(url, role: .destination)
+        } catch {
             transientErrorMessage = "That Deduplicate folder is no longer available. Choose it again to continue."
             return
         }
 
-        preferencesStore.removeBookmark(for: Self.deduplicateDestinationBookmarkKey)
-        preferencesStore.lastDeduplicateDestinationPath = path
-        resetDeduplicate()
+        do {
+            let bookmark = try folderAccessService.makeBookmark(for: url, key: Self.deduplicateDestinationBookmarkKey)
+            preferencesStore.storeBookmark(bookmark)
+            preferencesStore.lastDeduplicateDestinationPath = path
+            resetDeduplicate()
+        } catch {
+            transientErrorMessage = UserFacingErrorMessage.message(for: error, context: .setup)
+        }
     }
 
     /// Open Finder with the active Deduplicate destination selected. Only

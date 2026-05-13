@@ -355,7 +355,14 @@ public final class OrganizerDatabase {
 
     public func enqueueQueuedJobs<S: Sequence>(_ jobs: S) throws where S.Element == QueuedCopyJob {
         let statement = try prepare(
-            "INSERT OR IGNORE INTO CopyJobs (src_path, dst_path, hash, status) VALUES (?, ?, ?, ?)"
+            """
+            INSERT INTO CopyJobs (src_path, dst_path, hash, status)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(src_path) DO UPDATE SET
+                dst_path = excluded.dst_path,
+                hash = excluded.hash,
+                status = excluded.status
+            """
         )
         defer { sqlite3_finalize(statement) }
 

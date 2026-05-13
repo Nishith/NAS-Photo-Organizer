@@ -4,9 +4,9 @@ import Foundation
 ///
 /// - If the user dropped exactly one directory, we use it directly and no
 ///   staging work is needed (`stagingDirectory == originalFolder`).
-/// - Otherwise we build a synthetic "source" directory full of symlinks to
-///   each dropped item so the existing discovery + transfer pipeline can
-///   walk it exactly like a normal source folder.
+/// - Otherwise we build a synthetic "source" directory with a private manifest
+///   of dropped items so discovery can safely resolve exactly those paths
+///   without enabling arbitrary symlink traversal.
 public struct StagedDrop: Equatable {
     public var sourceDirectory: URL
     public var wasSingleFolder: Bool
@@ -38,10 +38,21 @@ public enum DroppedItemStagerError: Error, LocalizedError {
     }
 }
 
-/// Stages dropped files/folders into a temporary directory of symlinks so
+/// Stages dropped files/folders into a temporary manifest directory so
 /// Chronoframe's normal source-folder discovery can process them. For a
 /// single-folder drop we skip staging entirely and hand the folder back.
 public struct DroppedItemStager {
+    private struct Manifest: Codable {
+        var items: [Item]
+
+        struct Item: Codable {
+            var path: String
+            var isDirectory: Bool
+        }
+    }
+
+    public static let manifestFilename = ".chronoframe_drop_manifest.json"
+
     private let fileManager: FileManager
     private let stagingRootURL: URL
 
@@ -98,26 +109,23 @@ public struct DroppedItemStager {
             )
         }
 
-        // Multi-item or file drop: build a fresh staging directory of symlinks.
+        // Multi-item or file drop: build a fresh staging directory with a
+        // manifest. This avoids broad symlink following while still letting
+        // dropped individual files participate in the regular pipeline.
         let stagingDir = try createFreshStagingDirectory(at: date)
 
-        var staged = 0
-        var usedNames: Set<String> = []
-        for url in unique {
-            let baseName = url.lastPathComponent
-            let uniqueName = nextAvailableName(baseName, in: &usedNames)
-            let linkURL = stagingDir.appendingPathComponent(uniqueName)
-            do {
-                try fileManager.createSymbolicLink(at: linkURL, withDestinationURL: url)
-                staged += 1
-            } catch {
-                // Skip individual failures — other items can still proceed.
-                continue
-            }
+        let items = unique.map { url in
+            Manifest.Item(path: url.path, isDirectory: isDirectory(url))
         }
+        let manifest = Manifest(items: items)
+        let manifestURL = stagingDir.appendingPathComponent(Self.manifestFilename)
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(manifest)
+        try data.write(to: manifestURL, options: .atomic)
+        let staged = items.count
 
         guard staged > 0 else {
-            throw DroppedItemStagerError.stagingFailed("no droppable items after symlinking")
+            throw DroppedItemStagerError.stagingFailed("no droppable items after staging")
         }
 
         let label = humanLabel(itemCount: staged, date: date)
@@ -182,30 +190,6 @@ public struct DroppedItemStager {
             throw DroppedItemStagerError.stagingFailed(error.localizedDescription)
         }
         return dir
-    }
-
-    /// Picks a name that doesn't collide with ones we've already symlinked
-    /// in this staging dir. Appends " (N)" before the extension on collision.
-    private func nextAvailableName(_ baseName: String, in usedNames: inout Set<String>) -> String {
-        if !usedNames.contains(baseName) {
-            usedNames.insert(baseName)
-            return baseName
-        }
-
-        let nsName = baseName as NSString
-        let ext = nsName.pathExtension
-        let stem = nsName.deletingPathExtension
-        var counter = 2
-        while true {
-            let candidate = ext.isEmpty
-                ? "\(stem) (\(counter))"
-                : "\(stem) (\(counter)).\(ext)"
-            if !usedNames.contains(candidate) {
-                usedNames.insert(candidate)
-                return candidate
-            }
-            counter += 1
-        }
     }
 
     private static let timestampFormatter: DateFormatter = {

@@ -385,6 +385,8 @@ public final class PythonOrganizerEngine: OrganizerEngine {
 
         if configuration.verifyCopies {
             arguments.append("--verify")
+        } else {
+            arguments.append("--skip-verify")
         }
 
         arguments.append(contentsOf: ["--folder-structure", configuration.folderStructure.rawValue])

@@ -186,6 +186,12 @@ public final class DeduplicateExecutor: @unchecked Sendable {
                 do {
                     let data = try Data(contentsOf: receiptURL)
                     let receipt = try JSONDecoder.dedupe.decode(DeduplicateAuditReceipt.self, from: data)
+                    guard receipt.kind == "dedupe" || receipt.operation == "deduplicate" else {
+                        throw DeduplicateReceiptValidationError.invalidKind
+                    }
+                    guard ["PENDING", "COMPLETED", "ABORTED", "FAILED"].contains(receipt.status) else {
+                        throw DeduplicateReceiptValidationError.invalidStatus(receipt.status)
+                    }
                     continuation.yield(.started(totalToDelete: receipt.items.count))
 
                     var deletedCount = 0
@@ -204,6 +210,19 @@ public final class DeduplicateExecutor: @unchecked Sendable {
                             continue
                         }
                         let originalURL = URL(fileURLWithPath: item.originalPath)
+                        guard SafePathContainment.isContained(
+                            originalURL,
+                            in: URL(fileURLWithPath: receipt.destinationRoot, isDirectory: true)
+                        ) else {
+                            failedCount += 1
+                            continuation.yield(.itemFailed(originalPath: item.originalPath, errorMessage: "Receipt path is outside the dedupe destination."))
+                            continue
+                        }
+                        if FileManager.default.fileExists(atPath: originalURL.path) {
+                            failedCount += 1
+                            continuation.yield(.itemFailed(originalPath: item.originalPath, errorMessage: "Original path already exists. Chronoframe left it untouched."))
+                            continue
+                        }
                         do {
                             try fileOperations.createDirectory(
                                 at: originalURL.deletingLastPathComponent(),
@@ -285,6 +304,20 @@ public final class DeduplicateExecutor: @unchecked Sendable {
         )
         let data = try JSONEncoder.dedupe.encode(receipt)
         try data.write(to: receiptURL, options: .atomic)
+    }
+}
+
+public enum DeduplicateReceiptValidationError: LocalizedError, Equatable {
+    case invalidKind
+    case invalidStatus(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidKind:
+            return "This receipt is not a deduplicate receipt."
+        case let .invalidStatus(status):
+            return "This deduplicate receipt has an unknown status: \(status)."
+        }
     }
 }
 

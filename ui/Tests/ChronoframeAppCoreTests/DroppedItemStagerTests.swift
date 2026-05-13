@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+@testable import ChronoframeCore
 @testable import ChronoframeAppCore
 
 final class DroppedItemStagerTests: XCTestCase {
@@ -37,7 +38,7 @@ final class DroppedItemStagerTests: XCTestCase {
         XCTAssertFalse(stager.isStagingPath(result.sourceDirectory.path))
     }
 
-    func testStageFilesCreatesSymlinkSourceWithUniqueNamesAndHumanLabel() throws {
+    func testStageFilesCreatesManifestSourceAndHumanLabel() throws {
         let firstFolder = temporaryDirectory.appendingPathComponent("A", isDirectory: true)
         let secondFolder = temporaryDirectory.appendingPathComponent("B", isDirectory: true)
         try FileManager.default.createDirectory(at: firstFolder, withIntermediateDirectories: true)
@@ -60,16 +61,13 @@ final class DroppedItemStagerTests: XCTestCase {
         XCTAssertTrue(result.displayLabel.contains("2 items"))
 
         let stagedNames = try FileManager.default.contentsOfDirectory(atPath: result.sourceDirectory.path).sorted()
-        XCTAssertEqual(stagedNames, ["IMG_0001 (2).JPG", "IMG_0001.JPG"])
+        XCTAssertEqual(stagedNames, [DroppedItemStager.manifestFilename])
 
-        let firstDestination = try FileManager.default.destinationOfSymbolicLink(
-            atPath: result.sourceDirectory.appendingPathComponent("IMG_0001.JPG").path
-        )
-        let secondDestination = try FileManager.default.destinationOfSymbolicLink(
-            atPath: result.sourceDirectory.appendingPathComponent("IMG_0001 (2).JPG").path
-        )
-        XCTAssertEqual(URL(fileURLWithPath: firstDestination).standardizedFileURL, firstPhoto.standardizedFileURL)
-        XCTAssertEqual(URL(fileURLWithPath: secondDestination).standardizedFileURL, secondPhoto.standardizedFileURL)
+        let discovered = try MediaDiscovery.discoverMediaFiles(at: result.sourceDirectory).sorted()
+        XCTAssertEqual(discovered.map { URL(fileURLWithPath: $0).standardizedFileURL }, [
+            firstPhoto.standardizedFileURL,
+            secondPhoto.standardizedFileURL,
+        ])
     }
 
     func testStageThrowsNoItemsForEmptyOrMissingDrops() throws {

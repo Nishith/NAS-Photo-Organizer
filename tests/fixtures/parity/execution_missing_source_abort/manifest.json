@@ -1,7 +1,8 @@
 {
-  "description": "Missing sources fail fast, trigger the consecutive failure abort threshold, and leave later queued jobs pending for resume.",
+  "description": "Missing sources are skipped without counting toward failure thresholds.",
   "runner": "execute_jobs",
   "verify": false,
+  "verify_source": true,
   "log_markers": [
     "Copy failed",
     "Aborting: 5 consecutive failures"
