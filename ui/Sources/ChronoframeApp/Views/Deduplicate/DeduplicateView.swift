@@ -49,7 +49,7 @@ struct DeduplicateView: View {
             }
         }
         .navigationTitle("Deduplicate")
-        .onDisappear { thumbnailLoader.cancelAll() }
+        .onDisappear { thumbnailLoader.purgeCache() }
     }
 
     // MARK: - Idle
