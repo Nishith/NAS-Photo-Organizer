@@ -191,7 +191,7 @@ final class SetupCoordinator {
             setupStore.newProfileName = ""
             refreshProfiles()
             useProfile(named: name)
-            navigate(.profiles)
+            navigate(.organize(.setup))
         } catch {
             setTransientErrorMessage(UserFacingErrorMessage.message(for: error, context: .profiles))
         }

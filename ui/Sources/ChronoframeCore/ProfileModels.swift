@@ -116,6 +116,8 @@ public enum SidebarDestination: String, CaseIterable, Identifiable, Hashable, Se
     case deduplicate
     case profiles
 
+    public static let primaryNavigationCases: [SidebarDestination] = [.organize, .deduplicate]
+
     public var id: String { rawValue }
 
     public var title: String {

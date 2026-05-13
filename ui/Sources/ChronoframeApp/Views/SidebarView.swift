@@ -21,21 +21,33 @@ struct SidebarView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(SidebarDestination.allCases) { destination in
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(SidebarDestination.primaryNavigationCases) { destination in
                 let isSelected = appState.selection == destination
                 Button {
                     appState.selection = destination
                 } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: destination.systemImage)
-                            .foregroundStyle(isSelected ? DesignTokens.ColorSystem.accentAction : iconTint(for: destination))
-                            .frame(width: 16)
+                    HStack(alignment: .top, spacing: 12) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(isSelected ? DesignTokens.ColorSystem.accentAction.opacity(0.16) : DesignTokens.ColorSystem.elevated.opacity(0.52))
+                            Image(systemName: destination.systemImage)
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(isSelected ? DesignTokens.ColorSystem.accentAction : iconTint(for: destination))
+                        }
+                        .frame(width: 30, height: 30)
 
-                        Text(destination.title)
-                            .font(DesignTokens.Typography.body)
-                            .foregroundStyle(isSelected ? DesignTokens.ColorSystem.accentAction : DesignTokens.ColorSystem.inkPrimary)
-                            .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(destination.title)
+                                .font(.system(size: 14, weight: .semibold, design: .default))
+                                .foregroundStyle(isSelected ? DesignTokens.ColorSystem.accentAction : DesignTokens.ColorSystem.inkPrimary)
+                                .lineLimit(1)
+
+                            Text(destination.subtitle)
+                                .font(.caption)
+                                .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+                                .lineLimit(1)
+                        }
 
                         Spacer()
 
@@ -49,12 +61,16 @@ struct SidebarView: View {
                         }
                     }
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
+                    .padding(.vertical, 9)
                     .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .fill(isSelected ? DesignTokens.ColorSystem.accentAction.opacity(0.12) : Color.clear)
                     )
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(isSelected ? DesignTokens.ColorSystem.accentAction.opacity(0.22) : Color.clear, lineWidth: 1)
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(isSelected ? [.isSelected] : [])

@@ -116,7 +116,7 @@ final class SetupCoordinatorTests: XCTestCase {
         harness.setupStore.newProfileName = "archive"
         coordinator.saveCurrentPathsAsProfile()
 
-        XCTAssertEqual(route, .profiles)
+        XCTAssertEqual(route, .organize(.setup))
         XCTAssertEqual(harness.repository.savedProfiles.last?.name, "archive")
         XCTAssertEqual(harness.setupStore.selectedProfileName, "archive")
         XCTAssertEqual(harness.preferencesStore.bookmark(for: "profile.archive.source")?.path, "/Volumes/Card")

@@ -4,15 +4,27 @@ import ChronoframeAppCore
 import SwiftUI
 
 struct ProfilesView: View {
+    enum DisplayMode {
+        case main
+        case settings
+    }
+
     let appState: AppState
+    let displayMode: DisplayMode
     @ObservedObject private var setupStore: SetupStore
 
-    init(appState: AppState) {
+    init(appState: AppState, displayMode: DisplayMode = .main) {
         self.appState = appState
+        self.displayMode = displayMode
         self._setupStore = ObservedObject(wrappedValue: appState.setupStore)
     }
 
     var body: some View {
+        content
+            .modifier(ProfilesPresentationModifier(displayMode: displayMode))
+    }
+
+    private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.sectionSpacing) {
                 headerStrip
@@ -23,8 +35,6 @@ struct ProfilesView: View {
             .frame(maxWidth: DesignTokens.Layout.archiveMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .darkroom()
-        .navigationTitle("Profiles")
     }
 
     // MARK: - Header strip (replaces hero card)
@@ -43,10 +53,12 @@ struct ProfilesView: View {
 
             Spacer(minLength: DesignTokens.Spacing.md)
 
-            Button("Return to Setup") {
-                appState.navigate(to: .organize(.setup))
+            if displayMode == .main {
+                Button("Return to Setup") {
+                    appState.navigate(to: .organize(.setup))
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.borderedProminent)
         }
     }
 
@@ -160,6 +172,21 @@ struct ProfilesView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+private struct ProfilesPresentationModifier: ViewModifier {
+    let displayMode: ProfilesView.DisplayMode
+
+    func body(content: Content) -> some View {
+        switch displayMode {
+        case .main:
+            content
+                .darkroom()
+                .navigationTitle("Profiles")
+        case .settings:
+            content
         }
     }
 }

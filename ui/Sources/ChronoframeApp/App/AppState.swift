@@ -10,6 +10,7 @@ final class AppState: ObservableObject {
 
     @Published var selection: SidebarDestination
     @Published var organizeSubSelection: OrganizeSubSection
+    @Published var settingsSelection: SettingsTab
     @Published var transientErrorMessage: String?
 
     var preferencesStore: PreferencesStore
@@ -144,6 +145,7 @@ final class AppState: ObservableObject {
     ) {
         self.selection = route.sidebar
         self.organizeSubSelection = route.organizeSubSection ?? .setup
+        self.settingsSelection = .general
         self.transientErrorMessage = nil
         self.preferencesStore = preferencesStore
         self.setupStore = setupStore
@@ -467,6 +469,11 @@ final class AppState: ObservableObject {
 
     func openSettingsWindow() {
         runCoordinator.openSettingsWindow()
+    }
+
+    func openProfilesSettings() {
+        settingsSelection = .profiles
+        openSettingsWindow()
     }
 
     func revealHistoryEntry(_ entry: RunHistoryEntry) {

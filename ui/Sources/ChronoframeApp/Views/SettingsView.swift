@@ -3,43 +3,63 @@ import ChronoframeAppCore
 #endif
 import SwiftUI
 
+enum SettingsTab: String, Hashable {
+    case general
+    case profiles
+    case layout
+    case performance
+    case deduplicate
+    case diagnostics
+}
+
 struct SettingsView: View {
-    let appState: AppState
+    @ObservedObject var appState: AppState
     @ObservedObject private var preferencesStore: PreferencesStore
 
     init(appState: AppState) {
-        self.appState = appState
+        self._appState = ObservedObject(wrappedValue: appState)
         self._preferencesStore = ObservedObject(wrappedValue: appState.preferencesStore)
     }
 
     var body: some View {
-        TabView {
+        TabView(selection: $appState.settingsSelection) {
             GeneralSettingsTab()
                 .tabItem {
                     Label("General", systemImage: "gear")
                 }
+                .tag(SettingsTab.general)
+
+            ProfilesView(appState: appState, displayMode: .settings)
+                .tabItem {
+                    Label("Profiles", systemImage: "person.crop.rectangle.stack")
+                }
+                .tag(SettingsTab.profiles)
 
             LayoutSettingsTab(appState: appState, preferencesStore: preferencesStore)
                 .tabItem {
                     Label("Layout", systemImage: "rectangle.3.offgrid")
                 }
+                .tag(SettingsTab.layout)
 
             PerformanceSettingsTab(preferencesStore: preferencesStore)
                 .tabItem {
                     Label("Performance", systemImage: "speedometer")
                 }
+                .tag(SettingsTab.performance)
 
             DeduplicateSettingsTab(preferencesStore: preferencesStore)
                 .tabItem {
                     Label("Deduplicate", systemImage: "rectangle.on.rectangle.angled")
                 }
+                .tag(SettingsTab.deduplicate)
 
             DiagnosticsSettingsTab(appState: appState, preferencesStore: preferencesStore)
                 .tabItem {
                     Label("Diagnostics", systemImage: "stethoscope")
                 }
+                .tag(SettingsTab.diagnostics)
         }
-        .frame(minWidth: 460, idealWidth: 520, minHeight: 360)
+        .frame(minWidth: 620, idealWidth: 760, minHeight: 520)
         .onAppear {
             UITestScenario.configureCurrentWindow(for: UITestScenario.current(), isSettings: true)
         }

@@ -73,7 +73,7 @@ struct SetupView: View {
                     setupStore: setupStore,
                     refreshProfiles: appState.refreshProfiles,
                     clearSelectedProfile: appState.clearSelectedProfile,
-                    openProfiles: { appState.navigate(to: .profiles) },
+                    openProfiles: appState.openProfilesSettings,
                     onProfileSelection: handleProfileSelection(_:)
                 )
 

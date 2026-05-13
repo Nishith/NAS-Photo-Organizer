@@ -56,7 +56,7 @@ enum UITestAppStateFactory {
             setupStore.newProfileName = "Weekend Archive"
             historyStore = HistoryStore(destinationRoot: setupStore.destinationPath)
             engine = previewReviewEngine(sourcePath: setupStore.sourcePath, destinationPath: setupStore.destinationPath)
-            route = .profiles
+            route = .organize(.setup)
 
         case .settingsSections:
             setupStore.sourcePath = "/Volumes/Card/April Session"
@@ -108,6 +108,9 @@ enum UITestAppStateFactory {
             showSettingsWindowAction: showSettingsWindowAction
         )
         appStateBox.value = appState
+        if scenario == .profilesPopulated {
+            appState.settingsSelection = .profiles
+        }
 
         if scenario == .runPreviewReview {
             Task { @MainActor in

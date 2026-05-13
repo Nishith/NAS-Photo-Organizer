@@ -16,7 +16,7 @@ enum UITestScenario: String, CaseIterable {
     }
 
     var opensSettingsOnLaunch: Bool {
-        self == .settingsSections
+        self == .settingsSections || self == .profilesPopulated
     }
 
     private var preferredMainWindowSize: NSSize {

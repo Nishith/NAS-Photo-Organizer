@@ -15,7 +15,26 @@ final class AppStateTests: XCTestCase {
         XCTAssertNil(UITestScenario.current(environment: [:]))
         XCTAssertNil(UITestScenario.current(environment: ["CHRONOFRAME_UI_TEST_SCENARIO": "unknown"]))
         XCTAssertTrue(UITestScenario.settingsSections.opensSettingsOnLaunch)
+        XCTAssertTrue(UITestScenario.profilesPopulated.opensSettingsOnLaunch)
         XCTAssertFalse(UITestScenario.setupReady.opensSettingsOnLaunch)
+    }
+
+    @MainActor
+    func testOpenProfilesSettingsSelectsProfilesTabAndOpensSettingsWindow() {
+        let harness = AppStateHarness()
+        var settingsOpenCount = 0
+        let appState = harness.makeAppState(
+            performInitialBootstrap: false,
+            showSettingsWindowAction: { settingsOpenCount += 1 }
+        )
+
+        XCTAssertEqual(appState.settingsSelection, .general)
+
+        appState.openProfilesSettings()
+
+        XCTAssertEqual(appState.settingsSelection, .profiles)
+        XCTAssertEqual(settingsOpenCount, 1)
+        XCTAssertEqual(appState.selection, .organize)
     }
 
     @MainActor
@@ -31,7 +50,8 @@ final class AppStateTests: XCTestCase {
 
         let profilesState = UITestAppStateFactory.make(scenario: .profilesPopulated)
 
-        XCTAssertEqual(profilesState.selection, .profiles)
+        XCTAssertEqual(profilesState.selection, .organize)
+        XCTAssertEqual(profilesState.settingsSelection, .profiles)
         XCTAssertTrue(profilesState.setupStore.usingProfile)
         XCTAssertEqual(profilesState.setupStore.selectedProfileName, "Meridian Travel")
         XCTAssertEqual(profilesState.setupStore.newProfileName, "Weekend Archive")
