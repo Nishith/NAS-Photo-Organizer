@@ -171,7 +171,7 @@ struct RunPreviewReviewSection: View {
     let startTransfer: () -> Void
 
     var body: some View {
-        MeridianSurfaceCard(tint: DesignTokens.Color.sky) {
+        MeridianSurfaceCard(style: .section, tint: DesignTokens.Color.sky) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .center, spacing: 16) {
                     reviewSummary
@@ -281,7 +281,7 @@ struct RunWorkspaceShell: View {
     @ObservedObject var previewReviewStore: PreviewReviewStore
 
     var body: some View {
-        MeridianSurfaceCard {
+        MeridianSurfaceCard(style: .section) {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
                 HStack(alignment: .top, spacing: 12) {
                     SectionHeading(

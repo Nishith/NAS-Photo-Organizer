@@ -17,7 +17,7 @@ struct RunTimelineView: View {
     let model: RunWorkspaceModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let chartHeight: CGFloat = 96
+    private let chartHeight: CGFloat = 136
     private let minBarHeight: CGFloat = 3
 
     var body: some View {
@@ -84,6 +84,8 @@ struct RunTimelineView: View {
             }
         }
         .frame(height: chartHeight)
+        .padding(DesignTokens.Spacing.md)
+        .background(DesignTokens.ColorSystem.imageStage, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private func bar(
@@ -125,11 +127,11 @@ struct RunTimelineView: View {
     private var emptyState: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(DesignTokens.ColorSystem.hairline.opacity(0.4))
+                .fill(DesignTokens.ColorSystem.imageStage)
 
             Text(emptyStateMessage)
                 .font(DesignTokens.Typography.label)
-                .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+                .foregroundStyle(.white.opacity(0.62))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, DesignTokens.Spacing.md)
         }

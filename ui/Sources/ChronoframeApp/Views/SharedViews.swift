@@ -98,6 +98,7 @@ enum MeridianSurfaceCardStyle {
     case hero
     case standard
     case inner
+    case section
 
     var cornerRadius: CGFloat {
         switch self {
@@ -107,6 +108,8 @@ enum MeridianSurfaceCardStyle {
             return DesignTokens.Corner.card
         case .inner:
             return DesignTokens.Corner.innerCard
+        case .section:
+            return 0
         }
     }
 
@@ -116,6 +119,8 @@ enum MeridianSurfaceCardStyle {
             return DesignTokens.Layout.cardPadding
         case .inner:
             return DesignTokens.Layout.compactPadding
+        case .section:
+            return 0
         }
     }
 }
@@ -169,10 +174,15 @@ struct MeridianSurfaceCard<Content: View>: View {
             } else {
                 Rectangle().fill(DesignTokens.ColorSystem.hairline.opacity(0.6))
             }
+        case .section:
+            Rectangle().fill(.clear)
         }
     }
 
     private var borderColor: SwiftUI.Color {
+        if style == .section {
+            return .clear
+        }
         if let tint, style == .inner {
             return tint.opacity(0.18)
         }
@@ -361,9 +371,9 @@ struct DetailHeroCard<Summary: View, Actions: View>: View {
     }
 
     var body: some View {
-        MeridianSurfaceCard(style: .hero) {
+        MeridianSurfaceCard(style: .section) {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
-                HStack(alignment: .firstTextBaseline, spacing: 14) {
+                HStack(alignment: .center, spacing: 14) {
                     MeridianLeadIcon(
                         systemImage: systemImage,
                         tint: tint,
@@ -391,6 +401,12 @@ struct DetailHeroCard<Summary: View, Actions: View>: View {
 
                 summary
                 actions
+            }
+            .padding(.bottom, DesignTokens.Spacing.sm)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(DesignTokens.ColorSystem.hairline)
+                    .frame(height: 0.5)
             }
         }
     }
@@ -534,4 +550,3 @@ struct EmptyStateView: View {
         }
     }
 }
-

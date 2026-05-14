@@ -88,6 +88,7 @@ struct ClusterDetailPane: View {
 
                 memberStripArea(cluster: cluster, height: stripHeight)
             }
+            .background(DesignTokens.ColorSystem.imageStage)
         }
     }
 
@@ -99,6 +100,7 @@ struct ClusterDetailPane: View {
         }
         .padding(.vertical, DesignTokens.Spacing.sm)
         .frame(height: height)
+        .background(.ultraThinMaterial)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("dedupeMemberStrip")
     }
@@ -169,7 +171,7 @@ struct ClusterDetailPane: View {
     private func preview(for member: PhotoCandidate?) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(DesignTokens.ColorSystem.panel)
+                .fill(Color.black.opacity(0.34))
             if let member {
                 LargePreviewImage(path: member.path)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -223,8 +225,12 @@ struct ClusterDetailPane: View {
             }
         }
         .padding(DesignTokens.Spacing.md)
-        .background(DesignTokens.ColorSystem.panel)
+        .background(.thinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+        }
     }
 
     private func metaRow(_ label: String, value: String) -> some View {
@@ -328,14 +334,15 @@ struct ClusterDetailPane: View {
                 loader: thumbnailLoader
             )
             .opacity(decision == .delete ? 0.55 : 1.0)
+            .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(isFocused ? DesignTokens.ColorSystem.accentAction : Color.clear, lineWidth: 2)
+                    .stroke(isFocused ? DesignTokens.ColorSystem.accentWaypoint : Color.white.opacity(0.16), lineWidth: isFocused ? 2 : 0.5)
             )
 
             Image(systemName: decision == .keep ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(decision == .keep ? DesignTokens.ColorSystem.statusSuccess : DesignTokens.ColorSystem.statusDanger)
+                .foregroundStyle(decision == .keep ? DesignTokens.ColorSystem.statusSuccess : DesignTokens.ColorSystem.statusDanger, .black.opacity(0.42))
                 .padding(3)
         }
         .onTapGesture {
