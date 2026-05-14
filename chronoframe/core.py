@@ -1015,15 +1015,39 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False,
             try:
                 result = safe_copy_atomic(src_p, dst_p)
                 if verify:
-                    if not verify_copy(src_p, result, h):
+                    match, reason = verify_copy(src_p, result, h)
+                    if not match:
                         try:
                             os.remove(result)
                         except OSError as cleanup_err:
                             if run_log:
                                 run_log.warn(f"Failed to remove unverified copy: {result}: {cleanup_err}")
+
+                        # Log specific reason for verification failure
+                        if reason == "not_found":
+                            msg = f"Verification failed: destination vanished after copy (filesystem race?): {src_p} → {result}"
+                            emit_json("error", message=msg, type="verification_not_found")
+                        elif reason == "symlink":
+                            msg = f"Verification failed: destination became symlink (possible attack?): {src_p} → {result}"
+                            emit_json("error", message=msg, type="verification_symlink")
+                        elif reason == "not_regular_file":
+                            msg = f"Verification failed: destination is not a regular file: {src_p} → {result}"
+                            emit_json("error", message=msg, type="verification_not_regular")
+                        elif reason == "permission_denied":
+                            msg = f"Verification failed: permission denied reading destination (ACL issue?): {src_p} → {result}"
+                            emit_json("error", message=msg, type="verification_permission")
+                        elif reason == "io_error":
+                            msg = f"Verification failed: I/O error reading destination (disk error?): {src_p} → {result}"
+                            emit_json("error", message=msg, type="verification_io_error")
+                        elif reason == "mismatch":
+                            msg = f"Verification failed: hash mismatch (data corruption): {src_p} → {result}"
+                            emit_json("error", message=msg, type="verification_mismatch")
+                        else:
+                            msg = f"Verification failed ({reason}): {src_p} → {result}"
+                            emit_json("error", message=msg, type=f"verification_{reason}")
+
                         if run_log:
-                            run_log.error(f"Verification failed: {src_p} → {result}")
-                        emit_json("error", message=f"Verification failed: {src_p} -> {result}")
+                            run_log.error(msg)
                         verify_failures += 1
                         status_updates.append((src_p, 'FAILED'))
                         consecutive_fail += 1

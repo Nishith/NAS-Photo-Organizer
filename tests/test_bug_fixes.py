@@ -212,6 +212,68 @@ class TestRevertLogging(unittest.TestCase):
             shutil.rmtree(tmpdir)
 
 
+class TestVerificationFailureReasons(unittest.TestCase):
+    """P0 Issue: Verification failures should distinguish root causes."""
+
+    def test_verify_copy_reports_not_found(self):
+        """Verify that missing destination is properly reported."""
+        from chronoframe.io import verify_copy
+        match, reason = verify_copy("/fake/src.jpg", "/nonexistent/dst.jpg", "hash")
+        self.assertFalse(match)
+        self.assertEqual(reason, "not_found")
+
+    def test_verify_copy_reports_hash_mismatch(self):
+        """Verify that hash mismatch is properly reported."""
+        import tempfile
+        from chronoframe.io import verify_copy, fast_hash
+
+        tmpdir = tempfile.mkdtemp()
+        try:
+            src = os.path.join(tmpdir, "src.jpg")
+            dst = os.path.join(tmpdir, "dst.jpg")
+
+            with open(src, 'wb') as f:
+                f.write(b"original content")
+            with open(dst, 'wb') as f:
+                f.write(b"different content")
+
+            src_hash = fast_hash(src)
+            match, reason = verify_copy(src, dst, src_hash)
+
+            self.assertFalse(match)
+            self.assertEqual(reason, "mismatch")
+        finally:
+            import shutil
+            shutil.rmtree(tmpdir)
+
+    def test_verify_copy_reports_symlink(self):
+        """Verify that symlink destination is properly reported."""
+        import tempfile
+        from chronoframe.io import verify_copy, fast_hash
+
+        tmpdir = tempfile.mkdtemp()
+        try:
+            src = os.path.join(tmpdir, "src.jpg")
+            real_dst = os.path.join(tmpdir, "real.jpg")
+            symlink_dst = os.path.join(tmpdir, "link.jpg")
+
+            with open(src, 'wb') as f:
+                f.write(b"content")
+            with open(real_dst, 'wb') as f:
+                f.write(b"content")
+
+            os.symlink(real_dst, symlink_dst)
+
+            src_hash = fast_hash(src)
+            match, reason = verify_copy(src, symlink_dst, src_hash)
+
+            self.assertFalse(match)
+            self.assertEqual(reason, "symlink")
+        finally:
+            import shutil
+            shutil.rmtree(tmpdir)
+
+
 class TestPathTraversalValidation(unittest.TestCase):
     """P0 Issue #5: Path traversal TOCTOU race in revert."""
 

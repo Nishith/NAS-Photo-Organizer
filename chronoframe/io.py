@@ -37,12 +37,34 @@ def fast_hash(path, known_size=None):
 
 
 def verify_copy(src_path, dst_path, expected_hash):
-    """Re-hash the destination file and compare to expected hash. Returns True if match."""
+    """Re-hash the destination file and compare to expected hash.
+
+    Returns: (bool, Optional[str])
+      (True, None) — hashes match
+      (False, "mismatch") — hash differs (data corruption)
+      (False, "not_found") — destination file missing
+      (False, "symlink") — destination is symlink
+      (False, "not_regular_file") — destination is directory or special
+      (False, "permission_denied") — can't read destination
+      (False, "io_error") — disk I/O error
+    """
     try:
+        if not os.path.exists(dst_path):
+            return False, "not_found"
+        if os.path.islink(dst_path):
+            return False, "symlink"
+        st = os.lstat(dst_path)
+        if not stat_module.S_ISREG(st.st_mode):
+            return False, "not_regular_file"
         actual = fast_hash(dst_path)
-        return actual == expected_hash
+        if actual == expected_hash:
+            return True, None
+        else:
+            return False, "mismatch"
+    except PermissionError:
+        return False, "permission_denied"
     except OSError:
-        return False
+        return False, "io_error"
 
 
 def check_disk_space(src_path, dst_dir):

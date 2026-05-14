@@ -149,18 +149,24 @@ class TestVerifyCopy(TempDirMixin, unittest.TestCase):
         src = self._mkfile("src.jpg", content)
         dst = self._mkfile("dst.jpg", content)
         h = fast_hash(src)
-        self.assertTrue(verify_copy(src, dst, h))
+        match, reason = verify_copy(src, dst, h)
+        self.assertTrue(match)
+        self.assertIsNone(reason)
 
     def test_mismatched_hash(self):
         src = self._mkfile("src.jpg", b"original")
         dst = self._mkfile("dst.jpg", b"corrupted")
         h = fast_hash(src)
-        self.assertFalse(verify_copy(src, dst, h))
+        match, reason = verify_copy(src, dst, h)
+        self.assertFalse(match)
+        self.assertEqual(reason, "mismatch")
 
     def test_missing_dst(self):
         src = self._mkfile("src.jpg", b"data")
         h = fast_hash(src)
-        self.assertFalse(verify_copy(src, "/nonexistent/dst.jpg", h))
+        match, reason = verify_copy(src, "/nonexistent/dst.jpg", h)
+        self.assertFalse(match)
+        self.assertEqual(reason, "not_found")
 
 
 # ════════════════════════════════════════════════════════════════════════════
