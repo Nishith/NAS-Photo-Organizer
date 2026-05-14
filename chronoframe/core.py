@@ -116,7 +116,16 @@ def parse_args():
     parser.add_argument("--folder-structure", type=str, choices=["YYYY/MM/DD", "YYYY/MM", "YYYY", "YYYY/Mon/Event", "Flat"], default="YYYY/MM/DD", help="Output directory layout")
     parser.add_argument("--fast-dest", action="store_true", help="Bypass destination OS scan and load directly from cache (fast repeated dry runs)")
     parser.add_argument("--revert", type=str, metavar="RECEIPT_JSON", help="Revert a previous run using its audit receipt")
-    return parser.parse_args()
+
+    args = parser.parse_args()
+
+    # Validate argument ranges
+    import multiprocessing
+    max_workers = max(1, multiprocessing.cpu_count() * 2)
+    if args.workers < 1 or args.workers > max_workers:
+        parser.error(f"--workers must be between 1 and {max_workers} (got {args.workers})")
+
+    return args
 
 
 def _find_profiles_yaml():
@@ -614,6 +623,7 @@ def main():
 
         # ── Discovery ───────────────────────────────────────────────────────
         src_files = []
+        symlinks_skipped = 0
         emit_json("task_start", task="discovery")
         with console.status("[bold blue]Scanning source directories...", spinner="dots"):
             for root, dirs, fnames in os.walk(src, onerror=_walk_error_handler(run_log)):
@@ -626,10 +636,15 @@ def main():
                         continue
                     path = os.path.join(root, fname)
                     if os.path.islink(path):
+                        symlinks_skipped += 1
                         continue
                     if os.path.splitext(fname)[1].lower() in ALL_EXTS:
                         src_files.append(path)
-        emit_json("task_complete", task="discovery", found=len(src_files))
+        if symlinks_skipped > 0:
+            msg = f"Skipped {symlinks_skipped} symbolic links in source"
+            run_log.log(msg)
+            emit_json("info", message=msg)
+        emit_json("task_complete", task="discovery", found=len(src_files), symlinks_skipped=symlinks_skipped)
 
         if not src_files:
             console.print("[yellow]No valid media files found in source.[/yellow]")
