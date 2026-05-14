@@ -90,15 +90,23 @@ def get_date_from_filename(path):
     return None
 
 def get_file_date(path):
+    """Extract file date, falling back through multiple sources.
+
+    Returns: (datetime, source_method)
+      source_method: "exif", "filename", "mdls", "mtime", or None
+    """
     ext = os.path.splitext(path)[1].lower()
     if HAS_EXIFREAD and ext in PHOTO_EXTS:
         dt = get_date_exifread(path)
-        if dt and 1900 <= dt.year <= 2100: return dt
+        if dt and 1900 <= dt.year <= 2100: return dt, "exif"
 
     dt = get_date_from_filename(path)
-    if dt: return dt
+    if dt: return dt, "filename"
 
     dt = get_date_mdls(path)
-    if dt and 1900 <= dt.year <= 2100: return dt
+    if dt and 1900 <= dt.year <= 2100: return dt, "mdls"
 
-    return datetime.fromtimestamp(os.path.getmtime(path), timezone.utc).replace(tzinfo=None)
+    try:
+        return datetime.fromtimestamp(os.path.getmtime(path), timezone.utc).replace(tzinfo=None), "mtime"
+    except OSError:
+        return None, None

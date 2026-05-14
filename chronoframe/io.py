@@ -170,16 +170,27 @@ def safe_copy_atomic(src, dst):
 
 
 def process_single_file(path, cached_data):
-    """Hash a single file, using cache if size+mtime unchanged."""
+    """Hash a single file, using cache if size+mtime unchanged.
+
+    Returns: (hash_or_none, size, mtime, was_recomputed, error_reason_or_none)
+      error_reason: None if success, else "symlink", "not_regular_file", "permission_denied",
+                   "not_found", "io_error", or error message
+    """
     try:
         st = os.lstat(path)
-        if stat_module.S_ISLNK(st.st_mode) or not stat_module.S_ISREG(st.st_mode):
-            return None, 0, 0, False
+        if stat_module.S_ISLNK(st.st_mode):
+            return None, 0, 0, False, "symlink"
+        if not stat_module.S_ISREG(st.st_mode):
+            return None, 0, 0, False, "not_regular_file"
         size = st.st_size
         mtime = st.st_mtime
         if cached_data and cached_data["size"] == size and abs(cached_data["mtime"] - mtime) < 0.001:
-            return cached_data["hash"], size, mtime, False
+            return cached_data["hash"], size, mtime, False, None
         h = fast_hash(path, known_size=size)
-        return h, size, mtime, True
-    except OSError:
-        return None, 0, 0, False
+        return h, size, mtime, True, None
+    except FileNotFoundError:
+        return None, 0, 0, False, "not_found"
+    except PermissionError:
+        return None, 0, 0, False, "permission_denied"
+    except OSError as e:
+        return None, 0, 0, False, f"io_error:{e.errno}"

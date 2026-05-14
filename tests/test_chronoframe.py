@@ -237,44 +237,50 @@ class TestProcessSingleFile(TempDirMixin, unittest.TestCase):
 
     def test_fresh_hash(self):
         p = self._mkfile("photo.jpg", b"photo data")
-        h, size, mtime, was_hashed = process_single_file(p, None)
+        h, size, mtime, was_hashed, error_reason = process_single_file(p, None)
         self.assertIsNotNone(h)
         self.assertEqual(size, 10)
         self.assertTrue(was_hashed)
+        self.assertIsNone(error_reason)
 
     def test_cache_hit(self):
         p = self._mkfile("photo.jpg", b"photo data")
         st = os.stat(p)
         cached = {"hash": "cached_hash", "size": st.st_size, "mtime": st.st_mtime}
-        h, size, mtime, was_hashed = process_single_file(p, cached)
+        h, size, mtime, was_hashed, error_reason = process_single_file(p, cached)
         self.assertEqual(h, "cached_hash")
         self.assertFalse(was_hashed)
+        self.assertIsNone(error_reason)
 
     def test_cache_miss_size_changed(self):
         p = self._mkfile("photo.jpg", b"photo data")
         cached = {"hash": "old_hash", "size": 999, "mtime": os.stat(p).st_mtime}
-        h, size, mtime, was_hashed = process_single_file(p, cached)
+        h, size, mtime, was_hashed, error_reason = process_single_file(p, cached)
         self.assertNotEqual(h, "old_hash")
         self.assertTrue(was_hashed)
+        self.assertIsNone(error_reason)
 
     def test_cache_miss_mtime_changed(self):
         p = self._mkfile("photo.jpg", b"photo data")
         cached = {"hash": "old_hash", "size": os.stat(p).st_size, "mtime": 0.0}
-        h, size, mtime, was_hashed = process_single_file(p, cached)
+        h, size, mtime, was_hashed, error_reason = process_single_file(p, cached)
         self.assertTrue(was_hashed)
+        self.assertIsNone(error_reason)
 
     def test_nonexistent_file(self):
-        h, size, mtime, was_hashed = process_single_file("/no/such/file.jpg", None)
+        h, size, mtime, was_hashed, error_reason = process_single_file("/no/such/file.jpg", None)
         self.assertIsNone(h)
         self.assertEqual(size, 0)
         self.assertFalse(was_hashed)
+        self.assertEqual(error_reason, "not_found")
 
     def test_unreadable_file(self):
         p = self._mkfile("locked.jpg", b"data")
         os.chmod(p, 0o000)
-        h, size, mtime, was_hashed = process_single_file(p, None)
+        h, size, mtime, was_hashed, error_reason = process_single_file(p, None)
         # Depending on OS, stat may succeed but open may fail — either way no crash
         os.chmod(p, 0o644)  # Restore for cleanup
+        # On macOS, owner can read even with 000 permissions, so error_reason may be None
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -536,33 +542,37 @@ class TestGetFileDate(TempDirMixin, unittest.TestCase):
     @patch('chronoframe.metadata.get_date_mdls', return_value=None)
     def test_filename_fallback_when_no_mdls(self, mock_mdls):
         p = self._mkfile("IMG_20210501_120000.jpg", b"data")
-        dt = get_file_date(p)
+        dt, source = get_file_date(p)
         self.assertEqual(dt, datetime(2021, 5, 1))
+        self.assertEqual(source, "filename")
 
     @patch('chronoframe.metadata.get_date_mdls')
     def test_mdls_used_when_filename_fails(self, mock_mdls):
         mock_mdls.return_value = datetime(2020, 6, 15, 10, 30, 0)
         p = self._mkfile("random_name.jpg", b"data")
         with patch('chronoframe.metadata.HAS_EXIFREAD', False):
-            dt = get_file_date(p)
+            dt, source = get_file_date(p)
         self.assertEqual(dt.year, 2020)
         self.assertEqual(dt.month, 6)
+        self.assertEqual(source, "mdls")
 
     def test_mtime_fallback(self):
         p = self._mkfile("nodate.jpg", b"data")
         with patch('chronoframe.metadata.get_date_mdls', return_value=None):
             with patch('chronoframe.metadata.HAS_EXIFREAD', False):
-                dt = get_file_date(p)
+                dt, source = get_file_date(p)
         # Should return mtime which is recent
         self.assertGreater(dt.year, 2020)
+        self.assertEqual(source, "mtime")
 
     @patch('chronoframe.metadata.get_date_mdls', return_value=datetime(1970, 1, 1))
     def test_mdls_1970_accepted(self, mock_mdls):
         """Archival-range mdls dates are accepted."""
         p = self._mkfile("nodate.jpg", b"data")
         with patch('chronoframe.metadata.HAS_EXIFREAD', False):
-            dt = get_file_date(p)
+            dt, source = get_file_date(p)
         self.assertEqual(dt, datetime(1970, 1, 1))
+        self.assertEqual(source, "mdls")
 
 
 class TestMDLSParsing(unittest.TestCase):
@@ -1156,7 +1166,7 @@ class TestEndToEndDryRun(TempDirMixin, unittest.TestCase):
         src_files = sorted([os.path.join(src, f) for f in os.listdir(src)])
         src_hashes = {}
         for p in src_files:
-            h, _, _, _ = process_single_file(p, None)
+            h, _, _, _, _ = process_single_file(p, None)
             src_hashes[p] = h
 
         new_files = {p: h for p, h in src_hashes.items() if h and h not in hi}
@@ -1178,7 +1188,7 @@ class TestEndToEndDryRun(TempDirMixin, unittest.TestCase):
         hi, seq, _ = build_dest_index(dst, db)
 
         src_path = os.path.join(src, "IMG_20230101_120000.jpg")
-        h, _, _, _ = process_single_file(src_path, None)
+        h, _, _, _, _ = process_single_file(src_path, None)
         self.assertIn(h, hi)  # Already in dest
         db.close()
 
@@ -1194,7 +1204,7 @@ class TestEndToEndDryRun(TempDirMixin, unittest.TestCase):
         src_seen = {}
         dups = []
         for p in src_files:
-            h, _, _, _ = process_single_file(p, None)
+            h, _, _, _, _ = process_single_file(p, None)
             if h in src_seen:
                 dups.append(p)
             else:
@@ -2005,17 +2015,19 @@ class TestExifreadParsing(TempDirMixin, unittest.TestCase):
         p = self._mkfile("test.jpg", b"not real exif data")
         with patch('chronoframe.metadata.get_date_exifread', return_value=datetime(2023, 6, 15)) as mock_exif:
             with patch('chronoframe.metadata.HAS_EXIFREAD', True):
-                dt = get_file_date(p)
+                dt, source = get_file_date(p)
         mock_exif.assert_called_once_with(p)
         self.assertEqual(dt, datetime(2023, 6, 15))
+        self.assertEqual(source, "exif")
 
     def test_exifread_skipped_for_video(self):
         """get_file_date should NOT use exifread for video files."""
         p = self._mkfile("IMG_20230615_120000.mov", b"video data")
         with patch('chronoframe.metadata.get_date_exifread') as mock_exif:
-            dt = get_file_date(p)
+            dt, source = get_file_date(p)
         mock_exif.assert_not_called()
         self.assertEqual(dt, datetime(2023, 6, 15))
+        self.assertEqual(source, "filename")
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -3247,7 +3259,7 @@ class TestUnknownDatePath(TempDirMixin, unittest.TestCase):
             f.write(b"data")
 
         # Return a pre-archival datetime so date_str becomes "Unknown_Date"
-        with patch('chronoframe.core.get_file_date', return_value=datetime(1899, 12, 31)):
+        with patch('chronoframe.core.get_file_date', return_value=(datetime(1899, 12, 31), "test")):
             with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
                 main()
 
@@ -3274,7 +3286,7 @@ class TestUnknownDatePath(TempDirMixin, unittest.TestCase):
                 f.write(b"identical content here")
 
         # Return a pre-archival date for all date queries → Unknown_Date for both copy plan and dups
-        with patch('chronoframe.core.get_file_date', return_value=datetime(1899, 12, 31)):
+        with patch('chronoframe.core.get_file_date', return_value=(datetime(1899, 12, 31), "test")):
             with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '--dry-run']):
                 main()
 

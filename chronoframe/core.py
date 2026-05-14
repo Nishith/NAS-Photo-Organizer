@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import errno
 import argparse
 import concurrent.futures
 import json
@@ -155,7 +156,7 @@ def load_profile(profile_name):
 # ── Destination Indexing ────────────────────────────────────────────────────
 
 def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
-                     progress=None, ptask=None, fast_dest=False):
+                     progress=None, ptask=None, fast_dest=False, run_log=None):
     if rebuild:
         cache_db.clear_cache(type_id=2)
 
@@ -260,17 +261,44 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
 
         count = 0
         hash_errors = 0
+        hash_error_breakdown = defaultdict(list)  # error_reason -> [paths]
+
         for future in concurrent.futures.as_completed(futures):
             path = futures[future]
             try:
-                h, size, mtime, was_hashed = future.result()
-                if h:
+                result = future.result()
+                # Handle both old 4-tuple and new 5-tuple returns for backwards compatibility
+                if len(result) == 5:
+                    h, size, mtime, was_hashed, error_reason = result
+                else:
+                    h, size, mtime, was_hashed = result
+                    error_reason = None
+
+                if error_reason:
+                    # File failed hashing with specific reason
+                    hash_errors += 1
+                    hash_error_breakdown[error_reason].append(path)
+                    if error_reason == "symlink":
+                        emit_json("warning", message=f"Skipped symlink in destination: {path}", type="dest_symlink")
+                    elif error_reason == "not_regular_file":
+                        emit_json("warning", message=f"Skipped non-regular file in destination: {path}", type="dest_non_regular")
+                    elif error_reason == "permission_denied":
+                        emit_json("warning", message=f"Permission denied indexing destination file: {path}", type="dest_permission")
+                    elif error_reason == "not_found":
+                        emit_json("warning", message=f"Destination file disappeared during scan: {path}", type="dest_not_found")
+                    elif error_reason.startswith("io_error"):
+                        emit_json("warning", message=f"I/O error indexing destination file: {path}: {error_reason}", type="dest_io_error")
+                    else:
+                        emit_json("warning", message=f"Failed to hash destination file: {path}: {error_reason}", type="dest_hash_error")
+                elif h:
+                    # File successfully hashed
                     hash_index[h] = path
                     if was_hashed:
                         updates.append((path, h, size, mtime))
             except Exception as e:
                 hash_errors += 1
-                emit_json("warning", message=f"Failed to hash destination file: {path}: {e}")
+                hash_error_breakdown[type(e).__name__].append(path)
+                emit_json("warning", message=f"Exception hashing destination file: {path}: {e}")
                 console.print(f"[yellow]Warning:[/yellow] Could not hash {path}: {e}")
             count += 1
             if progress is not None and ptask is not None:
@@ -278,7 +306,21 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
             if total > 0 and count % max(1, total // 100) == 0:
                 emit_json("task_progress", task="dest_hash", completed=count, total=total)
 
+        # Log summary of hash errors by type
+        if hash_errors > 0 and run_log:
+            msg = f"Destination indexing had {hash_errors} issues"
+            run_log.warn(msg)
+            for error_type, paths in sorted(hash_error_breakdown.items()):
+                run_log.warn(f"  {error_type}: {len(paths)} files")
+                for path in paths[:3]:
+                    run_log.warn(f"    {path}")
+                if len(paths) > 3:
+                    run_log.warn(f"    ... and {len(paths) - 3} more")
+
     emit_json("task_complete", task="dest_hash", errors=hash_errors)
+    emit_json("dest_hash_errors",
+              total=hash_errors,
+              breakdown=dict(hash_error_breakdown))
     cache_db.save_batch(2, updates)
     return hash_index, seq_index, dup_seq_index
 
@@ -674,7 +716,8 @@ def main():
 
             task_dest = progress.add_task("[cyan]Scanning Destination Array...", total=None)
             dest_hash_index, dest_seq, dup_seq = build_dest_index(
-                dst, cache_db, rebuild, workers, progress, task_dest, fast_dest=args.fast_dest
+                dst, cache_db, rebuild, workers, progress, task_dest, fast_dest=args.fast_dest,
+                run_log=run_log
             )
 
             task_src = progress.add_task("[magenta]Hashing Source Payload...", total=len(src_files))
@@ -690,7 +733,14 @@ def main():
                 for future in concurrent.futures.as_completed(futures):
                     path = futures[future]
                     try:
-                        h, size, mtime, was_hashed = future.result()
+                        result = future.result()
+                        # Handle both old 4-tuple and new 5-tuple returns for backwards compatibility
+                        if len(result) == 5:
+                            h, size, mtime, was_hashed, error_reason = result
+                        else:
+                            h, size, mtime, was_hashed = result
+                            error_reason = None
+
                         src_hashes[path] = h
                         if h and was_hashed:
                             src_updates.append((path, h, size, mtime))
@@ -731,7 +781,12 @@ def main():
         all_needing_dates = [(p, h) for p, h in new_files] + [(p, h) for p, h in src_dups]
         emit_json("task_start", task="classification", total=len(all_needing_dates))
         file_dates = {}
+        file_date_sources = {}  # path -> source_method
         date_groups = defaultdict(list)
+
+        # Track date extraction sources for observability
+        date_source_counts = defaultdict(int)
+        date_extraction_failures = {}  # path -> error_reason
 
         if all_needing_dates:
             with console.status("[bold yellow]Classifying by date...", spinner="arc"):
@@ -744,14 +799,37 @@ def main():
                     for future in concurrent.futures.as_completed(future_to_path):
                         path = future_to_path[future]
                         try:
-                            file_dates[path] = future.result()
-                        except Exception:
+                            dt, source = future.result()
+                            if dt is None:
+                                # Failed to get any date
+                                date_extraction_failures[path] = "all_methods_failed"
+                                date_source_counts["none"] += 1
+                            elif 1900 <= dt.year <= 2100:
+                                # Valid date
+                                file_dates[path] = dt
+                                file_date_sources[path] = source
+                                if source:
+                                    date_source_counts[source] += 1
+                            else:
+                                # Date out of reasonable range
+                                date_extraction_failures[path] = "year_out_of_range"
+                                date_source_counts["none"] += 1
+                        except Exception as e:
+                            # Exception during date extraction
+                            date_extraction_failures[path] = str(e)
+                            date_source_counts["exception"] += 1
                             try:
-                                file_dates[path] = datetime.fromtimestamp(
+                                # Fallback to mtime
+                                dt = datetime.fromtimestamp(
                                     os.path.getmtime(path), timezone.utc
                                 ).replace(tzinfo=None)
+                                file_dates[path] = dt
+                                file_date_sources[path] = "mtime"
+                                date_source_counts["mtime"] += 1
                             except OSError:
                                 file_dates[path] = None
+                                file_date_sources[path] = None
+                                date_source_counts["none"] += 1
                         done += 1
                         if done % max(1, len(all_needing_dates) // 100) == 0:
                             emit_json("task_progress", task="classification", completed=done, total=len(all_needing_dates))
@@ -761,9 +839,33 @@ def main():
             date_str = dt.strftime('%Y-%m-%d') if (dt and 1900 <= dt.year <= 2100) else "Unknown_Date"
             date_groups[date_str].append((src_path, h))
 
+        # Log date source breakdown for observability
+        date_source_summary = {k: v for k, v in date_source_counts.items() if v > 0}
+        if date_extraction_failures:
+            msg = f"Date extraction had {len(date_extraction_failures)} issues:"
+            run_log.warn(msg)
+            for path, reason in list(date_extraction_failures.items())[:5]:
+                run_log.warn(f"  {path}: {reason}")
+            if len(date_extraction_failures) > 5:
+                run_log.warn(f"  ... and {len(date_extraction_failures) - 5} more")
+
+        run_log.log(f"Date sources: exif={date_source_counts.get('exif', 0)}, "
+                    f"filename={date_source_counts.get('filename', 0)}, "
+                    f"mdls={date_source_counts.get('mdls', 0)}, "
+                    f"mtime={date_source_counts.get('mtime', 0)}, "
+                    f"unknown={date_source_counts.get('none', 0)}")
+
         emit_json("task_complete", task="classification",
                   already_in_dst=already_in_dst, new=len(new_files),
                   dups=len(src_dups), errors=hash_errors)
+
+        emit_json("date_source_breakdown",
+                  exif=date_source_counts.get('exif', 0),
+                  filename=date_source_counts.get('filename', 0),
+                  mdls=date_source_counts.get('mdls', 0),
+                  mtime=date_source_counts.get('mtime', 0),
+                  unknown=date_source_counts.get('none', 0),
+                  extraction_failures=len(date_extraction_failures))
 
         # Year-month histogram of planned files, for the UI's source timeline.
         month_buckets = defaultdict(int)
@@ -962,6 +1064,25 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False,
 
     emit_json("task_start", task="copy", total=len(pending_jobs), bytes_total=bytes_total)
 
+    # Log disk space at start for observability
+    try:
+        import shutil
+        disk_usage = shutil.disk_usage(dst_root)
+        disk_total_gb = disk_usage.total / (1024 ** 3)
+        disk_free_gb = disk_usage.free / (1024 ** 3)
+        disk_used_gb = disk_usage.used / (1024 ** 3)
+        if run_log:
+            run_log.log(f"Destination disk at start: {disk_total_gb:.1f} GB total, "
+                        f"{disk_free_gb:.1f} GB free ({100 * disk_free_gb / disk_total_gb:.0f}%), "
+                        f"{disk_used_gb:.1f} GB used")
+        emit_json("system_state", disk_total_gb=round(disk_total_gb, 1),
+                  disk_free_gb=round(disk_free_gb, 1),
+                  disk_used_gb=round(disk_used_gb, 1),
+                  bytes_to_copy=bytes_total)
+    except Exception as e:
+        if run_log:
+            run_log.warn(f"Could not check destination disk space: {e}")
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -1086,9 +1207,21 @@ def execute_jobs(pending_jobs, cache_db, dst_root, run_log=None, verify=False,
                     bytes_copied += st.st_size
             except Exception as e:
                 status_updates.append((src_p, 'FAILED'))
-                emit_json("error", message=f"Copy failed: {src_p} -> {dst_p}: {e}")
+
+                # Check if error is disk space related and log current state
+                error_msg = f"Copy failed: {src_p} -> {dst_p}: {e}"
+                if isinstance(e, OSError) and e.errno == errno.ENOSPC:
+                    try:
+                        import shutil
+                        disk_usage = shutil.disk_usage(dst_root)
+                        disk_free_gb = disk_usage.free / (1024 ** 3)
+                        error_msg += f" (current disk free: {disk_free_gb:.1f} GB)"
+                    except:
+                        pass
+
+                emit_json("error", message=error_msg)
                 if run_log:
-                    run_log.error(f"Copy failed: {src_p} → {dst_p}: {e}")
+                    run_log.error(error_msg)
                 consecutive_fail += 1
                 total_fail += 1
                 if consecutive_fail >= MAX_CONSECUTIVE_FAILURES or total_fail >= MAX_TOTAL_FAILURES:
