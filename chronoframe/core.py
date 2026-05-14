@@ -242,6 +242,7 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
                 progress.update(ptask, description="[cyan]Validating Dest Hashes...", total=total)
 
         count = 0
+        hash_errors = 0
         for future in concurrent.futures.as_completed(futures):
             path = futures[future]
             try:
@@ -250,15 +251,17 @@ def build_dest_index(dst_dir, cache_db, rebuild=False, workers=DEFAULT_WORKERS,
                     hash_index[h] = path
                     if was_hashed:
                         updates.append((path, h, size, mtime))
-            except Exception:
-                pass
+            except Exception as e:
+                hash_errors += 1
+                emit_json("warning", message=f"Failed to hash destination file: {path}: {e}")
+                console.print(f"[yellow]Warning:[/yellow] Could not hash {path}: {e}")
             count += 1
             if progress is not None and ptask is not None:
                 progress.advance(ptask)
             if total > 0 and count % max(1, total // 100) == 0:
                 emit_json("task_progress", task="dest_hash", completed=count, total=total)
 
-    emit_json("task_complete", task="dest_hash")
+    emit_json("task_complete", task="dest_hash", errors=hash_errors)
     cache_db.save_batch(2, updates)
     return hash_index, seq_index, dup_seq_index
 
@@ -359,6 +362,15 @@ def revert_receipt(receipt_path, dest_root_override=None):
     dest_root_real = os.path.realpath(dest_root)
     dest_prefix = os.path.normpath(dest_root_real) + os.sep
 
+    def _is_within_boundary(path, boundary_real, boundary_prefix):
+        """Validate that path is within boundary, using canonical path resolution."""
+        try:
+            path_real = os.path.realpath(path)
+            # Allow exact match or any path starting with boundary prefix
+            return path_real == boundary_real or path_real.startswith(boundary_prefix)
+        except (OSError, ValueError):
+            return False
+
     transfers = data.get("transfers", [])
     if not transfers:
         console.print("[yellow]No transfers to revert.[/yellow]")
@@ -387,9 +399,10 @@ def revert_receipt(receipt_path, dest_root_override=None):
 
             # Refuse paths outside the destination boundary, even if the
             # hash matches. A crafted receipt cannot escape <dest>/.
+            # Note: We validate both before and at deletion time to catch
+            # symlink swaps during the revert operation.
             if dst:
-                dst_abs = os.path.normpath(os.path.realpath(dst))
-                if dst_abs != dest_root_real and not dst_abs.startswith(dest_prefix):
+                if not _is_within_boundary(dst, dest_root_real, dest_prefix):
                     console.print(
                         f"[red]Refusing to revert path outside destination:[/red] {dst}"
                     )
@@ -407,26 +420,44 @@ def revert_receipt(receipt_path, dest_root_override=None):
 
             if dst and os.path.exists(dst):
                 try:
-                    # Optional: Verify it still has the same hash before destroying!
-                    current_hash = fast_hash(dst)
-                    if current_hash == expected_hash:
-                        os.remove(dst)
-                        reverted_count += 1
-
-                        # Clean up directory if empty
-                        d_dir = os.path.dirname(dst)
-                        try:
-                            if not os.listdir(d_dir):
-                                os.rmdir(d_dir)
-                        except OSError:
-                            pass
-                    else:
+                    # Re-validate boundary at deletion time to catch symlink swaps
+                    if not _is_within_boundary(dst, dest_root_real, dest_prefix):
+                        console.print(
+                            f"[red]Refusing to delete (boundary check failed):[/red] {dst}"
+                        )
+                        emit_json("error", message=f"Boundary check failed at deletion time: {dst}")
                         failed_count += 1
-                except OSError:
+                    else:
+                        # Verify it still has the same hash before destroying!
+                        current_hash = fast_hash(dst)
+                        if current_hash == expected_hash:
+                            try:
+                                os.remove(dst)
+                                reverted_count += 1
+                                emit_json("info", message=f"Reverted: {dst}")
+
+                                # Clean up directory if empty
+                                d_dir = os.path.dirname(dst)
+                                try:
+                                    if not os.listdir(d_dir):
+                                        os.rmdir(d_dir)
+                                except OSError:
+                                    pass
+                            except OSError as e:
+                                failed_count += 1
+                                emit_json("warning", message=f"Failed to delete {dst}: {e}")
+                                console.print(f"[yellow]Warning:[/yellow] Failed to delete {dst}: {e}")
+                        else:
+                            failed_count += 1
+                            emit_json("warning", message=f"Hash mismatch for {dst} - file was modified after copy")
+                            console.print(f"[yellow]Warning:[/yellow] Skipped {dst} - hash mismatch (file was modified)")
+                except OSError as e:
                     failed_count += 1
+                    emit_json("warning", message=f"Could not verify hash for {dst}: {e}")
+                    console.print(f"[yellow]Warning:[/yellow] Could not verify {dst}: {e}")
             else:
                 # Missing implies trivially reverted
-                pass
+                emit_json("info", message=f"Already missing: {src_path} → {dst or 'unknown'}")
 
             progress.advance(task_id)
             emit_json("task_progress", task="revert", completed=reverted_count + failed_count, total=len(transfers))

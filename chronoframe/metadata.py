@@ -58,6 +58,8 @@ def get_date_mdls(path):
             return None
         result = subprocess.run(['mdls', '-name', 'kMDItemContentCreationDate', '-raw', path],
                                 capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            return None
         return parse_mdls_creation_date(result.stdout)
     except Exception:
         pass
