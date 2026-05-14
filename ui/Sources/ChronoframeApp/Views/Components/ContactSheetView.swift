@@ -23,7 +23,7 @@ struct ContactSheetView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !sourcePath.isEmpty {
+            if shouldShowHeroCell {
                 heroCell
             }
 
@@ -69,10 +69,12 @@ struct ContactSheetView: View {
                         .frame(height: 168)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .transition(.opacity)
-                } else {
+                } else if loader.isLoading {
                     ProgressView()
                         .controlSize(.small)
                         .tint(.white)
+                } else {
+                    ContactSheetHeroPlaceholder()
                 }
             }
             .overlay(alignment: .bottomLeading) {
@@ -108,7 +110,45 @@ struct ContactSheetView: View {
         if sourcePath.isEmpty {
             return "Contact sheet preview — no source selected."
         }
+        if loader.didFinishLoading && loader.loadedThumbnailCount == 0 {
+            return "Contact sheet preview — no previewable media found in the source."
+        }
         return "Contact sheet showing \(loader.thumbnails.count) of \(cellCount) preview frames from the source."
+    }
+
+    private var shouldShowHeroCell: Bool {
+        !sourcePath.isEmpty
+    }
+}
+
+private struct ContactSheetHeroPlaceholder: View {
+    var body: some View {
+        VStack(spacing: 9) {
+            Image(systemName: "photo.on.rectangle.angled")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(.white.opacity(0.45))
+            Text("No previewable frames")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.72))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            EmptyFilmstripPattern()
+                .opacity(0.55)
+        }
+    }
+}
+
+private struct EmptyFilmstripPattern: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<6, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(Color.white.opacity(index == 2 ? 0.18 : 0.10), lineWidth: 0.5)
+                    .background(Color.white.opacity(index == 2 ? 0.06 : 0.03), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .frame(width: index == 2 ? 74 : 52, height: index == 2 ? 96 : 78)
+            }
+        }
     }
 }
 
@@ -188,8 +228,27 @@ enum ContactSheetThumbnailPipeline {
 @MainActor
 private final class ContactSheetLoader: ObservableObject {
     @Published var thumbnails: [NSImage?] = []
+    @Published private(set) var phase: Phase = .idle
 
     private var lastSource: String = ""
+
+    enum Phase: Equatable {
+        case idle
+        case loading
+        case finished
+    }
+
+    var isLoading: Bool {
+        phase == .loading
+    }
+
+    var didFinishLoading: Bool {
+        phase == .finished
+    }
+
+    var loadedThumbnailCount: Int {
+        thumbnails.compactMap { $0 }.count
+    }
 
     func load(sourcePath: String, count: Int, cellSize: CGFloat) async {
         let trimmed = sourcePath.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -198,11 +257,13 @@ private final class ContactSheetLoader: ObservableObject {
 
         guard !trimmed.isEmpty else {
             thumbnails = []
+            phase = .idle
             return
         }
 
-        let urls = await Self.findMediaFiles(in: trimmed, limit: ContactSheetThumbnailPipeline.candidateLimit(for: count))
         thumbnails = Array(repeating: nil, count: count)
+        phase = .loading
+        let urls = await Self.findMediaFiles(in: trimmed, limit: ContactSheetThumbnailPipeline.candidateLimit(for: count))
 
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         let size = CGSize(width: cellSize * 2, height: cellSize * 2)
@@ -218,6 +279,7 @@ private final class ContactSheetLoader: ObservableObject {
                 thumbnails[index] = image
             }
         }
+        phase = .finished
     }
 
     nonisolated private static func findMediaFiles(in path: String, limit: Int) async -> [URL] {
