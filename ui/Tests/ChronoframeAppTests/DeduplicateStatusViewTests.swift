@@ -1,4 +1,5 @@
 import ChronoframeAppCore
+import ChronoframeCore
 import SwiftUI
 import XCTest
 @testable import ChronoframeApp
@@ -114,6 +115,56 @@ final class DeduplicateStatusViewTests: XCTestCase {
         XCTAssertEqual(DeduplicateReviewLayout.mode(forWidth: 652), .compact)
     }
 
+    func testMemberNavigationMovesToNextAndPreviousPhoto() {
+        let members = [
+            PhotoCandidate(path: "/photos/a.jpg", size: 1, modificationTime: 0),
+            PhotoCandidate(path: "/photos/b.jpg", size: 1, modificationTime: 0),
+            PhotoCandidate(path: "/photos/c.jpg", size: 1, modificationTime: 0),
+        ]
+
+        XCTAssertEqual(
+            DeduplicateMemberNavigation.focusedPath(afterMoving: 1, from: "/photos/a.jpg", through: members),
+            "/photos/b.jpg"
+        )
+        XCTAssertEqual(
+            DeduplicateMemberNavigation.focusedPath(afterMoving: -1, from: "/photos/b.jpg", through: members),
+            "/photos/a.jpg"
+        )
+    }
+
+    func testMemberNavigationWrapsWithinCluster() {
+        let members = [
+            PhotoCandidate(path: "/photos/a.jpg", size: 1, modificationTime: 0),
+            PhotoCandidate(path: "/photos/b.jpg", size: 1, modificationTime: 0),
+            PhotoCandidate(path: "/photos/c.jpg", size: 1, modificationTime: 0),
+        ]
+
+        XCTAssertEqual(
+            DeduplicateMemberNavigation.focusedPath(afterMoving: 1, from: "/photos/c.jpg", through: members),
+            "/photos/a.jpg"
+        )
+        XCTAssertEqual(
+            DeduplicateMemberNavigation.focusedPath(afterMoving: -1, from: "/photos/a.jpg", through: members),
+            "/photos/c.jpg"
+        )
+    }
+
+    func testMemberNavigationStartsFromFirstPhotoWhenFocusIsMissing() {
+        let members = [
+            PhotoCandidate(path: "/photos/a.jpg", size: 1, modificationTime: 0),
+            PhotoCandidate(path: "/photos/b.jpg", size: 1, modificationTime: 0),
+        ]
+
+        XCTAssertEqual(
+            DeduplicateMemberNavigation.focusedPath(afterMoving: 1, from: nil, through: members),
+            "/photos/b.jpg"
+        )
+        XCTAssertEqual(
+            DeduplicateMemberNavigation.focusedPath(afterMoving: -1, from: "/photos/missing.jpg", through: members),
+            "/photos/b.jpg"
+        )
+    }
+
     // MARK: - Commit button density (design-critique fix #1)
 
     func testCommitDensityFullLabelIncludesFileCountForClearerDestructiveAction() {
@@ -214,7 +265,7 @@ final class DeduplicateStatusViewTests: XCTestCase {
             hardDelete: false
         ))
 
-        XCTAssertEqual(copy.message, "Removed 3 files · reclaimed 1 MB")
+        XCTAssertEqual(copy.message, "Moved 3 files to Trash · 1 MB recoverable")
         XCTAssertEqual(copy.warning, "1 item failed — see Run History for details.")
     }
 

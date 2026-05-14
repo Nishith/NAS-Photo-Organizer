@@ -97,6 +97,7 @@ struct RunHistoryView: View {
                 }
 
                 reusableSourcesSection
+                recoveryCenterSection
                 archiveSection
             }
             .padding(DesignTokens.Layout.contentPadding)
@@ -219,6 +220,98 @@ struct RunHistoryView: View {
             RoundedRectangle(cornerRadius: DesignTokens.Corner.innerCard, style: .continuous)
                 .fill(DesignTokens.ColorSystem.statusWarning.opacity(0.08))
         )
+    }
+
+    // MARK: - Recovery center
+
+    private var recoveryCenterSection: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+            SectionHeading(
+                title: "Undo Center",
+                message: "Recent runs that have a recovery receipt."
+            )
+
+            let receipts = filteredRecoveryReceipts
+            if receipts.isEmpty {
+                EmptyStateView(
+                    title: "No Revertable Runs Yet",
+                    message: "Transfers, dedupe commits, and reorganize runs write receipts here when they can be undone safely.",
+                    systemImage: "arrow.uturn.backward.circle"
+                )
+            } else {
+                DarkroomPanel(variant: .panel) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(receipts.prefix(5).enumerated()), id: \.element.id) { index, entry in
+                            if index != 0 {
+                                Rectangle()
+                                    .fill(DesignTokens.ColorSystem.hairline.opacity(0.5))
+                                    .frame(height: 0.5)
+                            }
+                            recoveryRow(for: entry)
+                        }
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("recoveryCenterSection")
+    }
+
+    private var filteredRecoveryReceipts: [RunHistoryEntry] {
+        historyStore.entries
+            .filter {
+                $0.kind == .auditReceipt
+                    || $0.kind == .dedupeAuditReceipt
+                    || $0.kind == .reorganizeAuditReceipt
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private func recoveryRow(for entry: RunHistoryEntry) -> some View {
+        HStack(alignment: .center, spacing: DesignTokens.Spacing.md) {
+            Image(systemName: recoverySymbol(for: entry.kind))
+                .foregroundStyle(tint(for: entry.kind))
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(recoveryTitle(for: entry))
+                    .font(.subheadline.weight(.semibold))
+                Text("\(entry.createdAt.formatted(date: .abbreviated, time: .shortened)) · \(entry.relativePath)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: DesignTokens.Spacing.md)
+
+            Button(Self.confirmationActionLabel(for: entry)) {
+                pendingRevertEntry = entry
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(.vertical, DesignTokens.Spacing.sm)
+    }
+
+    private func recoverySymbol(for kind: RunHistoryEntryKind) -> String {
+        switch kind {
+        case .dedupeAuditReceipt:
+            return "trash.slash"
+        case .reorganizeAuditReceipt:
+            return "rectangle.3.offgrid"
+        default:
+            return "arrow.uturn.backward.circle"
+        }
+    }
+
+    private func recoveryTitle(for entry: RunHistoryEntry) -> String {
+        switch entry.kind {
+        case .dedupeAuditReceipt:
+            return "Deduplicate run can be restored"
+        case .reorganizeAuditReceipt:
+            return "Reorganize run can be undone"
+        default:
+            return "Transfer can be reverted"
+        }
     }
 
     // MARK: - Reusable sources

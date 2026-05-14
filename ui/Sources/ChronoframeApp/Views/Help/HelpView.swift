@@ -140,6 +140,13 @@ private struct HelpShortcutsSection: View {
                 ShortcutRow(keys: "⌘↩",   label: "Transfer (copies files for real)")
             }
 
+            HelpListPanel(title: "Review") {
+                ShortcutRow(keys: "← / →", label: "Move between photos in a duplicate group")
+                ShortcutRow(keys: "↩",     label: "Confirm the current duplicate group")
+                ShortcutRow(keys: "C",     label: "Compare duplicate candidates")
+                ShortcutRow(keys: "Space", label: "Open comparison in Rapid Triage")
+            }
+
             HelpListPanel(title: "App") {
                 ShortcutRow(keys: "⌘,",   label: "Settings")
                 ShortcutRow(keys: "⌘?",   label: "Chronoframe Help (this window)")

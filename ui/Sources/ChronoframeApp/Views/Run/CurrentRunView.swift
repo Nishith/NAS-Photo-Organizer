@@ -35,6 +35,10 @@ struct CurrentRunView: View {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.sectionSpacing) {
                 RunHeroSection(model: model, workspaceTab: $workspaceTab, appState: appState)
 
+                if model.showsOutcomeSummary {
+                    RunOutcomeSummaryCard(model: model, appState: appState)
+                }
+
                 if model.showsPreviewReview {
                     RunPreviewReviewSection(
                         model: model,
@@ -87,5 +91,51 @@ struct CurrentRunView: View {
         default:
             return false
         }
+    }
+}
+
+private struct RunOutcomeSummaryCard: View {
+    let model: RunWorkspaceModel
+    let appState: AppState
+
+    var body: some View {
+        MeridianSurfaceCard(tint: model.heroState.tone.color) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Run Summary")
+                        .font(DesignTokens.Typography.cardTitle)
+                    Spacer()
+                    Button("Open History") {
+                        appState.navigate(to: .organize(.history))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 10)], spacing: 10) {
+                    summaryMetric("Copied", value: model.context.metrics.copiedCount.formatted(), tint: DesignTokens.ColorSystem.statusSuccess)
+                    summaryMetric("Planned", value: model.context.metrics.plannedCount.formatted(), tint: DesignTokens.ColorSystem.accentAction)
+                    summaryMetric("Skipped", value: model.context.metrics.alreadyInDestinationCount.formatted(), tint: DesignTokens.ColorSystem.inkSecondary)
+                    summaryMetric("Issues", value: "\(model.context.issueCount)", tint: model.issueTone.color)
+                }
+
+                Text(model.outcomeSummaryMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityIdentifier("runOutcomeSummaryCard")
+    }
+
+    private func summaryMetric(_ title: String, value: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.title3.monospacedDigit())
+                .foregroundStyle(tint)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

@@ -27,13 +27,10 @@ struct ClusterDetailPane: View {
                     detailContent(for: cluster)
                 }
                 .background {
-                    VStack {
-                        Button("Previous") { navigateMember(by: -1, in: cluster) }
-                            .keyboardShortcut(.leftArrow, modifiers: [])
-                        Button("Next") { navigateMember(by: 1, in: cluster) }
-                            .keyboardShortcut(.rightArrow, modifiers: [])
-                    }
-                    .opacity(0)
+                    DeduplicatePhotoKeyNavigationView(
+                        moveToPrevious: { navigateMember(by: -1, in: cluster) },
+                        moveToNext: { navigateMember(by: 1, in: cluster) }
+                    )
                 }
             } else {
                 VStack(spacing: 12) {
@@ -135,6 +132,7 @@ struct ClusterDetailPane: View {
 
     private func acceptSuggestionButton(for cluster: DuplicateCluster) -> some View {
         Button("Accept & Next") {
+            sessionStore.approveCluster(cluster.id)
             onAcceptAndAdvance?()
         }
         .fixedSize()
@@ -459,11 +457,11 @@ struct ClusterDetailPane: View {
     }
 
     private func navigateMember(by delta: Int, in cluster: DuplicateCluster) {
-        let members = cluster.members
-        guard !members.isEmpty else { return }
-        let currentIndex = members.firstIndex(where: { $0.path == focusedMemberPath }) ?? 0
-        let nextIndex = (currentIndex + delta + members.count) % members.count
-        focusedMemberPath = members[nextIndex].path
+        focusedMemberPath = DeduplicateMemberNavigation.focusedPath(
+            afterMoving: delta,
+            from: focusedMemberPath,
+            through: cluster.members
+        )
     }
 
     private func isSuggestedKeeper(_ member: PhotoCandidate, in cluster: DuplicateCluster) -> Bool {
@@ -501,6 +499,94 @@ struct ClusterDetailPane: View {
         formatter.allowedUnits = [.useKB, .useMB, .useGB]
         formatter.countStyle = .file
         return formatter
+    }
+}
+
+enum DeduplicateMemberNavigation {
+    static func focusedPath(
+        afterMoving delta: Int,
+        from focusedPath: String?,
+        through members: [PhotoCandidate]
+    ) -> String? {
+        guard !members.isEmpty else { return focusedPath }
+        let currentIndex = members.firstIndex(where: { $0.path == focusedPath }) ?? 0
+        let nextIndex = (currentIndex + delta + members.count) % members.count
+        return members[nextIndex].path
+    }
+}
+
+private struct DeduplicatePhotoKeyNavigationView: NSViewRepresentable {
+    let moveToPrevious: () -> Void
+    let moveToNext: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(moveToPrevious: moveToPrevious, moveToNext: moveToNext)
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.hostView = view
+        context.coordinator.installMonitor()
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.hostView = nsView
+        context.coordinator.moveToPrevious = moveToPrevious
+        context.coordinator.moveToNext = moveToNext
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.removeMonitor()
+    }
+
+    final class Coordinator {
+        weak var hostView: NSView?
+        var moveToPrevious: () -> Void
+        var moveToNext: () -> Void
+        private var monitor: Any?
+
+        init(moveToPrevious: @escaping () -> Void, moveToNext: @escaping () -> Void) {
+            self.moveToPrevious = moveToPrevious
+            self.moveToNext = moveToNext
+        }
+
+        deinit {
+            removeMonitor()
+        }
+
+        func installMonitor() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                self?.handle(event) ?? event
+            }
+        }
+
+        func removeMonitor() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        private func handle(_ event: NSEvent) -> NSEvent? {
+            guard hostView != nil else { return event }
+            let modifiers = event.modifierFlags
+                .intersection(.deviceIndependentFlagsMask)
+                .subtracting(.numericPad)
+            guard modifiers.isEmpty else { return event }
+
+            switch event.keyCode {
+            case 123:
+                moveToPrevious()
+                return nil
+            case 124:
+                moveToNext()
+                return nil
+            default:
+                return event
+            }
+        }
     }
 }
 

@@ -184,6 +184,15 @@ private struct ClusterRow: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.caption)
                         .foregroundStyle(DesignTokens.ColorSystem.statusSuccess)
+                        .help("Reviewed")
+                } else {
+                    Text("Suggested")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(DesignTokens.ColorSystem.statusWarning)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(DesignTokens.ColorSystem.statusWarning.opacity(0.12), in: Capsule())
+                        .help("Chronoframe has a suggestion, but this group has not been reviewed")
                 }
             }
             if let annotation = cluster.annotation {

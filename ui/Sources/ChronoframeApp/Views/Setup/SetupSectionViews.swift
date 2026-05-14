@@ -328,6 +328,8 @@ struct SetupReadinessSection: View {
                     }
                 }
 
+                SetupPreflightChecklist(model: model)
+
                 Text(model.readinessMessage)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -371,6 +373,74 @@ struct SetupReadinessSection: View {
         .accessibilityIdentifier("transferButton")
         .accessibilityLabel("Transfer")
         .accessibilityHint(model.canStartRun ? "Copies files from the source to the destination after confirmation" : "Choose both folders or a saved profile first")
+    }
+}
+
+private struct SetupPreflightChecklist: View {
+    let model: SetupScreenModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Preflight")
+                .font(.subheadline.weight(.semibold))
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 8)], spacing: 8) {
+                preflightItem(
+                    title: "Source access",
+                    value: model.context.sourcePath.isEmpty ? "Needed" : "Ready",
+                    isReady: !model.context.sourcePath.isEmpty,
+                    systemImage: "folder"
+                )
+                preflightItem(
+                    title: "Destination",
+                    value: model.context.destinationPath.isEmpty ? "Needed" : "Writable check during preview",
+                    isReady: !model.context.destinationPath.isEmpty,
+                    systemImage: "externaldrive"
+                )
+                preflightItem(
+                    title: "Originals",
+                    value: "Read-only",
+                    isReady: true,
+                    systemImage: "lock.shield"
+                )
+                preflightItem(
+                    title: "Recovery",
+                    value: "Receipt after transfer",
+                    isReady: true,
+                    systemImage: "arrow.uturn.backward.circle"
+                )
+                preflightItem(
+                    title: "Copy verification",
+                    value: model.context.verifyCopies ? "On" : "Off",
+                    isReady: model.context.verifyCopies,
+                    systemImage: model.context.verifyCopies ? "checkmark.shield" : "speedometer"
+                )
+            }
+        }
+        .accessibilityIdentifier("setupPreflightChecklist")
+    }
+
+    private func preflightItem(
+        title: String,
+        value: String,
+        isReady: Bool,
+        systemImage: String
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: systemImage)
+                .foregroundStyle(isReady ? DesignTokens.ColorSystem.statusSuccess : DesignTokens.ColorSystem.statusWarning)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                Text(value)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DesignTokens.ColorSystem.hairline.opacity(0.35), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 

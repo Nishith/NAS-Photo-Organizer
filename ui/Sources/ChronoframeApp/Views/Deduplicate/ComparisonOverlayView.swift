@@ -44,21 +44,52 @@ struct ComparisonOverlayView: View {
     }
 
     private var toolbar: some View {
-        HStack {
-            Picker("Mode", selection: $mode) {
-                ForEach(ComparisonMode.allCases, id: \.self) { m in
-                    Label(m.label, systemImage: m.icon).tag(m)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: DesignTokens.Spacing.md) {
+                imagePairLabel
+                Spacer()
+                modePicker
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.escape, modifiers: [])
+            }
+
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+                imagePairLabel
+                HStack {
+                    modePicker
+                    Spacer()
+                    Button("Done") { dismiss() }
+                        .keyboardShortcut(.escape, modifiers: [])
                 }
             }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 300)
-
-            Spacer()
-
-            Button("Done") { dismiss() }
-                .keyboardShortcut(.escape, modifiers: [])
         }
         .padding(DesignTokens.Spacing.md)
+    }
+
+    private var modePicker: some View {
+        Picker("Mode", selection: $mode) {
+            ForEach(ComparisonMode.allCases, id: \.self) { m in
+                Label(m.label, systemImage: m.icon).tag(m)
+            }
+        }
+        .pickerStyle(.segmented)
+        .frame(maxWidth: 300)
+    }
+
+    private var imagePairLabel: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.Spacing.sm) {
+            Label(URL(fileURLWithPath: leftPath).lastPathComponent, systemImage: "a.circle")
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Image(systemName: "arrow.left.arrow.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Label(URL(fileURLWithPath: rightPath).lastPathComponent, systemImage: "b.circle")
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 
     @ViewBuilder

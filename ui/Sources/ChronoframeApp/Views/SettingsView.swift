@@ -131,11 +131,86 @@ private struct GeneralSettingsTab: View {
     }
 }
 
+private enum SafetyPerformancePreset: String, CaseIterable, Identifiable {
+    case safest
+    case balanced
+    case fastRepeat
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .safest:
+            return "Safest"
+        case .balanced:
+            return "Balanced"
+        case .fastRepeat:
+            return "Fast Repeat Runs"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .safest:
+            return "Verification on, full destination scan, serial transfer."
+        case .balanced:
+            return "Verification on with cached destination scanning."
+        case .fastRepeat:
+            return "Cached scanning and parallel transfer for familiar destinations."
+        }
+    }
+
+    func apply(to preferencesStore: PreferencesStore) {
+        switch self {
+        case .safest:
+            preferencesStore.verifyCopies = true
+            preferencesStore.useFastDestinationScan = false
+            preferencesStore.parallelTransferEnabled = false
+            preferencesStore.workerCount = min(preferencesStore.workerCount, 8)
+        case .balanced:
+            preferencesStore.verifyCopies = true
+            preferencesStore.useFastDestinationScan = true
+            preferencesStore.parallelTransferEnabled = false
+            preferencesStore.workerCount = max(4, min(preferencesStore.workerCount, 12))
+        case .fastRepeat:
+            preferencesStore.verifyCopies = true
+            preferencesStore.useFastDestinationScan = true
+            preferencesStore.parallelTransferEnabled = true
+            preferencesStore.workerCount = max(preferencesStore.workerCount, 12)
+        }
+    }
+}
+
 private struct PerformanceSettingsTab: View {
     @ObservedObject var preferencesStore: PreferencesStore
 
     var body: some View {
         Form {
+            Section {
+                ForEach(SafetyPerformancePreset.allCases) { preset in
+                    Button {
+                        preset.apply(to: preferencesStore)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(preset.title)
+                                Text(preset.summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "checkmark.circle")
+                                .foregroundStyle(DesignTokens.ColorSystem.accentAction)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            } header: {
+                Text("Presets")
+            } footer: {
+                Text("Presets adjust the advanced controls below without weakening Chronoframe's source-folder safety guarantees.")
+            }
+
             Section {
                 Stepper(value: $preferencesStore.workerCount, in: 1...32) {
                     LabeledContent("Worker Threads") {

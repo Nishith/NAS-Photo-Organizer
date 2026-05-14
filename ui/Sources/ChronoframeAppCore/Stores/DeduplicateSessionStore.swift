@@ -95,11 +95,11 @@ public final class DeduplicateSessionStore: ObservableObject {
         currentDeletionPlan().count
     }
 
-    /// Clusters where every member has an explicit user decision.
+    /// Clusters the user explicitly approved or changed. Scan completion
+    /// pre-populates suggested decisions for preview/commit math, but those
+    /// suggestions are not the same as a human-reviewed group.
     public var reviewedClusters: [DuplicateCluster] {
-        clusters.filter { cluster in
-            cluster.members.allSatisfy { decisions.byPath[$0.path] != nil }
-        }
+        clusters.filter { approvedClusterIDs.contains($0.id) }
     }
 
     /// Deletion plan scoped to reviewed clusters only.
@@ -298,6 +298,15 @@ public final class DeduplicateSessionStore: ObservableObject {
         var byPath = decisions.byPath
         byPath[path] = decision
         decisions = DedupeDecisions(byPath: byPath)
+        if let cluster = clusters.first(where: { cluster in
+            cluster.members.contains { $0.path == path }
+        }) {
+            approvedClusterIDs.insert(cluster.id)
+        }
+    }
+
+    public func approveCluster(_ clusterID: DuplicateCluster.ID) {
+        approvedClusterIDs.insert(clusterID)
     }
 
     public func acceptSuggestionsForCluster(_ cluster: DuplicateCluster) {
@@ -333,6 +342,7 @@ public final class DeduplicateSessionStore: ObservableObject {
             byPath[path] = decision
         }
         decisions = DedupeDecisions(byPath: byPath)
+        approvedClusterIDs.formUnion(clusters.map(\.id))
     }
 
     // MARK: - Confidence Triage
@@ -356,6 +366,7 @@ public final class DeduplicateSessionStore: ObservableObject {
             byPath[path] = decision
         }
         decisions = DedupeDecisions(byPath: byPath)
+        approvedClusterIDs.formUnion(highClusters.map(\.id))
     }
 
     public func pauseReview() {
@@ -434,9 +445,11 @@ public final class DeduplicateSessionStore: ObservableObject {
             currentPhase = nil
             closeSecurityScope()
             // Pre-populate decisions with suggestions so the UI starts in
-            // an "everything reviewed" state — the user only intervenes
-            // for clusters they disagree with.
-            acceptAllSuggestions()
+            // a plan-preview state. The user still needs to approve a group
+            // before it counts as reviewed.
+            let suggested = suggestedDecisions(for: clusters)
+            decisions = DedupeDecisions(byPath: suggested.byPath)
+            approvedClusterIDs = []
         }
     }
 

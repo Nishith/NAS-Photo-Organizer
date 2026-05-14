@@ -490,6 +490,32 @@ struct RunWorkspaceModel {
         context.status == .dryRunFinished
     }
 
+    var showsOutcomeSummary: Bool {
+        switch context.status {
+        case .finished, .nothingToCopy, .reverted, .reorganized, .nothingToReorganize:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var outcomeSummaryMessage: String {
+        switch context.status {
+        case .finished:
+            return "Originals were left untouched. Reports and receipts are available in Run History for inspection or recovery."
+        case .nothingToCopy:
+            return "No new copies were needed for this configuration."
+        case .reverted:
+            return "The receipt was applied conservatively; files modified after the original copy were preserved."
+        case .reorganized:
+            return "Destination files were moved into the selected layout and a reorganize receipt was written."
+        case .nothingToReorganize:
+            return "The destination already matches the selected folder layout."
+        default:
+            return ""
+        }
+    }
+
     var previewReviewMessage: String {
         if context.previewReviewIsStale {
             return "Corrections were saved. Rebuild the preview before transfer so the copied files match the reviewed plan."

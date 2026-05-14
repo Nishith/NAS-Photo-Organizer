@@ -445,6 +445,8 @@ struct RunIssuesPanel: View {
                     systemImage: "checkmark.shield"
                 )
             } else {
+                issueActionGuide
+
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(model.issueEntries) { entry in
                         MeridianSurfaceCard(style: .inner, tint: entry.tone.color) {
@@ -465,6 +467,45 @@ struct RunIssuesPanel: View {
                 }
             }
         }
+    }
+
+    private var issueActionGuide: some View {
+        MeridianSurfaceCard(style: .inner, tint: model.issueTone.color) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Suggested fixes")
+                    .font(.subheadline.weight(.semibold))
+                ForEach(Self.suggestedFixes(for: model.issueEntries), id: \.self) { fix in
+                    Label(fix, systemImage: "wrench.and.screwdriver")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    static func suggestedFixes(for entries: [RunIssueLineModel]) -> [String] {
+        let text = entries.map(\.text).joined(separator: "\n").lowercased()
+        var fixes: [String] = []
+        if text.contains("permission") || text.contains("access") || text.contains("bookmark") {
+            fixes.append("Choose the source or destination folder again so macOS refreshes access.")
+        }
+        if text.contains("space") || text.contains("disk") || text.contains("volume") {
+            fixes.append("Free space on the destination volume, then rebuild the preview.")
+        }
+        if text.contains("hash") || text.contains("verify") {
+            fixes.append("Keep verification on and retry the run; Chronoframe removes bad copies when verification fails.")
+        }
+        if text.contains("date") || text.contains("unknown") {
+            fixes.append("Open the Review tab and correct unknown or low-confidence dates before transfer.")
+        }
+        if text.contains("exist") || text.contains("collision") || text.contains("duplicate") {
+            fixes.append("Inspect skipped and duplicate items in Preview Review before starting transfer.")
+        }
+        if fixes.isEmpty {
+            fixes.append("Open the related file or folder from the artifact panel, then run Preview again after fixing the cause.")
+        }
+        fixes.append("Original source files are left untouched while you resolve these issues.")
+        return fixes
     }
 }
 

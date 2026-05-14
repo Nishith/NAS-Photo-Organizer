@@ -146,17 +146,12 @@ private struct PreviewReviewRow: View {
                         .font(.caption)
                         .foregroundStyle(tint)
 
-                        if let plannedDestinationPath = item.plannedDestinationPath {
-                            Text(plannedDestinationPath)
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                                .truncationMode(.middle)
-                        }
                     }
 
                     Spacer(minLength: 12)
                 }
+
+                visualPlan
 
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .center, spacing: 10) {
@@ -169,6 +164,69 @@ private struct PreviewReviewRow: View {
                 }
             }
         }
+    }
+
+    private var visualPlan: some View {
+        HStack(alignment: .top, spacing: 10) {
+            planEndpoint(title: "Source", path: item.sourcePath, systemImage: "folder")
+            Image(systemName: "arrow.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.top, 18)
+            planEndpoint(
+                title: destinationTitle,
+                path: item.plannedDestinationPath ?? destinationFallback,
+                systemImage: item.status == .alreadyInDestination ? "tray.full" : "folder.badge.plus"
+            )
+        }
+        .padding(8)
+        .background(DesignTokens.ColorSystem.hairline.opacity(0.35), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Preview plan from \(item.sourcePath) to \(item.plannedDestinationPath ?? destinationFallback)")
+    }
+
+    private var destinationTitle: String {
+        switch item.status {
+        case .ready:
+            return "Will Copy To"
+        case .alreadyInDestination:
+            return "Already Exists"
+        case .duplicate:
+            return "Duplicate Route"
+        case .hashError:
+            return "Needs Attention"
+        }
+    }
+
+    private var destinationFallback: String {
+        switch item.status {
+        case .alreadyInDestination:
+            return "Destination already contains a matching file"
+        case .duplicate:
+            return "Duplicate handling will route this away from the main archive"
+        case .hashError:
+            return "Chronoframe needs a readable file before it can plan this item"
+        case .ready:
+            return "Destination path will appear after preview rebuild"
+        }
+    }
+
+    private func planEndpoint(title: String, path: String, systemImage: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(path)
+                    .font(.caption.monospaced())
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

@@ -377,6 +377,8 @@ struct DeduplicateView: View {
 
     @ViewBuilder
     private func commitFooterStatus(toDelete: Int, bytes: Int64, hardDelete: Bool) -> some View {
+        let reviewedCount = sessionStore.reviewedClusters.count
+        let suggestedCount = max(0, sessionStore.clusters.count - reviewedCount)
         VStack(alignment: .leading, spacing: 2) {
             Text(Self.commitFooterTitle(fileCount: toDelete, hardDelete: hardDelete))
                 .font(.subheadline.weight(.semibold))
@@ -385,6 +387,10 @@ struct DeduplicateView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+            Text("\(reviewedCount) group\(reviewedCount == 1 ? "" : "s") reviewed · \(suggestedCount) still suggested")
+                .font(.caption2)
+                .foregroundStyle(suggestedCount > 0 ? DesignTokens.ColorSystem.statusWarning : DesignTokens.ColorSystem.statusSuccess)
+                .lineLimit(1)
         }
     }
 
@@ -676,7 +682,7 @@ extension DeduplicateView {
         }
 
         return DeduplicateStatusCopy(
-            message: "Removed \(summary.deletedCount) file\(summary.deletedCount == 1 ? "" : "s") · reclaimed \(statusByteCountFormatter.string(fromByteCount: summary.bytesReclaimed))",
+            message: "Moved \(summary.deletedCount) file\(summary.deletedCount == 1 ? "" : "s") to Trash · \(statusByteCountFormatter.string(fromByteCount: summary.bytesReclaimed)) recoverable",
             warning: summary.failedCount > 0
                 ? "\(summary.failedCount) item\(summary.failedCount == 1 ? "" : "s") failed — see Run History for details."
                 : nil
