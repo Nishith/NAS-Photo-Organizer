@@ -85,7 +85,7 @@ enum UITestAppStateFactory {
         let runSessionStore = RunSessionStore(engine: engine, logStore: runLogStore, historyStore: historyStore)
         let appStateBox = AppStateBox()
         let showSettingsWindowAction: @MainActor () -> Void = {
-            if scenario == .settingsSections {
+            if scenario.opensSettingsOnLaunch {
                 guard let appState = appStateBox.value else { return }
                 UITestSettingsWindowPresenter.show(appState: appState)
             } else {
