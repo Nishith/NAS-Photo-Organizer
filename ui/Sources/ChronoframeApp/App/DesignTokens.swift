@@ -19,7 +19,7 @@ enum DesignTokens {
 
     enum Layout {
         static let contentMaxWidth: CGFloat = 1_160
-        static let setupMaxWidth: CGFloat = 1_120
+        static let setupMaxWidth: CGFloat = 1_180
         static let archiveMaxWidth: CGFloat = 1_120
         static let contentPadding: CGFloat = 28
         static let heroPadding: CGFloat = 24
@@ -69,8 +69,8 @@ enum DesignTokens {
 
     enum Corner {
         static let hero: CGFloat = 20
-        static let card: CGFloat = 14
-        static let innerCard: CGFloat = 10
+        static let card: CGFloat = 10
+        static let innerCard: CGFloat = 8
         static let badge: CGFloat = 999
     }
 
@@ -107,6 +107,18 @@ enum DesignTokens {
         static let elevated = dynamicColor(
             light: NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.92),
             dark: NSColor(srgbRed: 32.0 / 255, green: 34.0 / 255, blue: 40.0 / 255, alpha: 0.96)
+        )
+
+        /// Neutral image stage behind previews and contact sheets.
+        static let imageStage = dynamicColor(
+            light: NSColor(srgbRed: 31.0 / 255, green: 33.0 / 255, blue: 38.0 / 255, alpha: 1),
+            dark: NSColor(srgbRed: 8.0 / 255, green: 9.0 / 255, blue: 11.0 / 255, alpha: 1)
+        )
+
+        /// Subtle utility band for command/status strips.
+        static let utilityBand = dynamicColor(
+            light: NSColor(srgbRed: 238.0 / 255, green: 237.0 / 255, blue: 234.0 / 255, alpha: 0.78),
+            dark: NSColor(srgbRed: 24.0 / 255, green: 25.0 / 255, blue: 29.0 / 255, alpha: 0.82)
         )
 
         // Ink (text)

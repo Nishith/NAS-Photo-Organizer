@@ -56,13 +56,13 @@ struct SetupContactSheetSection: View {
     let sourcePath: String
 
     var body: some View {
-        MeridianSurfaceCard {
+        MeridianSurfaceCard(style: .section) {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
                 SectionHeading(
-                    title: "Preview",
+                    title: "Source Contact Sheet",
                     message: sourcePath.isEmpty
                         ? "A contact sheet of the first frames will appear here once you choose a source."
-                        : "The first twelve frames discovered in your source, in Finder order."
+                        : "A quick visual read of the frames Chronoframe will organize."
                 )
 
                 ContactSheetView(sourcePath: sourcePath)
@@ -80,7 +80,7 @@ struct SetupSavedSetupSection: View {
     let onProfileSelection: (String) -> Void
 
     var body: some View {
-        MeridianSurfaceCard {
+        MeridianSurfaceCard(style: .section) {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
                 HStack(alignment: .top, spacing: 12) {
                     SectionHeading(
@@ -233,7 +233,7 @@ struct SetupSourceStepSection: View {
         stepState: SetupStepState,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        MeridianSurfaceCard {
+        MeridianSurfaceCard(style: .section) {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
                 HStack(alignment: .top, spacing: 12) {
                     SectionHeading(title: stepTitle, message: message)
@@ -252,7 +252,7 @@ struct SetupDestinationStepSection: View {
     let chooseDestination: () -> Void
 
     var body: some View {
-        MeridianSurfaceCard {
+        MeridianSurfaceCard(style: .section) {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
                 HStack(alignment: .top, spacing: 12) {
                     SectionHeading(
@@ -303,7 +303,7 @@ struct SetupReadinessSection: View {
     let isRunInProgress: Bool
 
     var body: some View {
-        MeridianSurfaceCard {
+        MeridianSurfaceCard(style: .section) {
             VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
                 HStack(alignment: .top, spacing: 12) {
                     SectionHeading(

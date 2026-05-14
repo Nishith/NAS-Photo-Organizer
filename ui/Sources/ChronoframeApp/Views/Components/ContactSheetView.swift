@@ -16,8 +16,8 @@ import UniformTypeIdentifiers
 /// - No filesystem work happens if ``sourcePath`` is empty.
 struct ContactSheetView: View {
     let sourcePath: String
-    var cellCount: Int = 12
-    var cellSize: CGFloat = 80
+    var cellCount: Int = 18
+    var cellSize: CGFloat = 92
 
     @StateObject private var loader = ContactSheetLoader()
 
@@ -27,16 +27,69 @@ struct ContactSheetView: View {
         // wraps the rest, so the contact sheet never extends past the panel.
         let columns = [GridItem(.adaptive(minimum: cellSize, maximum: cellSize), spacing: 8)]
 
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-            ForEach(0..<cellCount, id: \.self) { index in
-                cell(at: index)
+        VStack(alignment: .leading, spacing: 10) {
+            if !sourcePath.isEmpty {
+                heroCell
             }
+
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                ForEach(gridRange, id: \.self) { index in
+                    cell(at: index)
+                }
+            }
+        }
+        .padding(10)
+        .background(DesignTokens.ColorSystem.imageStage, in: RoundedRectangle(cornerRadius: DesignTokens.Corner.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: DesignTokens.Corner.card, style: .continuous)
+                .strokeBorder(DesignTokens.ColorSystem.hairline, lineWidth: 0.5)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: sourcePath) {
             await loader.load(sourcePath: sourcePath, count: cellCount, cellSize: cellSize)
         }
         .accessibilityLabel(accessibilityLabelText)
+    }
+
+    private var gridRange: Range<Int> {
+        let lowerBound = sourcePath.isEmpty ? 0 : min(1, cellCount)
+        return lowerBound..<cellCount
+    }
+
+    @ViewBuilder
+    private var heroCell: some View {
+        let thumb = loader.thumbnails[safe: 0] ?? nil
+
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color.black.opacity(0.24))
+            .overlay {
+                if let thumb {
+                    Image(nsImage: thumb)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 168)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .transition(.opacity)
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                Text(URL(fileURLWithPath: sourcePath).lastPathComponent)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(.black.opacity(0.42), in: Capsule())
+                    .padding(10)
+            }
+            .frame(maxWidth: .infinity, minHeight: 168, maxHeight: 168)
+            .clipped()
+            .motion(Motion.reveal, value: thumb != nil)
     }
 
     @ViewBuilder
@@ -61,7 +114,7 @@ struct ContactSheetThumbnailCell: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill(DesignTokens.ColorSystem.hairline.opacity(thumbnail == nil ? 0.5 : 0))
+            .fill(thumbnail == nil ? Color.white.opacity(0.06) : Color.clear)
             .overlay {
                 if let thumbnail {
                     Image(nsImage: thumbnail)
@@ -74,7 +127,7 @@ struct ContactSheetThumbnailCell: View {
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(DesignTokens.ColorSystem.hairline, lineWidth: 0.5)
+                    .strokeBorder(Color.white.opacity(thumbnail == nil ? 0.08 : 0.18), lineWidth: 0.5)
             }
             .frame(width: cellSize, height: cellSize)
             .clipped()

@@ -23,31 +23,30 @@ struct OrganizeContainerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            OrganizeNextActionBanner(
-                sourcePath: setupStore.sourcePath,
-                destinationPath: setupStore.destinationPath,
-                runStatus: runSessionStore.status,
-                previewIsStale: previewReviewStore.isStale,
-                deduplicateStatus: deduplicateSessionStore.status,
-                navigate: appState.navigate(to:),
-                startPreview: { Task { await appState.startPreview() } }
-            )
-            .padding(.horizontal, DesignTokens.Layout.contentPadding)
-            .padding(.top, DesignTokens.Spacing.md)
+            HStack(alignment: .center, spacing: DesignTokens.Spacing.md) {
+                OrganizeNextActionBanner(
+                    sourcePath: setupStore.sourcePath,
+                    destinationPath: setupStore.destinationPath,
+                    runStatus: runSessionStore.status,
+                    previewIsStale: previewReviewStore.isStale,
+                    deduplicateStatus: deduplicateSessionStore.status,
+                    navigate: appState.navigate(to:),
+                    startPreview: { Task { await appState.startPreview() } }
+                )
+                .layoutPriority(1)
 
-            Picker("Section", selection: $appState.organizeSubSelection) {
-                ForEach(OrganizeSubSection.allCases) { sub in
-                    // `.segmented` style ignores Label icons on macOS,
-                    // so drop the `systemImage` to match what users
-                    // actually see and avoid misleading code readers.
-                    Text(sub.title).tag(sub)
+                Picker("Section", selection: $appState.organizeSubSelection) {
+                    ForEach(OrganizeSubSection.allCases) { sub in
+                        Text(sub.title).tag(sub)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 360)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .padding(.horizontal, DesignTokens.Layout.contentPadding)
-            .padding(.top, DesignTokens.Spacing.sm)
-            .padding(.bottom, DesignTokens.Spacing.sm)
+            .padding(.vertical, DesignTokens.Spacing.sm)
+            .background(.bar)
 
             Divider()
 
@@ -81,19 +80,24 @@ private struct OrganizeNextActionBanner: View {
     let startPreview: () -> Void
 
     var body: some View {
-        MeridianSurfaceCard(style: .inner, tint: action.tint) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: 12) {
-                    label
-                    Spacer(minLength: 12)
-                    actionButton
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    label
-                    actionButton
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 12) {
+                label
+                Spacer(minLength: 12)
+                actionButton
             }
+
+            VStack(alignment: .leading, spacing: 10) {
+                label
+                actionButton
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(DesignTokens.ColorSystem.utilityBand, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(action.tint.opacity(0.16), lineWidth: 0.5)
         }
         .accessibilityIdentifier("organizeNextActionBanner")
     }
@@ -132,6 +136,7 @@ private struct OrganizeNextActionBanner: View {
         .buttonStyle(.borderedProminent)
         .controlSize(.small)
         .fixedSize()
+        .tint(action.tint)
     }
 
     private var action: NextAction {
