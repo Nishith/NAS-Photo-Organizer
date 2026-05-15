@@ -611,7 +611,6 @@ def main():
     if args.skip_verify:
         console.print("[yellow]WARNING: Copy verification disabled (--skip-verify).[/yellow]")
         console.print("[yellow]         Files may be corrupted if source is modified during transfer.[/yellow]")
-        run_log.warn("Copy verification disabled; source files must not be modified during transfer")
 
     os.makedirs(dst, exist_ok=True)
 
@@ -633,6 +632,8 @@ def main():
 
     try:
         run_log.log(f"=== Run started: src={src} dst={dst} dry_run={args.dry_run} workers={workers} ===")
+        if args.skip_verify:
+            run_log.warn("Copy verification disabled; source files must not be modified during transfer")
 
         # Clean up any orphaned .tmp files from previous interrupted copies
         tmp_cleaned = cleanup_tmp_files(dst)
