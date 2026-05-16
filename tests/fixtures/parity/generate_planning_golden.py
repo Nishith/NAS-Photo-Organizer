@@ -186,8 +186,6 @@ def run_scenario(manifest_path: Path) -> dict[str, Any]:
             "--workers",
             "1",
         ]
-        if manifest.get("fast_dest", False):
-            command.append("--fast-dest")
         if manifest.get("folder_structure"):
             command.extend(["--folder-structure", manifest["folder_structure"]])
 

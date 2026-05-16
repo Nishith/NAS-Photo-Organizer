@@ -23,7 +23,6 @@ final class PreferencesStoreTests: XCTestCase {
     func testPersistsScalarPreferencesAcrossReinit() {
         let store = PreferencesStore(defaults: defaults)
         store.workerCount = 12
-        store.useFastDestinationScan = true
         store.verifyCopies = true
         store.parallelTransferEnabled = true
         store.lastManualSourcePath = "/tmp/source"
@@ -34,7 +33,6 @@ final class PreferencesStoreTests: XCTestCase {
         let reloaded = PreferencesStore(defaults: defaults)
 
         XCTAssertEqual(reloaded.workerCount, 12)
-        XCTAssertTrue(reloaded.useFastDestinationScan)
         XCTAssertTrue(reloaded.verifyCopies)
         XCTAssertTrue(reloaded.parallelTransferEnabled)
         XCTAssertEqual(reloaded.lastManualSourcePath, "/tmp/source")

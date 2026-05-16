@@ -27,7 +27,6 @@ METRIC_SPECS = {
     "hashing.files_per_second": {"unit": "files/s", "higher_is_better": True},
     "classification.files_per_second": {"unit": "files/s", "higher_is_better": True},
     "destination_indexing.cold_entries_per_second": {"unit": "entries/s", "higher_is_better": True},
-    "destination_indexing.fast_dest_entries_per_second": {"unit": "entries/s", "higher_is_better": True},
     "preview.files_per_second": {"unit": "files/s", "higher_is_better": True},
 }
 
@@ -99,20 +98,14 @@ def benchmark_destination_indexing(dest_root, workers, file_count):
     cache_db = CacheDB(db_path)
     try:
         start = time.perf_counter()
-        build_dest_index(dest_root, cache_db, workers=workers, fast_dest=False)
+        build_dest_index(dest_root, cache_db, workers=workers)
         cold_elapsed = time.perf_counter() - start
-
-        start = time.perf_counter()
-        build_dest_index(dest_root, cache_db, workers=workers, fast_dest=True)
-        fast_elapsed = time.perf_counter() - start
     finally:
         cache_db.close()
 
     return {
         "cold_seconds": cold_elapsed,
         "cold_entries_per_second": 0 if cold_elapsed == 0 else file_count / cold_elapsed,
-        "fast_dest_seconds": fast_elapsed,
-        "fast_dest_entries_per_second": 0 if fast_elapsed == 0 else file_count / fast_elapsed,
     }
 
 
@@ -125,7 +118,6 @@ def benchmark_preview(repo_root, source_root, dest_root, workers, source_count):
         "--dest",
         dest_root,
         "--dry-run",
-        "--fast-dest",
         "--workers",
         str(workers),
         "--yes",

@@ -280,7 +280,6 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
     public var sourcePath: String
     public var destinationPath: String
     public var profileName: String?
-    public var useFastDestinationScan: Bool
     public var verifyCopies: Bool
     public var parallelTransferEnabled: Bool
     public var workerCount: Int
@@ -292,7 +291,6 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
         sourcePath: String = "",
         destinationPath: String = "",
         profileName: String? = nil,
-        useFastDestinationScan: Bool = false,
         verifyCopies: Bool = true,
         parallelTransferEnabled: Bool = false,
         workerCount: Int = 8,
@@ -303,7 +301,6 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
         self.sourcePath = sourcePath
         self.destinationPath = destinationPath
         self.profileName = profileName
-        self.useFastDestinationScan = useFastDestinationScan
         self.verifyCopies = verifyCopies
         self.parallelTransferEnabled = parallelTransferEnabled
         self.workerCount = workerCount
@@ -312,7 +309,7 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case mode, sourcePath, destinationPath, profileName, useFastDestinationScan, verifyCopies, parallelTransferEnabled, workerCount, folderStructure, eventSuggestionMode
+        case mode, sourcePath, destinationPath, profileName, verifyCopies, parallelTransferEnabled, workerCount, folderStructure, eventSuggestionMode
     }
 
     public init(from decoder: Decoder) throws {
@@ -321,7 +318,6 @@ public struct RunConfiguration: Equatable, Codable, Sendable {
         self.sourcePath = try container.decodeIfPresent(String.self, forKey: .sourcePath) ?? ""
         self.destinationPath = try container.decodeIfPresent(String.self, forKey: .destinationPath) ?? ""
         self.profileName = try container.decodeIfPresent(String.self, forKey: .profileName)
-        self.useFastDestinationScan = try container.decodeIfPresent(Bool.self, forKey: .useFastDestinationScan) ?? false
         self.verifyCopies = try container.decodeIfPresent(Bool.self, forKey: .verifyCopies) ?? true
         self.parallelTransferEnabled = try container.decodeIfPresent(Bool.self, forKey: .parallelTransferEnabled) ?? false
         self.workerCount = try container.decodeIfPresent(Int.self, forKey: .workerCount) ?? 8

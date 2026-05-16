@@ -108,7 +108,6 @@ class TestCoreExtra(unittest.TestCase):
             args.yes = True
             args.json = True
             args.workers = 1
-            args.fast_dest = False
             args.skip_verify = False
             
             # Since we want to test the loop in core.py, we might need a more integrative test or a direct call to the planning logic.
@@ -125,38 +124,6 @@ class TestCoreExtra(unittest.TestCase):
                         mock_progress.return_value.__enter__.return_value = MagicMock()
                         ret = cf_main()
                 self.assertTrue(ret is None or ret == 0)
-
-    def test_build_dest_index_fast_dest_invalidation(self):
-        dst_dir = os.path.join(self.tmpdir, "dest")
-        os.makedirs(dst_dir)
-        db_path = os.path.join(dst_dir, ".organize_cache.db")
-        db = CacheDB(db_path)
-
-        file_path = os.path.join(dst_dir, "test.jpg")
-        with open(file_path, "wb") as f:
-            f.write(b"data")
-
-        # Seed cache with correct data
-        st = os.stat(file_path)
-        db.save_batch(2, [(file_path, "hash1", st.st_size, st.st_mtime)])
-
-        # Modify file to trigger invalidation
-        with open(file_path, "wb") as f:
-            f.write(b"modified data")
-
-        # Run with fast_dest
-        hi, seq, _ = build_dest_index(dst_dir, db, fast_dest=True)
-
-        # Hash should be updated
-        self.assertIn(file_path, db.get_cache_dict(2))
-        self.assertNotEqual(db.get_cache_dict(2)[file_path]["hash"], "hash1")
-
-        # Test file removal
-        os.remove(file_path)
-        hi, seq, _ = build_dest_index(dst_dir, db, fast_dest=True)
-        self.assertNotIn(file_path, db.get_cache_dict(2))
-
-        db.close()
 
     def test_run_logger_remove_failure(self):
         """Test RunLogger gracefully handles os.remove failure during rotation."""
@@ -196,7 +163,7 @@ class TestCoreExtra(unittest.TestCase):
         self.assertTrue(os.path.exists(log_path))
 
     def test_build_dest_index_symlink_handling(self):
-        """Test fast_dest path handles symlinks correctly."""
+        """Symlinks in the destination directory must not be indexed."""
         dst_dir = os.path.join(self.tmpdir, "dest")
         os.makedirs(dst_dir)
         db_path = os.path.join(dst_dir, ".organize_cache.db")
@@ -210,22 +177,24 @@ class TestCoreExtra(unittest.TestCase):
         link_path = os.path.join(dst_dir, "link.jpg")
         os.symlink(real_file, link_path)
 
-        # Run with fast_dest - symlinks should be skipped
-        hi, seq, _ = build_dest_index(dst_dir, db, fast_dest=True)
+        # Normal scan — symlinks should be skipped by the walker
+        hi, seq, _ = build_dest_index(dst_dir, db)
 
-        # Symlink should not be in hash_index
+        # Symlink must not appear in the hash index
         self.assertNotIn(link_path, hi)
+        # Real file is indexed by content hash, not path
+        self.assertEqual(len(hi), 1)
 
         db.close()
 
     def test_build_dest_index_directory_handling(self):
-        """Test fast_dest path handles directories correctly."""
+        """Directory paths must not appear in the destination hash index."""
         dst_dir = os.path.join(self.tmpdir, "dest")
         os.makedirs(dst_dir)
         db_path = os.path.join(dst_dir, ".organize_cache.db")
         db = CacheDB(db_path)
 
-        # Create a regular file and a directory
+        # Create a regular file and a nested directory
         real_file = os.path.join(dst_dir, "file.jpg")
         with open(real_file, "wb") as f:
             f.write(b"data")
@@ -233,11 +202,11 @@ class TestCoreExtra(unittest.TestCase):
         subdir = os.path.join(dst_dir, "subdir")
         os.makedirs(subdir)
 
-        # Run with fast_dest
-        hi, seq, _ = build_dest_index(dst_dir, db, fast_dest=True)
+        # Normal scan — directories are never submitted to the hasher
+        hi, seq, _ = build_dest_index(dst_dir, db)
 
-        # Directory should not be in hash_index
-        self.assertNotIn(subdir, hi)
+        # Directory path must not be a value in the hash index
+        self.assertNotIn(subdir, hi.values())
 
         db.close()
 

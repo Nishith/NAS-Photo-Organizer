@@ -19,15 +19,15 @@ jobs:
     name: Whitespace check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - run: git diff --check
 
   python-tests:
     name: Python tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.13"
           cache: "pip"
@@ -42,11 +42,11 @@ jobs:
       - name: Run Python test suite with coverage
         run: |
           coverage run -m unittest discover -s tests -t . -v
-          coverage report --fail-under=90
+          coverage report --fail-under=95
           coverage xml
       - name: Upload Python coverage report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: python-coverage
           path: coverage.xml
@@ -57,7 +57,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Run SwiftPM tests
         run: |
           mkdir -p .tmp/home/Library/Caches .tmp/modulecache
@@ -72,7 +72,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Run meaningful coverage gate
         run: script/swift_meaningful_coverage.sh
 
@@ -81,7 +81,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Build Chronoframe app
         run: |
           xcodebuild \
@@ -98,7 +98,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Run Chronoframe UI tests
         run: |
           xcodebuild \
@@ -115,7 +115,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Build release archive
         run: |
           cd ui

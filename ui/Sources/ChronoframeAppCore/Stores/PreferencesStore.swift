@@ -14,10 +14,6 @@ public final class PreferencesStore: ObservableObject {
         didSet { persist(workerCount, key: "workerCount") }
     }
 
-    @Published public var useFastDestinationScan: Bool {
-        didSet { persist(useFastDestinationScan, key: "useFastDestinationScan") }
-    }
-
     @Published public var verifyCopies: Bool {
         didSet { persist(verifyCopies, key: "verifyCopies") }
     }
@@ -98,9 +94,8 @@ public final class PreferencesStore: ObservableObject {
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.workerCount = defaults.object(forKey: "workerCount") as? Int ?? 8
-        self.useFastDestinationScan = defaults.object(forKey: "useFastDestinationScan") as? Bool ?? false
         self.verifyCopies = defaults.object(forKey: "verifyCopies") as? Bool ?? true
-        self.parallelTransferEnabled = defaults.object(forKey: "parallelTransferEnabled") as? Bool ?? false
+        self.parallelTransferEnabled = defaults.object(forKey: "parallelTransferEnabled") as? Bool ?? true
         self.logBufferCapacity = defaults.object(forKey: "logBufferCapacity") as? Int ?? 2_000
         self.lastManualSourcePath = defaults.string(forKey: "lastManualSourcePath") ?? ""
         self.lastManualDestinationPath = defaults.string(forKey: "lastManualDestinationPath") ?? ""

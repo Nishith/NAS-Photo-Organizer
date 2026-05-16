@@ -22,7 +22,6 @@ final class ChronoframeCoreDryRunPlannerParityTests: XCTestCase {
 
     func testPlanningFixturesMatchPythonGoldenOutputs() throws {
         for scenario in [
-            "planning_fast_dest_cache_reuse",
             "planning_mixed_inputs",
             "planning_sequence_overflow",
             "planning_sequence_reuse",
@@ -408,7 +407,6 @@ final class ChronoframeCoreDryRunPlannerParityTests: XCTestCase {
         let result = try DryRunPlanner().plan(
             sourceRoot: sourceRoot,
             destinationRoot: destinationRoot,
-            fastDestination: manifest.fastDest ?? false,
             folderStructure: folderStructure
         )
 
@@ -572,13 +570,11 @@ final class ChronoframeCoreDryRunPlannerParityTests: XCTestCase {
 }
 
 private struct Manifest: Decodable {
-    var fastDest: Bool?
     var files: [ManifestFile]
     var seedDestinationCache: [SeedDestinationCacheRow]?
     var folderStructure: String?
 
     private enum CodingKeys: String, CodingKey {
-        case fastDest = "fast_dest"
         case files
         case seedDestinationCache = "seed_destination_cache"
         case folderStructure = "folder_structure"

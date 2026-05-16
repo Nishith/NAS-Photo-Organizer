@@ -379,13 +379,7 @@ public final class PythonOrganizerEngine: OrganizerEngine {
             arguments.append("--dry-run")
         }
 
-        if configuration.useFastDestinationScan {
-            arguments.append("--fast-dest")
-        }
-
-        if configuration.verifyCopies {
-            arguments.append("--verify")
-        } else {
+        if !configuration.verifyCopies {
             arguments.append("--skip-verify")
         }
 

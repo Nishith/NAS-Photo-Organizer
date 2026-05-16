@@ -50,7 +50,6 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
             RunConfiguration(
                 mode: .preview,
                 profileName: "camera",
-                useFastDestinationScan: true,
                 folderStructure: .yyyyMonEvent
             )
         )
@@ -86,7 +85,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
                 mode: .preview,
                 sourcePath: sourceURL.path,
                 destinationPath: destinationURL.path,
-                useFastDestinationScan: false
+
             )
         )
         let events = try await Self.collect(stream)
@@ -167,7 +166,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
                 mode: .preview,
                 sourcePath: sourceURL.path,
                 destinationPath: destinationURL.path,
-                useFastDestinationScan: false
+
             )
         )
         let events = try await Self.collect(stream)
@@ -221,7 +220,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
                 mode: .transfer,
                 sourcePath: sourceURL.path,
                 destinationPath: destinationURL.path,
-                useFastDestinationScan: false
+
             )
         )
         let events = try await Self.collect(stream)
@@ -319,7 +318,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
                 mode: .transfer,
                 sourcePath: sourceURL.path,
                 destinationPath: destinationURL.path,
-                useFastDestinationScan: false
+
             )
         )
         let events = try await Self.collect(stream)

@@ -82,7 +82,6 @@ public final class SetupStore: ObservableObject {
             sourcePath: sourcePath.trimmingCharacters(in: .whitespacesAndNewlines),
             destinationPath: destinationPath.trimmingCharacters(in: .whitespacesAndNewlines),
             profileName: usingProfile ? selectedProfileName : nil,
-            useFastDestinationScan: preferences.useFastDestinationScan,
             verifyCopies: preferences.verifyCopies,
             parallelTransferEnabled: preferences.parallelTransferEnabled,
             workerCount: max(1, preferences.workerCount),

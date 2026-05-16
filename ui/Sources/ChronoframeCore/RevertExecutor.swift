@@ -230,6 +230,27 @@ public struct RevertExecutor: Sendable {
             do {
                 let currentIdentity = try hasher.hashIdentity(at: destinationURL)
                 if currentIdentity.rawValue == transfer.hash {
+                    // Second containment check: close the TOCTOU window between
+                    // the first boundary check and removeItem. A symlink swap in
+                    // that interval could redirect the delete outside the boundary.
+                    if let boundaryPath {
+                        let recheckPath = SafePathContainment.resolvedPath(
+                            for: destinationURL, treatAsDirectory: false
+                        )
+                        let isStillInside = recheckPath == boundaryPath
+                            || recheckPath.hasPrefix(boundaryPath + "/")
+                        if !isStillInside {
+                            skippedCount += 1
+                            observer.onIssue(
+                                RunIssue(
+                                    severity: .warning,
+                                    message: "Refusing to revert path outside destination (post-hash re-check): \(destinationPath)"
+                                )
+                            )
+                            observer.onTaskProgress(revertedCount + skippedCount, transfers.count)
+                            continue
+                        }
+                    }
                     do {
                         try fileManager.removeItem(at: destinationURL)
                         revertedCount += 1

@@ -373,7 +373,6 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                     let result = try planner.plan(
                         sourceRoot: URL(fileURLWithPath: configuration.sourcePath, isDirectory: true),
                         destinationRoot: URL(fileURLWithPath: configuration.destinationPath, isDirectory: true),
-                        fastDestination: configuration.useFastDestinationScan,
                         workerCount: max(1, configuration.workerCount),
                         folderStructure: configuration.folderStructure,
                         eventSuggestionMode: configuration.eventSuggestionMode,
@@ -534,7 +533,6 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
         let result = try planner.plan(
             sourceRoot: URL(fileURLWithPath: configuration.sourcePath, isDirectory: true),
             destinationRoot: destinationURL,
-            fastDestination: configuration.useFastDestinationScan,
             workerCount: max(1, configuration.workerCount),
             folderStructure: configuration.folderStructure,
             eventSuggestionMode: configuration.eventSuggestionMode,

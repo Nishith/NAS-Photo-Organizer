@@ -103,20 +103,30 @@ final class DryRunPlannerExtraTests: XCTestCase {
         XCTAssertNotNil(result.previewReviewItems.first?.eventSuggestion)
     }
     
-    func testDryRunPlannerInvalidatesStaleDestinationRecord() async throws {
+    func testDryRunPlannerIgnoresStaleDestinationRecord() async throws {
+        // A stale database record for a file that no longer exists on disk
+        // must not cause the planner to treat a new source file as already
+        // in destination. The full-scan path discovers only files present on
+        // disk, so the stale record is effectively invisible to the snapshot.
         let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("DryRunPlannerInvalidate-\(UUID().uuidString)")
+            .appendingPathComponent("DryRunPlannerIgnoreStale-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-        
+
         let sourceDir = temporaryDirectory.appendingPathComponent("source")
         let destDir = temporaryDirectory.appendingPathComponent("dest")
         try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
-        
+
+        // Seed a source file whose hash will match the stale destination record.
+        let sourceFile = sourceDir.appendingPathComponent("sub/IMG_20260101_120000.jpg")
+        try FileManager.default.createDirectory(at: sourceFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("stale-test".utf8).write(to: sourceFile)
+
         let dbURL = destDir.appendingPathComponent(".organize_cache.db")
         let database = try OrganizerDatabase(url: dbURL)
 
+        // Stale record: path doesn't exist on disk, hash matches source file hash.
         let fakePath = destDir.appendingPathComponent("missing.jpg").path
         let fakeRecord = RawFileCacheRecord(
             namespace: .destination,
@@ -129,15 +139,12 @@ final class DryRunPlannerExtraTests: XCTestCase {
         database.close()
 
         let planner = DryRunPlanner()
-        _ = try planner.plan(sourceRoot: sourceDir, destinationRoot: destDir, fastDestination: true)
+        let result = try planner.plan(sourceRoot: sourceDir, destinationRoot: destDir)
 
-        let dbAfter = try OrganizerDatabase(url: dbURL)
-        defer { dbAfter.close() }
-        var records = [RawFileCacheRecord]()
-        try dbAfter.enumerateRawCacheRecordBatches(namespace: CacheNamespace.destination) { batch in
-            records.append(contentsOf: batch)
-        }
-        XCTAssertTrue(records.isEmpty)
+        // The source file must appear in the copy plan — the stale record
+        // must not suppress it as already-in-destination.
+        XCTAssertEqual(result.counts.newCount, 1, "Source file must be planned for copy despite stale dest record")
+        XCTAssertEqual(result.counts.alreadyInDestinationCount, 0)
     }
     
     func testDryRunPlannerEmptySourceThrows() async throws {

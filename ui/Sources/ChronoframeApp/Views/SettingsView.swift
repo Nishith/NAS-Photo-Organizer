@@ -164,17 +164,14 @@ private enum SafetyPerformancePreset: String, CaseIterable, Identifiable {
         switch self {
         case .safest:
             preferencesStore.verifyCopies = true
-            preferencesStore.useFastDestinationScan = false
             preferencesStore.parallelTransferEnabled = false
             preferencesStore.workerCount = min(preferencesStore.workerCount, 8)
         case .balanced:
             preferencesStore.verifyCopies = true
-            preferencesStore.useFastDestinationScan = true
             preferencesStore.parallelTransferEnabled = false
             preferencesStore.workerCount = max(4, min(preferencesStore.workerCount, 12))
         case .fastRepeat:
             preferencesStore.verifyCopies = true
-            preferencesStore.useFastDestinationScan = true
             preferencesStore.parallelTransferEnabled = true
             preferencesStore.workerCount = max(preferencesStore.workerCount, 12)
         }
@@ -219,12 +216,11 @@ private struct PerformanceSettingsTab: View {
                     }
                 }
 
-                Toggle("Use Cached Destination Scan", isOn: $preferencesStore.useFastDestinationScan)
                 Toggle("Parallel Transfers", isOn: $preferencesStore.parallelTransferEnabled)
             } header: {
                 Text("Throughput")
             } footer: {
-                Text("More worker threads can improve throughput on faster storage. Cached destination scanning speeds up repeated runs by reading the existing index. Parallel transfers are off by default and only affect future transfer runs.")
+                Text("More worker threads can improve throughput on faster storage. Parallel transfers allow concurrent file copies and only affect future transfer runs.")
             }
 
             Section {

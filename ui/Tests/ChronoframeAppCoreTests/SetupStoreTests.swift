@@ -98,7 +98,6 @@ final class SetupStoreTests: XCTestCase {
 
         let preferences = PreferencesStore(defaults: defaults)
         preferences.workerCount = 0
-        preferences.useFastDestinationScan = true
         preferences.verifyCopies = true
         preferences.parallelTransferEnabled = true
 
@@ -114,7 +113,6 @@ final class SetupStoreTests: XCTestCase {
         XCTAssertEqual(configuration.sourcePath, "/tmp/source")
         XCTAssertEqual(configuration.destinationPath, "/tmp/destination")
         XCTAssertEqual(configuration.profileName, "saved")
-        XCTAssertTrue(configuration.useFastDestinationScan)
         XCTAssertTrue(configuration.verifyCopies)
         XCTAssertTrue(configuration.parallelTransferEnabled)
         XCTAssertEqual(configuration.workerCount, 1)

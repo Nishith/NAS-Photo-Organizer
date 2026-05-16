@@ -63,7 +63,6 @@ final class PythonOrganizerEngineIntegrationTests: XCTestCase {
             RunConfiguration(
                 mode: .transfer,
                 profileName: "travel",
-                useFastDestinationScan: true,
                 verifyCopies: true,
                 workerCount: 4,
                 folderStructure: .flat
@@ -121,7 +120,6 @@ final class PythonOrganizerEngineIntegrationTests: XCTestCase {
                 mode: .preview,
                 sourcePath: sourceURL.path,
                 destinationPath: destinationURL.path,
-                useFastDestinationScan: true,
                 verifyCopies: true,
                 workerCount: 2
             )

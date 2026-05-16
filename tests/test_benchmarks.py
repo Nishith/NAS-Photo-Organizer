@@ -9,13 +9,12 @@ from benchmarks.run_benchmarks import write_summary
 
 
 class BenchmarkComparisonTests(unittest.TestCase):
-    def make_summary(self, *, hashing=100.0, classification=80.0, cold=60.0, fast=240.0, preview=50.0):
+    def make_summary(self, *, hashing=100.0, classification=80.0, cold=60.0, preview=50.0):
         return {
             "hashing": {"files_per_second": hashing},
             "classification": {"files_per_second": classification},
             "destination_indexing": {
                 "cold_entries_per_second": cold,
-                "fast_dest_entries_per_second": fast,
             },
             "preview": {"files_per_second": preview},
         }
@@ -25,7 +24,7 @@ class BenchmarkComparisonTests(unittest.TestCase):
 
         self.assertEqual(metrics["hashing.files_per_second"]["value"], 100.0)
         self.assertEqual(metrics["hashing.files_per_second"]["unit"], "files/s")
-        self.assertEqual(metrics["destination_indexing.fast_dest_entries_per_second"]["value"], 240.0)
+        self.assertEqual(metrics["destination_indexing.cold_entries_per_second"]["value"], 60.0)
         self.assertTrue(metrics["preview.files_per_second"]["higher_is_better"])
 
     def test_compare_to_baseline_passes_within_budget(self):
@@ -34,7 +33,6 @@ class BenchmarkComparisonTests(unittest.TestCase):
             hashing=96.0,
             classification=81.0,
             cold=58.0,
-            fast=242.0,
             preview=49.0,
         )
 

@@ -400,25 +400,51 @@ class TestWalkErrorHandlerLogging(unittest.TestCase):
 class TestSymlinkSkippingLogging(unittest.TestCase):
     """P2 Issue #23: Symlink files logged when skipped."""
 
-    def test_symlinks_counted_and_logged(self):
-        """Verify symlinks are counted during source discovery."""
-        # This requires integration with main() to capture the logging
-        # For unit testing, we can verify the logic exists
+    def test_source_modified_skip_logs_to_run_log(self):
+        """execute_jobs with verify_source=True must log a warning to run_log
+        when a source file's hash has changed since the copy plan was built.
+        This covers the run_log.warn path in the source-modified skip branch.
+        """
+        from chronoframe.core import execute_jobs
+        from chronoframe.io import fast_hash as real_fast_hash
+
         tmpdir = tempfile.mkdtemp()
         try:
-            os.makedirs(os.path.join(tmpdir, "src"))
+            src_dir = os.path.join(tmpdir, "src")
+            dst_dir = os.path.join(tmpdir, "dst")
+            os.makedirs(src_dir)
+            os.makedirs(dst_dir)
 
-            # Create a symlink
-            src_file = os.path.join(tmpdir, "src", "real.jpg")
-            with open(src_file, 'wb') as f:
-                f.write(b"test")
+            src = os.path.join(src_dir, "photo.jpg")
+            with open(src, 'wb') as f:
+                f.write(b"original")
+            planned_hash = real_fast_hash(src)
 
-            symlink = os.path.join(tmpdir, "src", "link.jpg")
-            os.symlink(src_file, symlink)
+            # Overwrite source so its hash no longer matches the planned hash.
+            with open(src, 'wb') as f:
+                f.write(b"modified after planning")
 
-            # Verify os.path.islink detects it
-            self.assertTrue(os.path.islink(symlink))
-            self.assertFalse(os.path.islink(src_file))
+            dst_path = os.path.join(dst_dir, "2024-06-15_001.jpg")
+            db = CacheDB(os.path.join(tmpdir, "test.db"))
+            db.enqueue_jobs([(src, dst_path, planned_hash, "PENDING")])
+            pending = db.get_pending_jobs()
+
+            log_path = os.path.join(tmpdir, "run.log")
+            run_log = RunLogger(log_path)
+            run_log.open()
+
+            execute_jobs(pending, db, dst_dir, run_log=run_log, verify_source=True)
+
+            run_log.close()
+            db.close()
+
+            with open(log_path) as f:
+                log_content = f.read()
+
+            self.assertIn("modified since planning", log_content,
+                          "run_log must record the source-modified skip")
+            self.assertFalse(os.path.exists(dst_path),
+                             "Skipped jobs must not produce a destination file")
         finally:
             import shutil
             shutil.rmtree(tmpdir)
@@ -491,34 +517,48 @@ class TestBugFixIntegration(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmpdir)
 
-    def test_database_error_recovery_flow(self):
-        """Verify database can recover from errors during batch operations."""
-        db_path = os.path.join(self.tmpdir, "test.db")
-        db = CacheDB(db_path)
+    def test_receipt_destroot_field_drives_revert_boundary(self):
+        """generate_audit_receipt() must write a destRoot field, and
+        revert_receipt() must use that field (not the path heuristic) to
+        derive the deletion boundary when no --dest override is provided.
 
-        # Normal operation
-        db.save_batch(1, [("/a.jpg", "h1", 100, 1.0)])
+        This prevents a receipt that has been moved from a different directory
+        from using the wrong boundary and refusing all reverts.
+        """
+        from chronoframe.core import generate_audit_receipt, revert_receipt
+        from chronoframe.io import fast_hash
 
-        # Simulate error (constraint violation) - should rollback
-        try:
-            db.conn.executemany(
-                "INSERT INTO FileCache (id, path, hash, size, mtime) VALUES (?, ?, ?, ?, ?)",
-                [(1, "/a.jpg", "h2", 200, 2.0)]  # Duplicate path
-            )
-            db.conn.commit()
-        except sqlite3.IntegrityError:
-            pass
+        dest_dir = os.path.join(self.tmpdir, "library")
+        os.makedirs(dest_dir)
 
-        # Should still be able to use the database
-        db.save_batch(2, [("/b.jpg", "h3", 300, 3.0)])
+        # Create a file in the destination that we will revert.
+        dest_file = os.path.join(dest_dir, "2024-06-15_001.jpg")
+        with open(dest_file, 'wb') as f:
+            f.write(b"photo data")
+        dest_hash = fast_hash(dest_file)
 
-        data1 = db.get_cache_dict(1)
-        data2 = db.get_cache_dict(2)
+        # Write the receipt into a DIFFERENT directory to simulate a moved receipt.
+        moved_receipt_dir = os.path.join(self.tmpdir, "moved_receipts")
+        os.makedirs(moved_receipt_dir)
+        logs_dir = os.path.join(moved_receipt_dir, ".organize_logs")
+        os.makedirs(logs_dir)
 
-        self.assertIn("/a.jpg", data1)
-        self.assertIn("/b.jpg", data2)
+        receipt_data = {
+            "schemaVersion": 2,
+            "destRoot": dest_dir,  # explicit boundary — must be honoured
+            "transfers": [{"source": "/src/photo.jpg", "dest": dest_file, "hash": dest_hash}],
+        }
+        receipt_path = os.path.join(logs_dir, "audit_receipt_test.json")
+        with open(receipt_path, 'w') as f:
+            json.dump(receipt_data, f)
 
-        db.close()
+        # revert_receipt with no dest override must use destRoot from the receipt.
+        with patch('chronoframe.core.console'):
+            revert_receipt(receipt_path)
+
+        # File inside dest_dir must be deleted; receipt boundary was respected.
+        self.assertFalse(os.path.exists(dest_file),
+                         "File inside destRoot must be deleted by revert")
 
 
 # ════════════════════════════════════════════════════════════════════════════

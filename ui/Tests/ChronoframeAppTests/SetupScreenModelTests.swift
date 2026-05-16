@@ -16,7 +16,6 @@ final class SetupScreenModelTests: XCTestCase {
                 droppedSourceLabel: nil,
                 droppedSourceItemCount: 0,
                 workerCount: 4,
-                useFastDestinationScan: false,
                 verifyCopies: true,
                 isRunInProgress: false
             )
@@ -41,7 +40,6 @@ final class SetupScreenModelTests: XCTestCase {
                 droppedSourceLabel: nil,
                 droppedSourceItemCount: 0,
                 workerCount: 8,
-                useFastDestinationScan: true,
                 verifyCopies: false,
                 isRunInProgress: false
             )
@@ -86,7 +84,6 @@ final class SetupScreenModelTests: XCTestCase {
                 droppedSourceLabel: nil,
                 droppedSourceItemCount: 0,
                 workerCount: 4,
-                useFastDestinationScan: false,
                 verifyCopies: true,
                 isRunInProgress: false
             )

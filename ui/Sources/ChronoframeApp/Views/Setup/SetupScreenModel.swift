@@ -89,7 +89,6 @@ struct SetupScreenContext {
     var droppedSourceLabel: String?
     var droppedSourceItemCount: Int
     var workerCount: Int
-    var useFastDestinationScan: Bool
     var verifyCopies: Bool
     var isRunInProgress: Bool
 }
@@ -112,7 +111,6 @@ struct SetupScreenModel {
                 droppedSourceLabel: setupStore.droppedSourceLabel,
                 droppedSourceItemCount: setupStore.droppedSourceItemCount,
                 workerCount: preferencesStore.workerCount,
-                useFastDestinationScan: preferencesStore.useFastDestinationScan,
                 verifyCopies: preferencesStore.verifyCopies,
                 isRunInProgress: isRunInProgress
             )
@@ -233,11 +231,7 @@ struct SetupScreenModel {
     }
 
     var performanceSummary: String {
-        [
-            "\(context.workerCount) workers",
-            context.useFastDestinationScan ? "cached destination scan" : "full destination scan",
-        ]
-        .joined(separator: " • ")
+        "\(context.workerCount) workers"
     }
 
     var safetySummary: String {

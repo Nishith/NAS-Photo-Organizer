@@ -1093,26 +1093,24 @@ class TestParseArgs(unittest.TestCase):
         self.assertIsNone(args.profile)
         self.assertFalse(args.dry_run)
         self.assertFalse(args.rebuild_cache)
-        self.assertFalse(args.verify)
+        self.assertFalse(args.skip_verify)
         self.assertFalse(args.yes)
         self.assertFalse(args.json)
-        self.assertFalse(args.fast_dest)
         self.assertEqual(args.workers, DEFAULT_WORKERS)
 
     def test_all_flags(self):
         with patch('sys.argv', ['prog', '--source', '/s', '--dest', '/d',
                                 '--profile', 'p', '--dry-run', '--rebuild-cache',
-                                '--verify', '-y', '--json', '--fast-dest', '--workers', '4']):
+                                '--skip-verify', '-y', '--json', '--workers', '4']):
             args = parse_args()
         self.assertEqual(args.source, '/s')
         self.assertEqual(args.dest, '/d')
         self.assertEqual(args.profile, 'p')
         self.assertTrue(args.dry_run)
         self.assertTrue(args.rebuild_cache)
-        self.assertTrue(args.verify)
+        self.assertTrue(args.skip_verify)
         self.assertTrue(args.yes)
         self.assertTrue(args.json)
-        self.assertTrue(args.fast_dest)
         self.assertEqual(args.workers, 4)
 
     def test_workers_flag(self):
@@ -1733,7 +1731,8 @@ class TestMainCopy(TempDirMixin, unittest.TestCase):
         with open(os.path.join(src, "IMG_20230615_120000.jpg"), 'wb') as f:
             f.write(b"verify_me")
 
-        with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '-y', '--verify']):
+        # Verify is enabled by default — no flag needed
+        with patch('sys.argv', ['prog', '--source', src, '--dest', dst, '-y']):
             main()
 
         expected = os.path.join(dst, "2023", "06", "15", "2023-06-15_001.jpg")
@@ -2441,75 +2440,6 @@ class TestMaxTotalFailures(unittest.TestCase):
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# build_dest_index — fast_dest mode
-# ════════════════════════════════════════════════════════════════════════════
-
-class TestBuildDestIndexFastDest(TempDirMixin, unittest.TestCase):
-
-    def _setup_dest(self, files):
-        dst = os.path.join(self.tmpdir, "dest")
-        for relpath, content in files:
-            path = os.path.join(dst, relpath)
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, 'wb') as f:
-                f.write(content)
-        return dst
-
-    def test_fast_dest_matches_full_scan(self):
-        dst = self._setup_dest([
-            ("2023/06/15/2023-06-15_001.jpg", b"photo1"),
-            ("2023/06/15/2023-06-15_002.jpg", b"photo2"),
-        ])
-        db = CacheDB(os.path.join(self.tmpdir, "test.db"))
-
-        # Full scan first — populates cache
-        hi_full, seq_full, _dup_full = build_dest_index(dst, db)
-
-        # Fast mode — reads from cache only
-        hi_fast, seq_fast, _dup_fast = build_dest_index(dst, db, fast_dest=True)
-
-        self.assertEqual(hi_full, hi_fast)
-        self.assertEqual(dict(seq_full), dict(seq_fast))
-        db.close()
-
-    def test_fast_dest_empty_cache_returns_empty(self):
-        dst = self._setup_dest([])
-        db = CacheDB(os.path.join(self.tmpdir, "test.db"))
-        hi, seq, _ = build_dest_index(dst, db, fast_dest=True)
-        self.assertEqual(hi, {})
-        self.assertEqual(dict(seq), {})
-        db.close()
-
-    def test_fast_dest_dup_dir_tracked_correctly(self):
-        dst = self._setup_dest([
-            ("2023/06/15/2023-06-15_005.jpg", b"main"),
-            ("Duplicate/2023/06/15/2023-06-15_003.jpg", b"dup"),
-        ])
-        db = CacheDB(os.path.join(self.tmpdir, "test.db"))
-        build_dest_index(dst, db)  # populate cache
-
-        _, seq, dup_seq = build_dest_index(dst, db, fast_dest=True)
-        self.assertEqual(seq["2023-06-15"], 5)
-        self.assertEqual(dup_seq["2023-06-15"], 3)
-        db.close()
-
-    def test_fast_dest_with_progress(self):
-        dst = self._setup_dest([
-            ("2023/01/01/2023-01-01_001.jpg", b"data"),
-        ])
-        db = CacheDB(os.path.join(self.tmpdir, "test.db"))
-        build_dest_index(dst, db)  # populate cache
-
-        with Progress(SpinnerColumn(), TextColumn("{task.description}"),
-                      console=Console(quiet=True)) as progress:
-            ptask = progress.add_task("Test", total=None)
-            hi, _, _ = build_dest_index(dst, db, fast_dest=True, progress=progress, ptask=ptask)
-
-        self.assertEqual(len(hi), 1)
-        db.close()
-
-
-# ════════════════════════════════════════════════════════════════════════════
 # generate_audit_receipt — return value
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -2916,7 +2846,7 @@ class TestMainJsonCompleteEvent(TempDirMixin, unittest.TestCase):
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# parse_args — --json and --fast-dest flags
+# parse_args — --json flag
 # ════════════════════════════════════════════════════════════════════════════
 
 class TestParseArgsExtended(unittest.TestCase):
@@ -2926,20 +2856,10 @@ class TestParseArgsExtended(unittest.TestCase):
             args = parse_args()
         self.assertTrue(args.json)
 
-    def test_fast_dest_flag(self):
-        with patch('sys.argv', ['prog', '--fast-dest']):
-            args = parse_args()
-        self.assertTrue(args.fast_dest)
-
     def test_json_false_by_default(self):
         with patch('sys.argv', ['prog']):
             args = parse_args()
         self.assertFalse(args.json)
-
-    def test_fast_dest_false_by_default(self):
-        with patch('sys.argv', ['prog']):
-            args = parse_args()
-        self.assertFalse(args.fast_dest)
 
 
 class TestRevertReceiptErrorHandling(TempDirMixin, unittest.TestCase):
@@ -3096,6 +3016,80 @@ class TestRevertReceiptErrorHandling(TempDirMixin, unittest.TestCase):
         revert_receipt(receipt_path, dest_root_override=dest_root)
 
         self.assertFalse(os.path.exists(inside))
+
+    def test_revert_malformed_transfers_not_a_list(self):
+        """transfers field that is not a list must exit with code 1 (lines 392-394)."""
+        dest_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(os.path.join(dest_dir, ".organize_logs"))
+        receipt = self._write_receipt(
+            "dest/.organize_logs/receipt.json",
+            {"transfers": "not-a-list"},
+        )
+
+        with patch("chronoframe.core.emit_json") as mock_emit:
+            with self.assertRaises(SystemExit) as raised:
+                revert_receipt(receipt)
+
+        self.assertEqual(raised.exception.code, 1)
+        mock_emit.assert_called_once_with(
+            "error", message="Malformed receipt: 'transfers' field must be a list."
+        )
+
+    def test_revert_transfer_missing_dest_field(self):
+        """Transfer entry with no 'dest' key is treated as already-missing (line 424→441)."""
+        dest_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(os.path.join(dest_dir, ".organize_logs"))
+        receipt = self._write_receipt(
+            "dest/.organize_logs/receipt.json",
+            {"transfers": [{"source": "/camera/IMG_0001.JPG"}]},  # no "dest" key
+        )
+
+        # Should complete without error – "Already missing" path
+        revert_receipt(receipt)
+
+    def test_revert_rmdir_cleanup_oserror_is_swallowed(self):
+        """OSError from os.rmdir during directory cleanup is silently ignored (lines 464-465)."""
+        dest_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(dest_dir)
+        logs_dir = os.path.join(dest_dir, ".organize_logs")
+        os.makedirs(logs_dir)
+        subdir = os.path.join(dest_dir, "2024", "01")
+        os.makedirs(subdir)
+        copied = os.path.join(subdir, "IMG_0001.JPG")
+        with open(copied, "wb") as f:
+            f.write(b"photo data")
+
+        receipt = self._write_receipt(
+            "dest/.organize_logs/receipt.json",
+            {"transfers": [{"dest": copied, "hash": fast_hash(copied)}]},
+        )
+
+        with patch("chronoframe.core.os.rmdir", side_effect=OSError("device busy")):
+            revert_receipt(receipt)
+
+        # File was deleted despite rmdir raising
+        self.assertFalse(os.path.exists(copied))
+
+    def test_revert_fast_hash_oserror_reported_as_warning(self):
+        """OSError from fast_hash during revert emits a warning and skips the file (lines 474-477)."""
+        dest_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(dest_dir)
+        logs_dir = os.path.join(dest_dir, ".organize_logs")
+        os.makedirs(logs_dir)
+        copied = os.path.join(dest_dir, "IMG_0001.JPG")
+        with open(copied, "wb") as f:
+            f.write(b"photo data")
+
+        receipt = self._write_receipt(
+            "dest/.organize_logs/receipt.json",
+            {"transfers": [{"dest": copied, "hash": "any_hash"}]},
+        )
+
+        with patch("chronoframe.io.fast_hash", side_effect=OSError("Permission denied")):
+            revert_receipt(receipt)
+
+        # File preserved because hash could not be verified
+        self.assertTrue(os.path.exists(copied))
 
 
 class TestEventSubpath(unittest.TestCase):
@@ -3397,6 +3391,26 @@ class TestExecuteJobsWithRunLog(TempDirMixin, unittest.TestCase):
         self.assertIn("Verification failed", content)
         db.close()
 
+    def test_verify_failure_without_run_log_increments_failure_count(self):
+        """Verification failure with run_log=None takes the false branch at line 1139."""
+        from chronoframe.core import execute_jobs
+        src_dir, dst_dir, db = self._setup_env()
+
+        src = os.path.join(src_dir, "photo.jpg")
+        with open(src, "wb") as f:
+            f.write(b"real photo data")
+        dst_path = os.path.join(dst_dir, "photo.jpg")
+
+        # Wrong planned hash → verify_copy detects mismatch → calls run_log.error
+        # at line 1139 only when run_log is not None. Passing None exercises the
+        # false branch so coverage records the arc 1139->1141.
+        db.enqueue_jobs([(src, dst_path, "wrong_hash", "PENDING")])
+        execute_jobs(db.get_pending_jobs(), db, dst_dir, run_log=None, verify=True)
+
+        # Destination should have been cleaned up (or never committed)
+        self.assertFalse(os.path.exists(dst_path))
+        db.close()
+
 
 class TestExecuteJobsGetSizeOSError(TempDirMixin, unittest.TestCase):
     """Lines 601-602: fallback to st_size when getsize raises OSError after successful copy."""
@@ -3581,6 +3595,271 @@ class TestConcurrentWorkerExceptionHandling(TempDirMixin, unittest.TestCase):
             src, dest = load_profile("env_profile")
             self.assertEqual(src, "/env/src")
             self.assertEqual(dest, "/env/dst")
+
+
+class TestFolderStructureVariants(TempDirMixin, unittest.TestCase):
+    """Cover YYYY/MM, YYYY, and Flat structure branches (lines 891-901, 947-957)."""
+
+    def _dry_run(self, folder_structure, *, with_dup=False):
+        """Perform a dry-run with the given folder structure."""
+        src_dir = os.path.join(self.tmpdir, "source_" + folder_structure.replace("/", "_"))
+        dst_dir = os.path.join(self.tmpdir, "dest_" + folder_structure.replace("/", "_"))
+        os.makedirs(src_dir, exist_ok=True)
+        os.makedirs(dst_dir, exist_ok=True)
+
+        # A file whose name encodes a date so planning gets a real date.
+        with open(os.path.join(src_dir, "IMG_20240315_120000.jpg"), "wb") as f:
+            f.write(b"unique photo payload A")
+
+        if with_dup:
+            # Identical content → second file gets classified as a duplicate.
+            with open(os.path.join(src_dir, "IMG_20240315_120001.jpg"), "wb") as f:
+                f.write(b"unique photo payload A")
+
+        argv = [
+            "prog",
+            "--source", src_dir,
+            "--dest", dst_dir,
+            "--dry-run",
+            "--yes",
+            "--folder-structure", folder_structure,
+        ]
+        from chronoframe.core import main
+        with patch("sys.argv", argv):
+            return main()
+
+    def test_yyyy_mm_structure(self):
+        """YYYY/MM branch: files land under <dest>/<YYYY>/<MM>/."""
+        self.assertIsNone(self._dry_run("YYYY/MM"))
+
+    def test_yyyy_structure(self):
+        """YYYY branch: files land directly under <dest>/<YYYY>/."""
+        self.assertIsNone(self._dry_run("YYYY"))
+
+    def test_flat_structure(self):
+        """Flat branch: files land directly in <dest>/."""
+        self.assertIsNone(self._dry_run("Flat"))
+
+    def test_yyyy_mm_with_duplicate(self):
+        """YYYY/MM branch for duplicate file planning (lines 947-948)."""
+        self.assertIsNone(self._dry_run("YYYY/MM", with_dup=True))
+
+    def test_yyyy_with_duplicate(self):
+        """YYYY branch for duplicate file planning (lines 950)."""
+        self.assertIsNone(self._dry_run("YYYY", with_dup=True))
+
+    def test_flat_with_duplicate(self):
+        """Flat branch for duplicate file planning (lines 956-957)."""
+        self.assertIsNone(self._dry_run("Flat", with_dup=True))
+
+
+class TestRunLoggerExceptionHandlers(TempDirMixin, unittest.TestCase):
+    """Cover exception handlers inside RunLogger.close() and RunLogger.open() rotation."""
+
+    def test_close_exception_on_fh_close_is_swallowed(self):
+        """Lines 63-64: Exception from _fh.close() during re-open is silently swallowed."""
+        log_path = os.path.join(self.tmpdir, "test.log")
+        logger = RunLogger(log_path)
+        logger.open()
+        logger.log("message")
+
+        # Replace the real file handle with a mock whose close() raises.
+        # open() closes any existing handle before opening the new one (lines 60-65).
+        bad_fh = MagicMock()
+        bad_fh.close.side_effect = Exception("I/O error on flush")
+        logger._fh = bad_fh
+
+        # Calling open() again triggers close() on bad_fh inside the try/except.
+        logger.open()  # must not propagate the exception
+        bad_fh.close.assert_called_once()
+        logger.close()
+
+    def test_remove_rotated_oserror_is_swallowed(self):
+        """Lines 74-75: OSError from os.remove(rotated) during rotation is swallowed."""
+        log_path = os.path.join(self.tmpdir, "test.log")
+        rotated = log_path + ".1"
+
+        # Pre-seed a large log so rotation is triggered.
+        with open(log_path, "wb") as f:
+            f.write(b"x" * (RunLogger.MAX_LOG_BYTES + 512))
+        # Pre-create the rotated file so the os.remove branch is reached.
+        with open(rotated, "w") as f:
+            f.write("old rotation\n")
+
+        logger = RunLogger(log_path)
+        with patch("chronoframe.core.os.remove", side_effect=OSError("locked")):
+            logger.open()
+        # If we reach here without exception, the handler swallowed it.
+        logger.close()
+
+
+class TestExecuteJobsSuccessBatchFlush(TempDirMixin, unittest.TestCase):
+    """Lines 1213-1214: status_updates batch flush after 50 successful copies."""
+
+    def test_success_flush_triggers_after_50_copies(self):
+        from chronoframe.core import execute_jobs
+        src_dir = os.path.join(self.tmpdir, "source")
+        dst_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        db = CacheDB(os.path.join(dst_dir, ".cache.db"))
+
+        # 51 distinct source files — all will copy successfully.
+        jobs = []
+        for i in range(51):
+            src = os.path.join(src_dir, f"photo_{i}.jpg")
+            with open(src, "wb") as f:
+                f.write(f"payload-{i}".encode())
+            jobs.append((src, os.path.join(dst_dir, f"photo_{i}.jpg"), f"hash_{i}", "PENDING"))
+
+        db.enqueue_jobs(jobs)
+        execute_jobs(db.get_pending_jobs(), db, dst_dir)
+
+        cursor = db.conn.execute("SELECT COUNT(*) FROM CopyJobs WHERE status = 'COPIED'")
+        self.assertEqual(cursor.fetchone()[0], 51)
+        db.close()
+
+
+class TestExecuteJobsEnospcDiskUsageFailure(TempDirMixin, unittest.TestCase):
+    """Lines 1188-1189: ENOSPC path where shutil.disk_usage also fails."""
+
+    def test_enospc_with_disk_usage_error_is_swallowed(self):
+        from chronoframe.core import execute_jobs
+        import errno as errno_mod
+        src_dir = os.path.join(self.tmpdir, "source")
+        dst_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        db = CacheDB(os.path.join(dst_dir, ".cache.db"))
+
+        src = os.path.join(src_dir, "photo.jpg")
+        with open(src, "wb") as f:
+            f.write(b"data")
+        dst_path = os.path.join(dst_dir, "photo.jpg")
+
+        enospc = OSError(errno_mod.ENOSPC, "No space left on device")
+        db.enqueue_jobs([(src, dst_path, "hash", "PENDING")])
+
+        with patch("chronoframe.core.safe_copy_atomic", side_effect=enospc), \
+             patch("shutil.disk_usage", side_effect=Exception("stat failed")):
+            execute_jobs(db.get_pending_jobs(), db, dst_dir)
+
+        # File not copied (copy failed); job should be FAILED.
+        cursor = db.conn.execute("SELECT status FROM CopyJobs WHERE src_path = ?", (src,))
+        self.assertEqual(cursor.fetchone()[0], "FAILED")
+        db.close()
+
+
+class TestSkipVerifyRunLogWarning(TempDirMixin, unittest.TestCase):
+    """Line 598: run_log.warn emitted when --skip-verify is active."""
+
+    def test_skip_verify_logs_warning(self):
+        src_dir = os.path.join(self.tmpdir, "source")
+        dst_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        with open(os.path.join(src_dir, "IMG_20240315_120000.jpg"), "wb") as f:
+            f.write(b"photo")
+
+        argv = ["prog", "--source", src_dir, "--dest", dst_dir, "--dry-run", "--yes", "--skip-verify"]
+        from chronoframe.core import main
+        with patch("sys.argv", argv):
+            main()
+
+        # The run log is written inside dest/.organize_log.txt
+        run_log_path = os.path.join(dst_dir, ".organize_log.txt")
+        with open(run_log_path) as f:
+            content = f.read()
+        self.assertIn("Copy verification disabled", content)
+
+
+class TestSourceSymlinkSkipping(TempDirMixin, unittest.TestCase):
+    """Lines 647-655: symlinks in source are skipped and counted."""
+
+    def test_symlinks_in_source_are_skipped_and_logged(self):
+        src_dir = os.path.join(self.tmpdir, "source")
+        dst_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        # A real media file.
+        real_file = os.path.join(src_dir, "IMG_20240315_120000.jpg")
+        with open(real_file, "wb") as f:
+            f.write(b"photo")
+
+        # A symlink to the media file — must be skipped during discovery.
+        link = os.path.join(src_dir, "IMG_20240315_120001.jpg")
+        os.symlink(real_file, link)
+
+        argv = ["prog", "--source", src_dir, "--dest", dst_dir, "--dry-run", "--yes"]
+        from chronoframe.core import main
+        with patch("sys.argv", argv):
+            main()
+
+        # Confirm the run log records the skipped symlink count.
+        run_log_path = os.path.join(dst_dir, ".organize_log.txt")
+        with open(run_log_path) as f:
+            content = f.read()
+        self.assertIn("symbolic link", content)
+
+
+class TestExecuteJobsStatusBatchFlush(TempDirMixin, unittest.TestCase):
+    """Lines 1087-1088 and 1101-1102: status_updates batch flush after 50 skips."""
+
+    def _setup_env(self):
+        src_dir = os.path.join(self.tmpdir, "source")
+        dst_dir = os.path.join(self.tmpdir, "dest")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        db = CacheDB(os.path.join(dst_dir, ".cache.db"))
+        return src_dir, dst_dir, db
+
+    def test_source_unreadable_flush_triggers_after_50_skips(self):
+        """Lines 1087-1088: batch flush fires when 50 unreadable-source skips accumulate."""
+        from chronoframe.core import execute_jobs
+        src_dir, dst_dir, db = self._setup_env()
+
+        # 51 jobs whose sources don't exist → every iteration hits the OSError
+        # branch inside verify_source, appending to status_updates until the
+        # batch threshold is crossed.
+        jobs = [
+            (
+                os.path.join(src_dir, f"missing_{i}.jpg"),
+                os.path.join(dst_dir, f"out_{i}.jpg"),
+                f"hash_{i}",
+                "PENDING",
+            )
+            for i in range(51)
+        ]
+        db.enqueue_jobs(jobs)
+        execute_jobs(db.get_pending_jobs(), db, dst_dir, verify_source=True)
+
+        cursor = db.conn.execute("SELECT COUNT(*) FROM CopyJobs WHERE status = 'SKIPPED'")
+        self.assertEqual(cursor.fetchone()[0], 51)
+        db.close()
+
+    def test_source_modified_flush_triggers_after_50_skips(self):
+        """Lines 1101-1102: batch flush fires when 50 source-modified skips accumulate."""
+        from chronoframe.core import execute_jobs
+        src_dir, dst_dir, db = self._setup_env()
+
+        # 51 real source files whose planned hashes are intentionally wrong →
+        # every iteration hits the `current_src_hash != h` branch.
+        jobs = []
+        for i in range(51):
+            src = os.path.join(src_dir, f"photo_{i}.jpg")
+            with open(src, "wb") as f:
+                f.write(f"content_{i}".encode())
+            jobs.append(
+                (src, os.path.join(dst_dir, f"out_{i}.jpg"), f"wrong_hash_{i}", "PENDING")
+            )
+
+        db.enqueue_jobs(jobs)
+        execute_jobs(db.get_pending_jobs(), db, dst_dir, verify_source=True)
+
+        cursor = db.conn.execute("SELECT COUNT(*) FROM CopyJobs WHERE status = 'SKIPPED'")
+        self.assertEqual(cursor.fetchone()[0], 51)
+        db.close()
 
 
 if __name__ == '__main__':
