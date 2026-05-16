@@ -20,6 +20,8 @@ public enum CLIError: LocalizedError, Equatable {
 }
 
 public struct CLIOptions: Equatable, Sendable {
+    public static let defaultWorkerCount = 8
+
     public var sourcePath: String?
     public var destinationPath: String?
     public var profileName: String?
@@ -40,7 +42,7 @@ public struct CLIOptions: Equatable, Sendable {
         dryRun: Bool = false,
         rebuildCache: Bool = false,
         verifyCopies: Bool = true,
-        workerCount: Int = 8,
+        workerCount: Int = CLIOptions.defaultWorkerCount,
         assumeYes: Bool = false,
         jsonOutput: Bool = false,
         folderStructure: FolderStructure = .default,
@@ -165,7 +167,7 @@ public enum CLIParser {
     }
 
     private static func validate(_ options: CLIOptions) throws {
-        let maxWorkers = max(1, ProcessInfo.processInfo.processorCount * 2)
+        let maxWorkers = max(CLIOptions.defaultWorkerCount, ProcessInfo.processInfo.processorCount * 2)
         guard (1...maxWorkers).contains(options.workerCount) else {
             throw CLIError.usage("--workers must be between 1 and \(maxWorkers) (got \(options.workerCount)).")
         }

@@ -32,6 +32,12 @@ final class CLIParserTests: XCTestCase {
         XCTAssertEqual(options.mode, .preview)
     }
 
+    func testParsesDefaultWorkerCountWithoutExplicitWorkerFlag() throws {
+        let options = try CLIParser.parse(["--source", "/photos/in", "--dest", "/photos/out"])
+
+        XCTAssertEqual(options.workerCount, CLIOptions.defaultWorkerCount)
+    }
+
     func testParsesRevertWithBoundaryOverride() throws {
         let options = try CLIParser.parse(["--revert", "/tmp/receipt.json", "--dest", "/tmp/destination"])
 
