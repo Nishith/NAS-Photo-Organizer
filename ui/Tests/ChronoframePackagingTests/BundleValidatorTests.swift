@@ -250,7 +250,8 @@ final class BundleValidatorTests: XCTestCase {
 
         XCTAssertEqual(exitCode, 1)
         let text = lines.joined(separator: "\n")
-        XCTAssertTrue(text.contains("\"distribution_ready\" : false"))
+        let payload = try decodeCLIJSON(lines)
+        XCTAssertEqual(payload["distribution_ready"] as? Bool, false)
         XCTAssertTrue(text.contains("Bundle does not exist"))
     }
 
@@ -386,7 +387,7 @@ final class BundleValidatorTests: XCTestCase {
         )
     }
 
-    func testCLIAppStoreFlagValidatesMASMode() {
+    func testCLIAppStoreFlagValidatesMASMode() throws {
         let missing = temporaryDirectoryURL.appendingPathComponent("Missing.app")
         var lines: [String] = []
         let exitCode = BundleValidatorCLI.run(
@@ -396,7 +397,16 @@ final class BundleValidatorTests: XCTestCase {
         )
 
         XCTAssertEqual(exitCode, 1)
-        XCTAssertTrue(lines.joined(separator: "\n").contains("\"distribution_ready\" : false"))
+        let payload = try decodeCLIJSON(lines)
+        XCTAssertEqual(payload["distribution_ready"] as? Bool, false)
+    }
+
+    private func decodeCLIJSON(_ lines: [String]) throws -> [String: Any] {
+        let text = lines.joined(separator: "\n")
+        let payload = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
+        )
+        return payload
     }
 
     private func makeMinimalAppBundle() throws -> URL {
