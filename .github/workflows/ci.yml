@@ -31,11 +31,18 @@ jobs:
       - name: Run SwiftPM tests
         run: |
           mkdir -p .tmp/home/Library/Caches .tmp/modulecache
+          set +e
           HOME="$PWD/.tmp/home" \
           XDG_CACHE_HOME="$PWD/.tmp/home/Library/Caches" \
           CLANG_MODULE_CACHE_PATH="$PWD/.tmp/modulecache" \
           SWIFTPM_MODULECACHE_OVERRIDE="$PWD/.tmp/modulecache" \
-          swift test --package-path ui --disable-sandbox
+          swift test --package-path ui --disable-sandbox 2>&1 | tee .tmp/swiftpm-tests.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            message=$(tail -80 .tmp/swiftpm-tests.log | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+            echo "::error title=SwiftPM tests failed::$message"
+          fi
+          exit "$status"
 
   meaningful-coverage:
     name: Meaningful Swift coverage
@@ -44,7 +51,15 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Run meaningful coverage gate
-        run: script/swift_meaningful_coverage.sh
+        run: |
+          set +e
+          script/swift_meaningful_coverage.sh 2>&1 | tee .tmp/meaningful-coverage.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            message=$(tail -80 .tmp/meaningful-coverage.log | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+            echo "::error title=Meaningful coverage failed::$message"
+          fi
+          exit "$status"
 
   xcode-build:
     name: Xcode build
