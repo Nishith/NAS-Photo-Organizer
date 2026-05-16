@@ -29,7 +29,7 @@ public protocol DeduplicateEngine: AnyObject {
         clusters: [DuplicateCluster],
         configuration: DeduplicateConfiguration
     ) throws -> AsyncThrowingStream<DeduplicateCommitEvent, Error>
-    func revert(receiptURL: URL) throws -> AsyncThrowingStream<DeduplicateCommitEvent, Error>
+    func revert(receiptURL: URL, destinationRoot: String) throws -> AsyncThrowingStream<DeduplicateCommitEvent, Error>
 }
 
 @MainActor
@@ -65,7 +65,10 @@ public final class NativeDeduplicateEngine: DeduplicateEngine {
         executor.commit(decisions: decisions, clusters: clusters, configuration: configuration)
     }
 
-    public func revert(receiptURL: URL) throws -> AsyncThrowingStream<DeduplicateCommitEvent, Error> {
-        executor.revert(receiptURL: receiptURL)
+    public func revert(receiptURL: URL, destinationRoot: String) throws -> AsyncThrowingStream<DeduplicateCommitEvent, Error> {
+        executor.revert(
+            receiptURL: receiptURL,
+            destinationBoundary: URL(fileURLWithPath: destinationRoot, isDirectory: true)
+        )
     }
 }

@@ -53,6 +53,7 @@ final class HistoryCoordinator {
             navigate(.deduplicate)
             deduplicateSessionStore.revert(
                 receiptURL: URL(fileURLWithPath: entry.path),
+                destinationRoot: destinationRoot,
                 securityScope: makeSecurityScopeForDestination(destinationRoot)
             )
         case .reorganizeAuditReceipt:

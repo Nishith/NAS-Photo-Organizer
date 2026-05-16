@@ -179,7 +179,10 @@ public final class DeduplicateExecutor: @unchecked Sendable {
     /// paths. Items that were hard-deleted (or evicted from Trash) are
     /// reported as failures. Returns a stream of the same commit events the
     /// forward path uses, so the UI can reuse its progress surface.
-    public func revert(receiptURL: URL) -> AsyncThrowingStream<DeduplicateCommitEvent, Error> {
+    public func revert(
+        receiptURL: URL,
+        destinationBoundary: URL? = nil
+    ) -> AsyncThrowingStream<DeduplicateCommitEvent, Error> {
         let fileOperations = self.fileOperations
         return AsyncThrowingStream<DeduplicateCommitEvent, Error> { continuation in
             Task.detached {
@@ -194,6 +197,9 @@ public final class DeduplicateExecutor: @unchecked Sendable {
                     }
                     continuation.yield(.started(totalToDelete: receipt.items.count))
 
+                    let boundaryURL = destinationBoundary
+                        ?? Self.inferredDestinationBoundary(for: receiptURL)
+                        ?? URL(fileURLWithPath: receipt.destinationRoot, isDirectory: true)
                     var deletedCount = 0
                     var failedCount = 0
                     var bytesReclaimed: Int64 = 0
@@ -212,7 +218,7 @@ public final class DeduplicateExecutor: @unchecked Sendable {
                         let originalURL = URL(fileURLWithPath: item.originalPath)
                         guard SafePathContainment.isContained(
                             originalURL,
-                            in: URL(fileURLWithPath: receipt.destinationRoot, isDirectory: true)
+                            in: boundaryURL
                         ) else {
                             failedCount += 1
                             continuation.yield(.itemFailed(originalPath: item.originalPath, errorMessage: "Receipt path is outside the dedupe destination."))
@@ -266,6 +272,12 @@ public final class DeduplicateExecutor: @unchecked Sendable {
         try Data().write(to: probe)
         try FileManager.default.removeItem(at: probe)
         return logsDirectory
+    }
+
+    static func inferredDestinationBoundary(for receiptURL: URL) -> URL? {
+        let logsDirectory = receiptURL.deletingLastPathComponent()
+        guard logsDirectory.lastPathComponent == ".organize_logs" else { return nil }
+        return logsDirectory.deletingLastPathComponent()
     }
 
     static func makeReceiptURL(

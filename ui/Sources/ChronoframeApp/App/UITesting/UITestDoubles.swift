@@ -127,7 +127,7 @@ final class MockDeduplicateEngine: DeduplicateEngine {
         }
     }
 
-    func revert(receiptURL: URL) throws -> AsyncThrowingStream<DeduplicateCommitEvent, Error> {
+    func revert(receiptURL: URL, destinationRoot: String) throws -> AsyncThrowingStream<DeduplicateCommitEvent, Error> {
         AsyncThrowingStream { continuation in
             continuation.finish()
         }
