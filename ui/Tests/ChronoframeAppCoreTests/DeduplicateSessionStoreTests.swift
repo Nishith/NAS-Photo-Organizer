@@ -485,7 +485,7 @@ final class DeduplicateSessionStoreTests: XCTestCase {
         ])
         let store = DeduplicateSessionStore(engine: engine)
 
-        store.revert(receiptURL: URL(fileURLWithPath: "/tmp/receipt.json"))
+        store.revert(receiptURL: URL(fileURLWithPath: "/tmp/receipt.json"), destinationRoot: "/dest")
         XCTAssertEqual(store.status, .reverting, "revert(...) must enter .reverting immediately, not .committing")
 
         let landed = await waitForCondition { store.status == .reverted }
@@ -529,7 +529,7 @@ final class DeduplicateSessionStoreTests: XCTestCase {
 
         // First a revert lands in .reverted, then a fresh scan + commit
         // must still reach .completed (not be sticky on revert).
-        store.revert(receiptURL: URL(fileURLWithPath: "/tmp/r.json"))
+        store.revert(receiptURL: URL(fileURLWithPath: "/tmp/r.json"), destinationRoot: "/dest")
         _ = await waitForCondition { store.status == .reverted }
 
         store.startScan(configuration: DeduplicateConfiguration(destinationPath: "/dest"))

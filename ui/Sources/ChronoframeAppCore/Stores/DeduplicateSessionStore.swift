@@ -225,14 +225,18 @@ public final class DeduplicateSessionStore: ObservableObject {
     /// Restore items listed in a previous dedupe audit receipt from Trash
     /// back to their original paths. Streams progress through the same
     /// commit-event channel as the forward path so the UI surface is shared.
-    public func revert(receiptURL: URL, securityScope: SecurityScopedFolderAccess? = nil) {
+    public func revert(
+        receiptURL: URL,
+        destinationRoot: String,
+        securityScope: SecurityScopedFolderAccess? = nil
+    ) {
         cancelStream()
         self.securityScope = securityScope
         commitSummary = nil
         isHandlingRevert = true
         status = .reverting
         do {
-            let stream = try engine.revert(receiptURL: receiptURL)
+            let stream = try engine.revert(receiptURL: receiptURL, destinationRoot: destinationRoot)
             streamTask = Task { [weak self] in
                 do {
                     for try await event in stream {
