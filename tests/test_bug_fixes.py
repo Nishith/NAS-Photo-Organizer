@@ -517,13 +517,21 @@ class TestBugFixIntegration(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmpdir)
 
-    def test_receipt_destroot_field_drives_revert_boundary(self):
-        """generate_audit_receipt() must write a destRoot field, and
-        revert_receipt() must use that field (not the path heuristic) to
-        derive the deletion boundary when no --dest override is provided.
+    def test_receipt_destroot_field_is_informational_not_trusted_as_boundary(self):
+        """The destRoot field in a receipt is audit metadata only.
 
-        This prevents a receipt that has been moved from a different directory
-        from using the wrong boundary and refusing all reverts.
+        revert_receipt() must derive the deletion boundary exclusively from
+        trusted sources (the --dest flag or the receipt's own filesystem
+        location).  It must NOT use data["destRoot"] as the boundary, because
+        that field comes from the untrusted receipt payload — a crafted receipt
+        with "destRoot": "/" would otherwise widen the boundary to the entire
+        filesystem.
+
+        When the receipt has been moved (and no --dest is provided), the
+        heuristic boundary is derived from the receipt's new location, which
+        will differ from destRoot.  A warning is emitted and the file inside
+        the real dest_dir is left untouched (correct safe-default behaviour).
+        To revert a moved receipt the operator must supply --dest explicitly.
         """
         from chronoframe.core import generate_audit_receipt, revert_receipt
         from chronoframe.io import fast_hash
@@ -531,13 +539,12 @@ class TestBugFixIntegration(unittest.TestCase):
         dest_dir = os.path.join(self.tmpdir, "library")
         os.makedirs(dest_dir)
 
-        # Create a file in the destination that we will revert.
         dest_file = os.path.join(dest_dir, "2024-06-15_001.jpg")
         with open(dest_file, 'wb') as f:
             f.write(b"photo data")
         dest_hash = fast_hash(dest_file)
 
-        # Write the receipt into a DIFFERENT directory to simulate a moved receipt.
+        # Place the receipt in a DIFFERENT directory to simulate a moved receipt.
         moved_receipt_dir = os.path.join(self.tmpdir, "moved_receipts")
         os.makedirs(moved_receipt_dir)
         logs_dir = os.path.join(moved_receipt_dir, ".organize_logs")
@@ -545,20 +552,67 @@ class TestBugFixIntegration(unittest.TestCase):
 
         receipt_data = {
             "schemaVersion": 2,
-            "destRoot": dest_dir,  # explicit boundary — must be honoured
+            # destRoot is informational — it must NOT be used as the security
+            # boundary.  Even though it points at the real library dir, the
+            # boundary must be derived from the receipt's location instead.
+            "destRoot": dest_dir,
             "transfers": [{"source": "/src/photo.jpg", "dest": dest_file, "hash": dest_hash}],
         }
         receipt_path = os.path.join(logs_dir, "audit_receipt_test.json")
         with open(receipt_path, 'w') as f:
             json.dump(receipt_data, f)
 
-        # revert_receipt with no dest override must use destRoot from the receipt.
+        # No --dest override: boundary comes from receipt location heuristic
+        # (moved_receipts/ in this case), not from data["destRoot"].
         with patch('chronoframe.core.console'):
             revert_receipt(receipt_path)
 
-        # File inside dest_dir must be deleted; receipt boundary was respected.
-        self.assertFalse(os.path.exists(dest_file),
-                         "File inside destRoot must be deleted by revert")
+        # dest_file is OUTSIDE the heuristic boundary, so it must be preserved.
+        self.assertTrue(
+            os.path.exists(dest_file),
+            "destRoot from JSON must not be trusted as the deletion boundary; "
+            "file outside the heuristic boundary must be preserved.",
+        )
+
+    def test_receipt_destroot_field_honoured_via_dest_override(self):
+        """When the operator supplies --dest, moved receipts work correctly.
+
+        This is the correct way to revert a receipt that has been moved from
+        its original <dest>/.organize_logs/ location.
+        """
+        from chronoframe.core import revert_receipt
+        from chronoframe.io import fast_hash
+
+        dest_dir = os.path.join(self.tmpdir, "library")
+        os.makedirs(dest_dir)
+
+        dest_file = os.path.join(dest_dir, "2024-06-15_001.jpg")
+        with open(dest_file, 'wb') as f:
+            f.write(b"photo data")
+        dest_hash = fast_hash(dest_file)
+
+        moved_receipt_dir = os.path.join(self.tmpdir, "moved_receipts")
+        os.makedirs(moved_receipt_dir)
+        logs_dir = os.path.join(moved_receipt_dir, ".organize_logs")
+        os.makedirs(logs_dir)
+
+        receipt_data = {
+            "schemaVersion": 2,
+            "destRoot": dest_dir,
+            "transfers": [{"source": "/src/photo.jpg", "dest": dest_file, "hash": dest_hash}],
+        }
+        receipt_path = os.path.join(logs_dir, "audit_receipt_test.json")
+        with open(receipt_path, 'w') as f:
+            json.dump(receipt_data, f)
+
+        # With --dest supplied, the boundary is correctly set to dest_dir.
+        with patch('chronoframe.core.console'):
+            revert_receipt(receipt_path, dest_root_override=dest_dir)
+
+        self.assertFalse(
+            os.path.exists(dest_file),
+            "File inside dest_dir must be deleted when --dest supplies the boundary.",
+        )
 
 
 # ════════════════════════════════════════════════════════════════════════════

@@ -363,18 +363,40 @@ def revert_receipt(receipt_path, dest_root_override=None):
         sys.exit(1)
 
     # Derive the destination root that bounds permissible deletions.
-    # Priority: explicit --dest override > destRoot field in the receipt >
-    # path heuristic (two levels up from the receipt file).  The field is
-    # written by generate_audit_receipt() so all receipts from this version
-    # onwards carry it; old receipts fall through to the heuristic.
+    # Only TRUSTED sources are accepted: an explicit --dest flag supplied by
+    # the operator, or the receipt's own filesystem location (two levels up
+    # from <dest>/.organize_logs/).
+    #
+    # The destRoot field embedded in the receipt is intentionally NOT used
+    # here.  It comes from the same untrusted JSON blob as `transfers`, so a
+    # crafted receipt with "destRoot": "/" would widen the boundary to the
+    # entire filesystem and let the boundary check pass for arbitrary paths
+    # (provided hashes match).  The field is retained for audit / display
+    # purposes only.
     if dest_root_override:
         dest_root = os.path.abspath(dest_root_override)
-    elif data.get("destRoot"):
-        dest_root = os.path.abspath(data["destRoot"])
     else:
         receipt_abs = os.path.abspath(receipt_path)
         logs_dir = os.path.dirname(receipt_abs)
         dest_root = os.path.dirname(logs_dir)
+        # Warn if the receipt claims a different root — most likely it was
+        # moved from its original location.  In that case the operator must
+        # pass --dest so the correct boundary can be established from a
+        # trusted source.
+        claimed = data.get("destRoot")
+        if claimed and os.path.realpath(claimed) != os.path.realpath(dest_root):
+            console.print(
+                "[yellow]Warning:[/yellow] Receipt's destRoot field does not match "
+                "the path derived from the receipt's location. "
+                "If this receipt was moved, re-run with --dest to set the correct boundary."
+            )
+            emit_json(
+                "warning",
+                message=(
+                    "destRoot mismatch: receipt may have been moved. "
+                    "Use --dest to specify the correct deletion boundary."
+                ),
+            )
     dest_root_real = os.path.realpath(dest_root)
     dest_prefix = os.path.normpath(dest_root_real) + os.sep
 
