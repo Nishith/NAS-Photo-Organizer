@@ -214,7 +214,7 @@ enum UITestAppStateFactory {
                 lastTransferredAt: Date(timeIntervalSinceReferenceDate: 764_121_600),
                 runCount: 3,
                 lastCopiedCount: 42,
-                totalCopiedCount: 124,
+                totalCopiedCount: 124
             ),
         ]
     }
