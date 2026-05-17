@@ -1180,6 +1180,7 @@ final class DeduplicateTests: XCTestCase {
     /// reported AFTER deletion had completed. The executor now
     /// preflights the receipt directory; an unwritable destination
     /// aborts the commit before any file is touched.
+    // AGENTS-INVARIANT: 13
     func testCommitAbortsBeforeMutationWhenReceiptDirectoryIsUnwritable() async throws {
         let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString)

@@ -4,6 +4,7 @@ import XCTest
 @testable import ChronoframeAppCore
 
 final class UserFacingErrorMessageTests: XCTestCase {
+    // AGENTS-INVARIANT: 10
     func testFallbackMessagesAreContextSpecificAndKeepOriginalDetails() {
         let cases: [(UserFacingErrorContext, String)] = [
             (.generic, "Chronoframe ran into a problem"),

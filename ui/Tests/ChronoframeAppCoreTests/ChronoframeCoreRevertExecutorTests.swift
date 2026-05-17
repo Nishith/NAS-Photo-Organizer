@@ -258,6 +258,7 @@ final class ChronoframeCoreRevertExecutorTests: XCTestCase {
         )
     }
 
+    // AGENTS-INVARIANT: 15
     func testSafeRevertRefusesSymlinkAtDestination() throws {
         // A symlink at the destination path (rather than the regular file
         // recorded by the receipt) must be refused outright. Opening with
@@ -691,6 +692,7 @@ final class ChronoframeCoreRevertExecutorTests: XCTestCase {
     /// the race deterministically:
     ///   • Call 1 (pre-hash boundary check) → path appears inside boundary → proceeds
     ///   • Call 2 (post-hash TOCTOU re-check) → path appears outside boundary → skipped
+    // AGENTS-INVARIANT: 8
     func testRevertPostHashBoundaryRecheckRefusesSymlinkSwappedPath() throws {
         let destinationRoot = temporaryDirectoryURL.appendingPathComponent("dest", isDirectory: true)
         try FileManager.default.createDirectory(at: destinationRoot, withIntermediateDirectories: true)

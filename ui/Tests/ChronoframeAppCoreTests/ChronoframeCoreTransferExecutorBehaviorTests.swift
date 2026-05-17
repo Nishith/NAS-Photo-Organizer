@@ -112,6 +112,9 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
     /// When the requested destination already holds a different file, the
     /// executor must keep the existing file and route the new copy to a
     /// `_collision_N` suffix.
+    // AGENTS-INVARIANT: 1
+    // AGENTS-INVARIANT: 2
+    // AGENTS-INVARIANT: 4
     func testCopyAppliesCollisionSuffixWhenDestinationExists() throws {
         let env = try makeEnvironment(jobCount: 1)
         let job = env.jobs[0]
@@ -312,6 +315,7 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
     /// A run of repeated failures must abort once the configured *consecutive*
     /// limit is hit, even if the *total* limit is far higher. The remaining
     /// jobs in the queue must stay PENDING so the user can retry.
+    // AGENTS-INVARIANT: 11
     func testRunAbortsAfterConsecutiveFailureThreshold() throws {
         let destinationRoot = temporaryDirectoryURL.appendingPathComponent("consecutive", isDirectory: true)
         try FileManager.default.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
@@ -682,6 +686,7 @@ final class ChronoframeCoreTransferExecutorBehaviorTests: XCTestCase {
     /// When `verifyCopies` is true and the queued hash doesn't match the
     /// post-copy file's hash, the executor must remove the bad copy and mark
     /// the job FAILED — protecting against silent corruption on flaky NAS.
+    // AGENTS-INVARIANT: 7
     func testVerifyCopiesRemovesFileWhenHashMismatchAndMarksJobFailed() throws {
         let env = try makeEnvironment(jobCount: 1)
         var job = env.jobs[0]

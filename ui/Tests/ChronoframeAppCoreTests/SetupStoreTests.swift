@@ -91,6 +91,7 @@ final class SetupStoreTests: XCTestCase {
         store.usingProfile || (!store.sourcePath.isEmpty && !store.destinationPath.isEmpty)
     }
 
+    // AGENTS-INVARIANT: 3
     func testMakeConfigurationUsesTrimmedPathsAndPreferenceFlags() {
         let suiteName = "SetupStoreTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

@@ -4,6 +4,7 @@ import XCTest
 
 final class DeduplicateScannerTests: XCTestCase {
 
+    // AGENTS-INVARIANT: 5
     func testScannerE2EExactDuplicate() async throws {
         let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("ScannerE2E-\(UUID().uuidString)")
@@ -82,6 +83,7 @@ final class DeduplicateScannerTests: XCTestCase {
         XCTAssertEqual(summary.clusterCounts[.exactDuplicate], 1)
     }
 
+    // AGENTS-INVARIANT: 16
     func testWarmCacheScanDoesNotInvokeImageAnalyzer() async throws {
         let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("ScannerWarmCache-\(UUID().uuidString)")
