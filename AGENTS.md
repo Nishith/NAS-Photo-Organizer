@@ -65,7 +65,7 @@ Do not weaken these unless the user explicitly asks for a product change.
 - Failure thresholds intentionally stop bad runs: 5 consecutive failures or 20 total failures.
 - Deduplicate moves files to the macOS Trash only. Hard delete is not available in the production UI or executor commit path.
 - The dedupe audit receipt directory (`.organize_logs/`) is preflighted before any deletion. An unwritable destination aborts the commit with `ReceiptPreflightError` and zero files touched.
-- Pair-as-unit conflict resolution is **Keep-wins**: if a user explicitly keeps either half of a RAW+JPEG or Live Photo HEIC+MOV pair, neither is deleted, even when the other half is marked Delete.
+- Pair-as-unit conflict resolution is **Keep-wins**: when either half of a RAW+JPEG or Live Photo HEIC+MOV pair has an effective Keep — explicit, automatic (the cluster's auto-suggested keeper), or implicit (default-Keep in an unreviewed low/medium-confidence cluster) — neither half is deleted. Pair-fanout deletes a partner only when that partner is itself marked Delete, auto-selected for Delete by a high-confidence cluster, or is a singleton outside any cluster.
 - Organize and dedupe traversal must not follow symlinks or aliases by default. Skip symlink files/directories, app bundles, photo libraries, packages, hidden system-like containers, and any path that escapes the selected root.
 - Fast destination scans are validating scans: cached records are trusted only when the file still exists and size/mtime still match; stale cache rows are refreshed or removed.
 

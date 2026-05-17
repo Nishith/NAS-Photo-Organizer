@@ -8,13 +8,14 @@ The Phase 1 review at [TOP_IMPROVEMENTS.md](TOP_IMPROVEMENTS.md) raised 10 findi
 
 ## P0 — Ship within one PR cycle
 
-### NEW1 — Cluster fully-emptied by pair fan-out (Phase 1 Finding #1 has a second consequence)
+### NEW1 — Cluster fully-emptied by pair fan-out (Phase 1 Finding #1 has a second consequence) ✅ FIXED
 
 - **Surface:** `DeduplicationPlanner.swift:84-95` (step 2 — pair rescue) + `:107-120` (step 4 — direct deletes) + `:122-153` (step 5 — pair expansion)
 - **Confirmed by:** `testPropertyNoClusterIsCompletelyEmptiedByThePlan` in `DeduplicationPlannerPropertyTests.swift` (currently skipped pending Finding #1 fix)
 - **Failure scenario:** A low/medium-confidence cluster has two members, both paired with each other (RAW+JPEG or Live Photo HEIC+MOV). User marks one half Delete. Step 2's pair rescue does not fire (defaultKeep partner). Step 3's "Per-cluster safety rail: skip any cluster whose effective decisions are all Delete" does NOT trip because only one is Delete. Step 4 plans the explicit Delete. **Step 5 then fans out the partner**, leaving the cluster fully emptied — violating step 3's documented invariant after step 3 ran.
 - **Why this is a separate finding:** Phase 1 Finding #1 noted "both files go to Trash" but did not flag that this is also a violation of the cluster-non-empty invariant. The two failures share a root cause (`DecisionSource.defaultKeep.blocksPairDeletion == false`), but the fix must address both invariants explicitly. The order-of-operations bug — step 3's safety rail runs BEFORE step 5's pair expansion — should be considered when writing the fix.
 - **Suggested fix:** Re-run the "skip cluster if every member ends up in plan" check AFTER step 5 (or rebuild the safety rail to consider pair-induced deletes), and treat `defaultKeep` as blocking pair deletion per Phase 1 Finding #1.
+- **Status:** Fixed in the same commit as Finding #1. `DecisionSource.blocksPairDeletion` removed; step 2's pair-rescue now flips any Keep↔Delete pair regardless of source; step 5's pair-expansion now short-circuits whenever the partner's effective decision is `.keep`. Both `testPropertyPairKeepWinsAcrossAllDecisionSources` and `testPropertyNoClusterIsCompletelyEmptiedByThePlan` are unskipped and passing. AGENTS.md's Keep-wins invariant clarified to make the broader interpretation explicit.
 
 ### NEW2 — `--json` mode interleaves human-language prompts on stdout
 

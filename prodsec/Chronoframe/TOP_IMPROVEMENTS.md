@@ -8,7 +8,7 @@ Recent in-flight commit `4ee99dd` ("Avoid quarantining unreadable revert receipt
 
 ## Top 10 Highest-Impact Findings
 
-### 1. Pair-as-unit "Keep wins" is bypassed when partner is in default-keep state — silent data loss
+### 1. Pair-as-unit "Keep wins" is bypassed when partner is in default-keep state — silent data loss ✅ FIXED
 
 - **Category:** data integrity / safety invariant
 - **Priority:** **P0**

@@ -802,14 +802,19 @@ final class DeduplicateTests: XCTestCase {
 
     // MARK: - DeduplicationPlanner
 
+    /// Verifies step 5 of the planner — paired singletons (typically the
+    /// RAW half of a RAW+JPEG pair sitting outside any duplicate cluster)
+    /// are fanned into the plan when their JPEG counterpart inside the
+    /// cluster is deleted and the RAW pairing toggle is on. Mirrors the
+    /// "partner outside cluster" pattern used by
+    /// `testPlannerHonorsPairTogglesIndependently`.
     func testPlannerExpandsRawJpegPairWhenToggleEnabled() {
-        let raw = candidate(path: "/dest/IMG.CR2", pairedPath: "/dest/IMG.JPG")
         let jpeg = candidate(path: "/dest/IMG.JPG", pairedPath: "/dest/IMG.CR2")
         let other = candidate(path: "/dest/OTHER.JPG")
 
         let cluster = DuplicateCluster(
             kind: .nearDuplicate,
-            members: [raw, jpeg, other],
+            members: [jpeg, other],
             suggestedKeeperIDs: ["/dest/OTHER.JPG"],
             bytesIfPruned: 200
         )
@@ -822,8 +827,40 @@ final class DeduplicateTests: XCTestCase {
         let plan = DeduplicationPlanner.plan(decisions: decisions, clusters: [cluster], configuration: config)
         let paths = Set(plan.pathsToDelete)
         XCTAssertTrue(paths.contains("/dest/IMG.JPG"))
-        XCTAssertTrue(paths.contains("/dest/IMG.CR2"), "Pair partner must be deleted alongside")
+        XCTAssertTrue(paths.contains("/dest/IMG.CR2"), "Singleton RAW partner must be fanned into the plan")
         XCTAssertFalse(paths.contains("/dest/OTHER.JPG"))
+    }
+
+    /// Regression for Finding #1: with `treatRawJpegPairsAsUnit = true`
+    /// and the RAW and JPEG both inside a low/medium-confidence cluster
+    /// (no auto-suggested deletes), marking ONLY the JPEG Delete must
+    /// NOT delete the RAW. Both halves are visually "Keep" in the UI
+    /// before the user's action; pair-fanout silently deleting the
+    /// unmarked partner is the data-loss surface the fix closes.
+    func testPlannerDoesNotFanOutDefaultKeepPartnerWithinSameCluster() {
+        let raw = candidate(path: "/dest/IMG.CR2", pairedPath: "/dest/IMG.JPG")
+        let jpeg = candidate(path: "/dest/IMG.JPG", pairedPath: "/dest/IMG.CR2")
+        let cluster = DuplicateCluster(
+            kind: .nearDuplicate,
+            members: [raw, jpeg],
+            suggestedKeeperIDs: ["/dest/IMG.CR2"],
+            bytesIfPruned: 100
+        )
+        // No annotation → confidence defaults to medium → canAutoSelectDeletes
+        // is false → both members start at defaultKeep. User explicitly
+        // marks only the JPEG Delete.
+        let decisions = DedupeDecisions(byPath: [
+            "/dest/IMG.JPG": .delete,
+        ])
+        let config = DeduplicateConfiguration(destinationPath: "/dest", treatRawJpegPairsAsUnit: true)
+
+        let plan = DeduplicationPlanner.plan(decisions: decisions, clusters: [cluster], configuration: config)
+        let paths = Set(plan.pathsToDelete)
+        XCTAssertFalse(paths.contains("/dest/IMG.CR2"),
+            "Finding #1: defaultKeep RAW partner must NOT be fanned into the plan")
+        // Step 2 rescued the JPEG via Keep-wins, so plan is empty.
+        XCTAssertTrue(paths.isEmpty,
+            "Pair Keep-wins should rescue the marked-Delete half, leaving the cluster intact")
     }
 
     func testPlannerRefusesAllDelete() {

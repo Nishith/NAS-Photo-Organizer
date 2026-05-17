@@ -24,13 +24,7 @@ final class DeduplicationPlannerPropertyTests: XCTestCase {
     /// implicit default-keep in a low/medium-confidence cluster), neither
     /// half is deleted.
     // AGENTS-INVARIANT: 14
-    func testPropertyPairKeepWinsAcrossAllDecisionSources() throws {
-        // Property test currently surfaces the known Finding #1
-        // (DeduplicationPlanner.swift:42-48 — DecisionSource.defaultKeep
-        // returns blocksPairDeletion=false). Removing this skip once the
-        // fix lands is the structural guard that prevents regression.
-        // See prodsec/Chronoframe/TOP_IMPROVEMENTS.md finding #1.
-        throw XCTSkip("Pending Finding #1 fix in DeduplicationPlanner pair-rescue predicate")
+    func testPropertyPairKeepWinsAcrossAllDecisionSources() {
         var prng = SeededPRNG(seed: 0x4B45_4550_5749_4E53)
         for iteration in 0..<Self.iterations {
             let scenario = randomScenario(prng: &prng)
@@ -96,13 +90,7 @@ final class DeduplicationPlannerPropertyTests: XCTestCase {
     /// AGENTS.md: a cluster never becomes fully empty as a result of the plan.
     /// (`DeduplicationPlanner` documents this as step 3: "Per-cluster safety
     /// rail: skip any cluster whose effective decisions are all Delete.")
-    func testPropertyNoClusterIsCompletelyEmptiedByThePlan() throws {
-        // Same root cause as testPropertyPairKeepWinsAcrossAllDecisionSources:
-        // step 3's per-cluster safety rail runs BEFORE step 5's pair-fanout,
-        // so an explicit Delete + defaultKeep partner within one cluster lets
-        // step 5 silently delete the partner and empty the cluster. Fixing
-        // the Keep-wins predicate (Finding #1) fixes this property too.
-        throw XCTSkip("Pending Finding #1 fix — step 5 pair-fanout can violate step 3's safety rail when partner is defaultKeep")
+    func testPropertyNoClusterIsCompletelyEmptiedByThePlan() {
         var prng = SeededPRNG(seed: 0xC0FF_EE5E_C0FF_EE5E)
         for iteration in 0..<Self.iterations {
             let scenario = randomScenario(prng: &prng)

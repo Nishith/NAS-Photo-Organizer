@@ -38,15 +38,6 @@ public enum DeduplicationPlanner {
             case explicit
             case automatic
             case defaultKeep
-
-            var blocksPairDeletion: Bool {
-                switch self {
-                case .explicit, .automatic:
-                    return true
-                case .defaultKeep:
-                    return false
-                }
-            }
         }
         var effective: [String: Effective] = [:]
         for cluster in clusters {
@@ -74,8 +65,17 @@ public enum DeduplicationPlanner {
             }
         }
 
-        // 2. Pair-as-unit conflict resolution: Keep wins. Iterate over a
-        // snapshot of the keys because we mutate the map.
+        // 2. Pair-as-unit conflict resolution: Keep wins regardless of
+        // *why* a member ended up Keep. Whether the Keep is explicit,
+        // automatic (high-confidence keeper), or implicit (low/medium-
+        // confidence cluster with no auto-deletes), pairing it with a
+        // Delete partner flips the Delete back to Keep. This restores
+        // the AGENTS.md safety invariant in the case where a user marks
+        // one half of a pair Delete and the other half is sitting at
+        // default-Keep — the UI shows both as Keep, the user expects
+        // both to survive, and pair-fanout would otherwise silently
+        // delete the unmarked partner. Iterate over a snapshot of the
+        // keys because we mutate the map.
         for path in Array(effective.keys) {
             guard let info = effective[path], let partner = info.member.pairedPath else { continue }
             let kind = pairKind(for: info.member)
@@ -83,13 +83,9 @@ public enum DeduplicationPlanner {
             guard let partnerInfo = effective[partner] else { continue }
             switch (info.decision, partnerInfo.decision) {
             case (.keep, .delete):
-                if info.source.blocksPairDeletion {
-                    effective[partner]?.decision = .keep
-                }
+                effective[partner]?.decision = .keep
             case (.delete, .keep):
-                if partnerInfo.source.blocksPairDeletion {
-                    effective[path]?.decision = .keep
-                }
+                effective[path]?.decision = .keep
             default:
                 break
             }
@@ -127,10 +123,12 @@ public enum DeduplicationPlanner {
                 let kind = pairKind(for: member)
                 if !pairKindEnabled(kind, in: configuration) { continue }
                 // If the partner is a cluster member with effective Keep,
-                // step 2 already neutralised this conflict — but be defensive.
-                if let partnerEffective = effective[partner],
-                   partnerEffective.decision == .keep,
-                   partnerEffective.source.blocksPairDeletion {
+                // step 2 already neutralised this conflict. Defensive
+                // belt-and-braces check that also closes the order-of-
+                // operations gap where step 3's safety rail ran before
+                // step 5's pair fanout and so couldn't catch the
+                // cluster-empty case.
+                if effective[partner]?.decision == .keep {
                     continue
                 }
                 // Explicit per-pair Keep override. Lets the user preserve a
