@@ -776,7 +776,7 @@ public final class OrganizerDatabase {
 
     /// Deletes all rows from `CopyJobs` whose status is `.pending`.
     public func clearPendingJobs() throws {
-        try execute("DELETE FROM CopyJobs WHERE status = 'pending'")
+        try execute("DELETE FROM CopyJobs WHERE status = '\(CopyJobStatus.pending.rawValue)'")
     }
 
     /// Truncates the entire `CopyJobs` table.

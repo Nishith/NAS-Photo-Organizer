@@ -28,7 +28,90 @@ fi
 # OS bridge wrappers, and other code where line coverage encourages shallow
 # instantiation tests. It focuses on deterministic domain algorithms,
 # planning, path building, hashing, indexing, and user-facing formatting.
-MEANINGFUL_REGEX='/(BLAKE2bHasher|CopyPlanBuilder|DryRunPlanner|MediaDiscovery|PlanningPathBuilder|DeduplicationPlanner|PerceptualHash|UserFacingErrorMessage|RunHistoryIndexer|RunConfiguration\+Profiles|TransferExecutor|RevertExecutor|DeduplicateExecutor|ReorganizeExecutor|DedupeFeatureCache|PreviewReviewModels|LibraryHealthScanner|ClusterAnnotator|ClusterConfidenceScorer|DuplicateClusterer|EditVariantDetector|FingerprintIndex|ImportDuplicateChecker|PhotoQualityScorer|SafetyWarningDetector|BackgroundDedupeMonitor|FaceExpressionAnalyzer)\.swift$'
+#
+# Edit MEANINGFUL_BASENAMES (not the regex) to add/remove files. Every
+# basename listed here must resolve to a real .swift file under ui/Sources;
+# the preflight loop below fails the build on phantom entries so the gate
+# can't silently shrink when a file is renamed or removed.
+MEANINGFUL_BASENAMES=(
+    BLAKE2bHasher
+    CopyPlanBuilder
+    DryRunPlanner
+    MediaDiscovery
+    PlanningPathBuilder
+    DeduplicationPlanner
+    PerceptualHash
+    UserFacingErrorMessage
+    RunHistoryIndexer
+    "RunConfiguration+Profiles"
+    TransferExecutor
+    RevertExecutor
+    DeduplicateExecutor
+    ReorganizeExecutor
+    DedupeFeatureCache
+    PreviewReviewModels
+    LibraryHealthScanner
+    ClusterAnnotator
+    ClusterConfidenceScorer
+    DuplicateClusterer
+    FingerprintIndex
+    PhotoQualityScorer
+    SafetyWarningDetector
+    FaceExpressionAnalyzer
+    BookmarkPathResolver
+    FileIdentityHasher
+    FileSystemMonitor
+    EngineDomainModels
+    BundleValidator
+    OrganizerDatabase
+    MediaDateResolver
+    DeduplicatePairDetector
+    DeduplicateScanner
+)
+
+missing_basenames=()
+for basename in "${MEANINGFUL_BASENAMES[@]}"; do
+    if [[ -z "$(find ui/Sources -name "${basename}.swift" -print -quit)" ]]; then
+        missing_basenames+=("$basename")
+    fi
+done
+if (( ${#missing_basenames[@]} > 0 )); then
+    echo "Phantom entries in MEANINGFUL_BASENAMES (no matching .swift under ui/Sources):" >&2
+    for basename in "${missing_basenames[@]}"; do
+        echo "  - ${basename}.swift" >&2
+    done
+    echo "Update the list in $(basename "$0") so the meaningful coverage gate stays load-bearing." >&2
+    exit 2
+fi
+
+escape_regex_basename() {
+    local input="$1"
+    local escaped=""
+    local i ch
+    for (( i=0; i<${#input}; i++ )); do
+        ch="${input:i:1}"
+        case "$ch" in
+            \\|.|\*|\+|\?|\(|\)|\[|\]|\{|\}|\||\^|\$|/)
+                escaped+="\\${ch}"
+                ;;
+            *)
+                escaped+="$ch"
+                ;;
+        esac
+    done
+    printf '%s' "$escaped"
+}
+
+regex_alternation=""
+for basename in "${MEANINGFUL_BASENAMES[@]}"; do
+    escaped="$(escape_regex_basename "$basename")"
+    if [[ -z "$regex_alternation" ]]; then
+        regex_alternation="$escaped"
+    else
+        regex_alternation+="|$escaped"
+    fi
+done
+MEANINGFUL_REGEX="/(${regex_alternation})\\.swift\$"
 
 summary_json="$(
     jq --arg regex "$MEANINGFUL_REGEX" '

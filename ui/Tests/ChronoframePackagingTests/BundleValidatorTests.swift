@@ -486,6 +486,118 @@ private extension SignatureInspection {
     )
 }
 
+extension BundleValidatorTests {
+    func testCLIHelpFlagPrintsUsageAndReturnsZero() {
+        var lines: [String] = []
+        let exit = BundleValidatorCLI.run(
+            arguments: ["--help"],
+            output: { lines.append($0) },
+            runner: .noCommands
+        )
+        XCTAssertEqual(exit, 0)
+        XCTAssertTrue(lines.joined(separator: "\n").contains("Usage: ChronoframePackagingTool"))
+    }
+
+    func testCLIShortHelpFlagPrintsUsage() {
+        var lines: [String] = []
+        let exit = BundleValidatorCLI.run(
+            arguments: ["-h"],
+            output: { lines.append($0) },
+            runner: .noCommands
+        )
+        XCTAssertEqual(exit, 0)
+        XCTAssertTrue(lines.contains(BundleValidatorCLI.helpText))
+    }
+
+    func testCLIRejectsUnknownOption() {
+        var lines: [String] = []
+        let exit = BundleValidatorCLI.run(
+            arguments: ["--no-such-option"],
+            output: { lines.append($0) },
+            runner: .noCommands
+        )
+        XCTAssertEqual(exit, 2)
+        XCTAssertTrue(lines.joined(separator: "\n").contains("Unknown option: --no-such-option"))
+    }
+
+    func testCLIRejectsMissingAppPath() {
+        var lines: [String] = []
+        let exit = BundleValidatorCLI.run(
+            arguments: [],
+            output: { lines.append($0) },
+            runner: .noCommands
+        )
+        XCTAssertEqual(exit, 2)
+        XCTAssertTrue(lines.contains(BundleValidatorCLI.helpText))
+    }
+
+    func testCLIRejectsExtraPositionalArgument() {
+        var lines: [String] = []
+        let exit = BundleValidatorCLI.run(
+            arguments: ["/tmp/one.app", "/tmp/two.app"],
+            output: { lines.append($0) },
+            runner: .noCommands
+        )
+        XCTAssertEqual(exit, 2)
+        XCTAssertTrue(lines.joined(separator: "\n").contains("Unexpected argument: /tmp/two.app"))
+    }
+
+    func testCLIRequireDistributionSigningFlagFailsForAdhocBundle() throws {
+        let appURL = try makeMinimalAppBundle()
+        var lines: [String] = []
+        let exit = BundleValidatorCLI.run(
+            arguments: ["--require-distribution-signing", appURL.path],
+            output: { lines.append($0) },
+            runner: .mock(returnCode: 0)
+        )
+        XCTAssertEqual(exit, 1)
+        let text = lines.joined(separator: "\n")
+        XCTAssertTrue(text.contains("FAIL"))
+    }
+
+    func testCLIHumanReadableOutputIncludesSignatureRowsWhenPresent() throws {
+        let appURL = try makeMinimalAppBundle()
+        var lines: [String] = []
+        let exit = BundleValidatorCLI.run(
+            arguments: [appURL.path],
+            output: { lines.append($0) },
+            runner: .mock(returnCode: 0)
+        )
+        XCTAssertNotEqual(exit, 2)
+        let text = lines.joined(separator: "\n")
+        XCTAssertTrue(text.contains("Bundle validation:"))
+        XCTAssertTrue(text.contains("Identifier:"))
+    }
+
+    func testHumanReadableLinesEmitHardenedRuntimeAndSealedResourcesWhenSignaturePresent() {
+        let signed = BundleValidationResult(
+            bundlePath: "/tmp/Chronoframe.app",
+            bundleIdentifier: "com.nishith.chronoframe",
+            executablePath: "/tmp/Chronoframe.app/Contents/MacOS/Chronoframe",
+            infoPlistPath: "/tmp/Chronoframe.app/Contents/Info.plist",
+            distributionReady: true,
+            errors: [],
+            warnings: [],
+            signature: SignatureInspection(
+                available: true,
+                kind: "developerId",
+                identifier: "com.nishith.chronoframe",
+                teamIdentifier: "TEAM1234",
+                sealedResources: true,
+                hardenedRuntime: true,
+                timestamped: true,
+                authorities: ["Developer ID Application"],
+                output: ""
+            ),
+            gatekeeper: .accepted
+        )
+        let text = BundleValidatorCLI.humanReadableLines(for: signed).joined(separator: "\n")
+        XCTAssertTrue(text.contains("Hardened runtime: yes"))
+        XCTAssertTrue(text.contains("Sealed resources: yes"))
+        XCTAssertTrue(text.contains("Bundle validation: PASS"))
+    }
+}
+
 private extension GatekeeperInspection {
     static let accepted = GatekeeperInspection(status: "accepted", returncode: 0, output: "accepted")
     static let rejected = GatekeeperInspection(status: "rejected", returncode: 1, output: "rejected")
