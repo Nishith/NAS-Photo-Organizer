@@ -119,12 +119,15 @@ public struct RevertExecutionObserver: Sendable {
 
 public enum RevertExecutorError: LocalizedError, Equatable {
     case receiptNotFound(path: String)
+    case receiptUnreadable(path: String, reason: String)
     case invalidReceipt(reason: String)
 
     public var errorDescription: String? {
         switch self {
         case let .receiptNotFound(path):
             return "The selected revert receipt could not be found. It may have been moved or deleted. Receipt: \(path)."
+        case let .receiptUnreadable(path, reason):
+            return "Chronoframe could not open this revert receipt. Check that the file is still available and try again. Receipt: \(path). Details: \(reason)"
         case let .invalidReceipt(reason):
             return "Chronoframe could not read this revert receipt. Choose a different receipt or run a new transfer. Details: \(reason)"
         }
@@ -170,8 +173,9 @@ public struct RevertExecutor: Sendable {
         do {
             data = try Data(contentsOf: url)
         } catch {
-            throw RevertExecutorError.invalidReceipt(
-                reason: "Could not read receipt: \(error.localizedDescription)"
+            throw RevertExecutorError.receiptUnreadable(
+                path: url.path,
+                reason: error.localizedDescription
             )
         }
 

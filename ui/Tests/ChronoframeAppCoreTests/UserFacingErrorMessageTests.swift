@@ -131,6 +131,7 @@ final class UserFacingErrorMessageTests: XCTestCase {
             (OrganizerEngineError.destinationMissing, "Choose a destination folder"),
             (DroppedItemStagerError.noItems, "Drag files or folders from Finder"),
             (RevertExecutorError.receiptNotFound(path: "/tmp/missing.json"), "could not be found"),
+            (RevertExecutorError.receiptUnreadable(path: "/tmp/receipt.json", reason: "permission denied"), "could not open this revert receipt"),
             (ReorganizeExecutorError.destinationNotADirectory(path: "/tmp/file.jpg"), "not a folder"),
             (OrganizerDatabaseError.databaseClosed, "lost access to its transfer queue"),
         ]
