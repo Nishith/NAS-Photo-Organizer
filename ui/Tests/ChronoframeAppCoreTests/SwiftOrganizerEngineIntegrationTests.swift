@@ -83,8 +83,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
             RunConfiguration(
                 mode: .preview,
                 sourcePath: sourceURL.path,
-                destinationPath: destinationURL.path,
-
+                destinationPath: destinationURL.path
             )
         )
         let events = try await Self.collect(stream)
@@ -164,8 +163,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
             RunConfiguration(
                 mode: .preview,
                 sourcePath: sourceURL.path,
-                destinationPath: destinationURL.path,
-
+                destinationPath: destinationURL.path
             )
         )
         let events = try await Self.collect(stream)
@@ -218,8 +216,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
             RunConfiguration(
                 mode: .transfer,
                 sourcePath: sourceURL.path,
-                destinationPath: destinationURL.path,
-
+                destinationPath: destinationURL.path
             )
         )
         let events = try await Self.collect(stream)
@@ -316,8 +313,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
             RunConfiguration(
                 mode: .transfer,
                 sourcePath: sourceURL.path,
-                destinationPath: destinationURL.path,
-
+                destinationPath: destinationURL.path
             )
         )
         let events = try await Self.collect(stream)
