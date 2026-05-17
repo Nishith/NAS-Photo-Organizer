@@ -17,34 +17,38 @@ The Phase 1 review at [TOP_IMPROVEMENTS.md](TOP_IMPROVEMENTS.md) raised 10 findi
 - **Suggested fix:** Re-run the "skip cluster if every member ends up in plan" check AFTER step 5 (or rebuild the safety rail to consider pair-induced deletes), and treat `defaultKeep` as blocking pair deletion per Phase 1 Finding #1.
 - **Status:** Fixed in the same commit as Finding #1. `DecisionSource.blocksPairDeletion` removed; step 2's pair-rescue now flips any Keep↔Delete pair regardless of source; step 5's pair-expansion now short-circuits whenever the partner's effective decision is `.keep`. Both `testPropertyPairKeepWinsAcrossAllDecisionSources` and `testPropertyNoClusterIsCompletelyEmptiedByThePlan` are unskipped and passing. AGENTS.md's Keep-wins invariant clarified to make the broader interpretation explicit.
 
-### NEW2 — `--json` mode interleaves human-language prompts on stdout
+### NEW2 — `--json` mode interleaves human-language prompts on stdout ✅ FIXED
 
 - **Surface:** `ChronoframeCLIKit/CLI.swift:284, 297`; `main.swift:4` (default `output: { print($0) }`)
 - **Failure scenario:** `chronoframe --json --source /A --dest /B` (no `--yes`) emits structured JSON events to stdout AND writes prompts like `"Found N pending copy jobs. Resume them? [Y/n/fresh]"` to the same stdout. A piping consumer (`jq -c .` / Codex / a downstream automation) gets a non-JSON line injected mid-stream and aborts on the parse error. The CLI then blocks on `readLine()` from stdin, hanging the pipeline.
 - **Severity:** P0 because JSON consumers are explicitly supported (per `JSONLineEmitter.eventVersion=1` introduced in commit `7dca67d`), and Codex's environment relies on this surface.
 - **Suggested fix:** When `--json` is set, treat the absence of `--yes` as a usage error (exit 2 with a JSON error event), or emit prompts as `{"type":"prompt", ...}` on stdout and the human-readable variant on stderr.
+- **Status:** Fixed. `transferDecision` now throws `CLIError.usage` immediately when `options.jsonOutput && !options.assumeYes`, before any prompt is written. The error path returns exit code 2 without writing the prompt or blocking on `readLine`. Regression test `testJSONWithoutAssumeYesFailsFastInsteadOfHangingOnAPrompt` asserts the CLI never reads stdin and never emits the "Resume them?" / "Continue?" prompt strings in this mode. Pipeline consumers get a clean diagnosis instead of a corrupted stream + hang. Emitting the error as a JSON event (rather than plain text) is left as NEW12 follow-up.
 
 ---
 
 ## P1 — Reliability / correctness
 
-### NEW3 — `FileSystemMonitor` polling fallback runs simultaneously with FSEvents → every event yielded twice
+### NEW3 — `FileSystemMonitor` polling fallback runs simultaneously with FSEvents → every event yielded twice ✅ FIXED
 
 - **Surface:** `FileSystemMonitor.swift:23-86` — `start()` calls `startPollingFallback()` unconditionally then sets up FSEvents; both stream into the same `AsyncStream.Continuation`. Failure-only fallback was the intent (lines 66-77 `continuation.finish()` on FSEvents failure), but the polling loop was wired before the FSEvents create call regardless of outcome.
 - **Failure scenario:** Any new file in the watched root produces TWO yielded events — one from the FSEvents callback, one from the next poll tick. Consumers that count events (e.g. duplicate-detection feature 10 in AGENTS.md) over-count.
 - **Suggested fix:** Move `startPollingFallback()` into the FSEvents-failure branch only.
+- **Status:** Fixed. `start()` now extracts FSEvents setup into `setupFSEvents()` returning a Bool; the polling fallback only runs when that returns false (or when the new internal `forcePollingOnly` test seam is set). Regression test `testFileSystemMonitorDoesNotDoubleYieldEventsWhenFSEventsIsActive` writes three files and asserts each path emits at most one `isCreated` event.
 
-### NEW4 — `FileSystemMonitor.continuation` mutation is unsynchronized between FSEvents callback thread, `stop()` caller, and polling task
+### NEW4 — `FileSystemMonitor.continuation` mutation is unsynchronized between FSEvents callback thread, `stop()` caller, and polling task ✅ FIXED
 
 - **Surface:** `FileSystemMonitor.swift:30-54` (callback), `:100` (`stop()` sets `continuation = nil`), `:107-119` (polling task reads `self.continuation`)
 - **Failure scenario:** `@unchecked Sendable` (line 6) bypasses the compile-time check. `stop()` called from a UI cancel handler racing the FSEvents `dispatch_async` callback can produce torn pointer reads / use-after-free on the `AsyncStream.Continuation?`.
 - **Suggested fix:** Serialize all `continuation` / `streamRef` / `pollingTask` access on `self.queue` (e.g. `queue.sync { … }` in `stop()`), or convert the type into an actor.
+- **Status:** Fixed. State is now guarded by a dedicated `stateLock: NSLock` via the `withState { … }` helper. The original `queue.sync` approach actually crashed with `__DISPATCH_WAIT_FOR_QUEUE__` SIGTRAP because `onTermination` can fire on the FSEvents dispatch queue itself, and `stop()` calling `queue.sync` from that callback context produced a same-queue deadlock. NSLock side-steps that. Regression test `testFileSystemMonitorSurvivesRepeatedStartStopCycles` runs 5 start/stop cycles to exercise the path.
 
-### NEW5 — `FileSystemMonitor` callback uses `Unmanaged.takeUnretainedValue` — callback can outlive the monitor
+### NEW5 — `FileSystemMonitor` callback uses `Unmanaged.takeUnretainedValue` — callback can outlive the monitor ✅ FIXED
 
 - **Surface:** `FileSystemMonitor.swift:32, 58`
 - **Failure scenario:** `deinit` → `stop()` → `FSEventStreamStop`/`Invalidate`/`Release`. The dispatch queue may still have an enqueued callback work item already dispatched (FSEventStream does not synchronously drain). When that callback fires after `deinit` returns, the unretained `self` pointer is dangling.
 - **Suggested fix:** Use `passRetained`/`takeRetainedValue` paired with a `context.release` callback that releases the unmanaged reference, or `dispatch_sync(self.queue) {}` after `Invalidate` to flush.
+- **Status:** Fixed. `FSEventStreamContext` now installs top-level `fileSystemMonitorRetainCallback` / `fileSystemMonitorReleaseCallback` so the stream holds a +1 retain on `self` for its lifetime. The `takeUnretainedValue` in the FSEvents callback is now safe — the retained reference holds the floor until `FSEventStreamRelease` runs the release callback at `stop()` time. Regression test `testFileSystemMonitorReleasesItselfCleanlyWhenDroppedMidStream` holds a `weak var` and asserts the monitor is deallocated after the stream consumer drops.
 
 ### NEW6 — `RunHistoryView.HistorySection.id = UUID()` regenerates on every render → animation/scroll state resets
 

@@ -277,6 +277,20 @@ public struct ChronoframeCLI {
             return false
         }
 
+        // JSON-output mode must not block on interactive prompts. The
+        // remaining branches in this function would write a human-language
+        // prompt string to `output` (the same stdout channel JSON events
+        // use) and then block on `input()` waiting for a `readLine()`.
+        // A pipeline consumer like Codex or `jq -c .` would receive a
+        // non-JSON line mid-stream (corrupting the parse) and the CLI
+        // would hang indefinitely on stdin. Fail fast with a usage error
+        // when `--json` is set without `--yes`.
+        if options.jsonOutput && !options.assumeYes {
+            throw CLIError.usage(
+                "--json requires --yes; interactive prompts would otherwise corrupt the JSON output stream."
+            )
+        }
+
         if preflight.pendingJobCount > 0 {
             if options.assumeYes {
                 return true

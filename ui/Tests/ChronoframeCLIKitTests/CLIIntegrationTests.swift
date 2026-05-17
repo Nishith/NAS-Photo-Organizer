@@ -277,6 +277,43 @@ final class CLIIntegrationTests: XCTestCase {
         XCTAssertEqual(pendingCount, 1)
     }
 
+    /// Regression for PHASE2_FINDINGS.md NEW2 — when `--json` is set
+    /// without `--yes`, the CLI used to write a human-language prompt
+    /// onto stdout (corrupting any pipeline consumer) and then block
+    /// indefinitely on stdin. The fix turns this into a fast usage
+    /// error (exit 2) before any prompt is written.
+    @MainActor
+    func testJSONWithoutAssumeYesFailsFastInsteadOfHangingOnAPrompt() async throws {
+        let source = try makeDirectory("json-no-yes-source")
+        let destination = try makeDirectory("json-no-yes-dest")
+        try writeFile(source.appendingPathComponent("camera/IMG_20240501_120000.jpg"), contents: "no-yes")
+
+        let recorder = LineRecorder()
+        // `input` must NOT be invoked. If the fix regressed and the CLI
+        // tried to prompt, the test would deadlock — fail it deterministically.
+        let exitCode = await ChronoframeCLI.run(
+            arguments: [
+                "--source", source.path,
+                "--dest", destination.path,
+                "--json",
+                "--workers", "1",
+            ],
+            output: recorder.append,
+            input: {
+                XCTFail("CLI must not read stdin when --json is set without --yes")
+                return nil
+            }
+        )
+        XCTAssertEqual(exitCode, 2, "Usage errors must exit 2, not 0 or 1")
+        let joined = recorder.lines.joined(separator: "\n")
+        XCTAssertTrue(joined.contains("--json"), "Error message should reference --json")
+        XCTAssertTrue(joined.contains("--yes"), "Error message should reference --yes")
+        XCTAssertFalse(joined.contains("Resume them?"),
+            "Stdout must NOT contain a human-language prompt")
+        XCTAssertFalse(joined.contains("Continue?"),
+            "Stdout must NOT contain a human-language prompt")
+    }
+
     private func makeDirectory(_ name: String) throws -> URL {
         let url = temporaryDirectory.appendingPathComponent(name, isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
