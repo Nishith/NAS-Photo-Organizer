@@ -8,6 +8,7 @@ ARCHIVE_PATH="${BUILD_DIR}/${APP_NAME}.xcarchive"
 EXPORT_DIR="${BUILD_DIR}/release"
 APP_DIR="${EXPORT_DIR}/${APP_NAME}.app"
 ZIP_PATH="${BUILD_DIR}/${APP_NAME}-release.zip"
+LOG_PATH="${BUILD_DIR}/archive-xcodebuild.log"
 PROJECT_PATH="${SCRIPT_DIR}/Chronoframe.xcodeproj"
 SCHEME_NAME="Chronoframe"
 PACKAGING_DIR="${SCRIPT_DIR}/Packaging"
@@ -45,6 +46,7 @@ rm -rf "$ARCHIVE_PATH"
 rm -rf "$APP_DIR"
 rm -rf "$DERIVED_DATA_DIR"
 rm -f "$ZIP_PATH"
+: >"$LOG_PATH"
 
 if [ ! -d "$PROJECT_PATH" ]; then
   echo "error: expected Xcode project at $PROJECT_PATH" >&2
@@ -98,7 +100,13 @@ else
   )
 fi
 
-"${XCODEBUILD_ARGS[@]}" archive >/dev/null
+if ! "${XCODEBUILD_ARGS[@]}" archive >"$LOG_PATH" 2>&1; then
+  echo "error: xcodebuild failed while archiving ${APP_NAME}." >&2
+  echo "log: ${LOG_PATH}" >&2
+  echo "---- last 80 xcodebuild log lines ----" >&2
+  tail -n 80 "$LOG_PATH" >&2 || true
+  exit 1
+fi
 
 ARCHIVED_APP_PATH="${ARCHIVE_PATH}/Products/Applications/${APP_NAME}.app"
 if [ ! -d "$ARCHIVED_APP_PATH" ]; then
@@ -156,3 +164,4 @@ echo "✅ Archive complete!"
 echo "➡️  Archive bundle: ${ARCHIVE_PATH}"
 echo "➡️  Staged app: ${APP_DIR}"
 echo "➡️  Zip archive: ${ZIP_PATH}"
+echo "➡️  Xcode archive log: ${LOG_PATH}"

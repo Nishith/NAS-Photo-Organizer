@@ -107,6 +107,22 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Select Swift 6 toolchain
+        run: |
+          swift6_developer_dir=""
+          for xcode in /Applications/Xcode*.app; do
+            swift_binary="$xcode/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift"
+            if [ -x "$swift_binary" ] && "$swift_binary" -version | grep -Eq 'Swift version 6\.'; then
+              swift6_developer_dir="$xcode/Contents/Developer"
+            fi
+          done
+          if [ -z "$swift6_developer_dir" ]; then
+            echo "::error title=Swift 6 toolchain not found::No installed Xcode app provides Swift 6."
+            ls -1 /Applications/Xcode*.app || true
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$swift6_developer_dir" >> "$GITHUB_ENV"
+          "$swift6_developer_dir/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift" -version
       - name: Build Chronoframe app
         run: |
           xcodebuild \
@@ -124,6 +140,22 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Select Swift 6 toolchain
+        run: |
+          swift6_developer_dir=""
+          for xcode in /Applications/Xcode*.app; do
+            swift_binary="$xcode/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift"
+            if [ -x "$swift_binary" ] && "$swift_binary" -version | grep -Eq 'Swift version 6\.'; then
+              swift6_developer_dir="$xcode/Contents/Developer"
+            fi
+          done
+          if [ -z "$swift6_developer_dir" ]; then
+            echo "::error title=Swift 6 toolchain not found::No installed Xcode app provides Swift 6."
+            ls -1 /Applications/Xcode*.app || true
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$swift6_developer_dir" >> "$GITHUB_ENV"
+          "$swift6_developer_dir/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift" -version
       - name: Run Chronoframe UI tests
         run: |
           xcodebuild \
@@ -141,6 +173,22 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Select Swift 6 toolchain
+        run: |
+          swift6_developer_dir=""
+          for xcode in /Applications/Xcode*.app; do
+            swift_binary="$xcode/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift"
+            if [ -x "$swift_binary" ] && "$swift_binary" -version | grep -Eq 'Swift version 6\.'; then
+              swift6_developer_dir="$xcode/Contents/Developer"
+            fi
+          done
+          if [ -z "$swift6_developer_dir" ]; then
+            echo "::error title=Swift 6 toolchain not found::No installed Xcode app provides Swift 6."
+            ls -1 /Applications/Xcode*.app || true
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$swift6_developer_dir" >> "$GITHUB_ENV"
+          "$swift6_developer_dir/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift" -version
       - name: Build release archive
         run: |
           cd ui
