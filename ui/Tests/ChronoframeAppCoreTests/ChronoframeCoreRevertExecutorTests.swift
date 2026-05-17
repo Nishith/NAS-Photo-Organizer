@@ -85,16 +85,17 @@ final class ChronoframeCoreRevertExecutorTests: XCTestCase {
         }
     }
 
-    func testLoadReceiptThrowsInvalidReceiptWhenPathIsDirectory() throws {
+    func testLoadReceiptThrowsUnreadableReceiptWhenPathIsDirectory() throws {
         let directoryURL = temporaryDirectoryURL.appendingPathComponent("receipt-directory", isDirectory: true)
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
 
         XCTAssertThrowsError(try RevertExecutor().loadReceipt(at: directoryURL)) { error in
-            guard case let RevertExecutorError.invalidReceipt(reason) = error else {
-                XCTFail("Expected invalidReceipt, got \(error)")
+            guard case let RevertExecutorError.receiptUnreadable(path, reason) = error else {
+                XCTFail("Expected receiptUnreadable, got \(error)")
                 return
             }
-            XCTAssertTrue(reason.contains("Could not read receipt"))
+            XCTAssertEqual(path, directoryURL.path)
+            XCTAssertFalse(reason.isEmpty)
         }
     }
 
@@ -106,6 +107,10 @@ final class ChronoframeCoreRevertExecutorTests: XCTestCase {
         XCTAssertTrue(
             RevertExecutorError.invalidReceipt(reason: "bad json").errorDescription?
                 .contains("could not read this revert receipt") == true
+        )
+        XCTAssertTrue(
+            RevertExecutorError.receiptUnreadable(path: "/receipt.json", reason: "permission denied").errorDescription?
+                .contains("could not open this revert receipt") == true
         )
     }
 

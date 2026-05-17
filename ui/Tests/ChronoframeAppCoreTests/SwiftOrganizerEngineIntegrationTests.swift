@@ -564,6 +564,52 @@ extension SwiftOrganizerEngineIntegrationTests {
 
         XCTAssertThrowsError(try engine.revert(receiptURL: missingReceipt, destinationRoot: destinationURL.path))
     }
+
+    @MainActor
+    func testRevertQuarantinesMalformedReceipt() throws {
+        let destinationURL = temporaryDirectoryURL.appendingPathComponent("dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+        let receiptURL = destinationURL.appendingPathComponent("audit_receipt_bad.json")
+        try Data("{not valid json".utf8).write(to: receiptURL)
+
+        let engine = SwiftOrganizerEngine(
+            profilesRepository: TestProfilesRepository(profiles: [], profilesFileURL: temporaryDirectoryURL.appendingPathComponent("profiles.yaml"))
+        )
+
+        XCTAssertThrowsError(try engine.revert(receiptURL: receiptURL, destinationRoot: destinationURL.path)) { error in
+            guard case RevertExecutorError.invalidReceipt = error else {
+                XCTFail("Expected invalidReceipt, got \(error)")
+                return
+            }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: receiptURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: destinationURL.appendingPathComponent("audit_receipt_bad.corrupt").path
+        ))
+    }
+
+    @MainActor
+    func testRevertDoesNotQuarantineUnreadableReceipt() throws {
+        let destinationURL = temporaryDirectoryURL.appendingPathComponent("dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+        let receiptURL = destinationURL.appendingPathComponent("audit_receipt_directory.json", isDirectory: true)
+        try FileManager.default.createDirectory(at: receiptURL, withIntermediateDirectories: true)
+
+        let engine = SwiftOrganizerEngine(
+            profilesRepository: TestProfilesRepository(profiles: [], profilesFileURL: temporaryDirectoryURL.appendingPathComponent("profiles.yaml"))
+        )
+
+        XCTAssertThrowsError(try engine.revert(receiptURL: receiptURL, destinationRoot: destinationURL.path)) { error in
+            guard case RevertExecutorError.receiptUnreadable = error else {
+                XCTFail("Expected receiptUnreadable, got \(error)")
+                return
+            }
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: receiptURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: destinationURL.appendingPathComponent("audit_receipt_directory.corrupt").path
+        ))
+    }
 }
 
 private final class TestProfilesRepository: ProfilesRepositorying {
