@@ -256,6 +256,119 @@ public struct TransferExecutor: Sendable {
         return cleanedCount
     }
 
+    /// Phase 1 finding #3: detect audit receipts left in PENDING state
+    /// by a crashed run, read the associated `.transfers.tmp` spool,
+    /// and rewrite the receipt as an ABORTED receipt that includes the
+    /// transfers actually completed before the interruption. The user
+    /// then sees the recovered run in Run History and can revert it
+    /// like any other run.
+    ///
+    /// Best-effort: any failure leaves the PENDING receipt + spool in
+    /// place for the next attempt. Returns the number of receipts
+    /// successfully consolidated.
+    @discardableResult
+    public func recoverInterruptedRuns(at destinationRoot: URL) -> Int {
+        let logsDirectory = destinationRoot.appendingPathComponent(
+            EngineArtifactLayout.chronoframeDefault.logsDirectoryName,
+            isDirectory: true
+        )
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: logsDirectory,
+            includingPropertiesForKeys: nil
+        ) else {
+            return 0
+        }
+
+        var recovered = 0
+        for receiptURL in files where receiptURL.lastPathComponent.hasPrefix(
+            EngineArtifactLayout.chronoframeDefault.auditReceiptPrefix
+        ) && receiptURL.pathExtension == "json" {
+            guard let data = try? Data(contentsOf: receiptURL),
+                  let raw = try? JSONSerialization.jsonObject(with: data),
+                  let receipt = raw as? [String: Any],
+                  (receipt["status"] as? String) == "PENDING"
+            else {
+                continue
+            }
+            let stem = receiptURL.deletingPathExtension().lastPathComponent
+            let spoolURL = logsDirectory.appendingPathComponent("\(stem).transfers.tmp")
+            // Try to consolidate; on failure, leave the receipt for the
+            // next pass instead of removing it.
+            if consolidatePendingReceipt(
+                receiptURL: receiptURL,
+                spoolURL: spoolURL,
+                header: receipt
+            ) {
+                recovered += 1
+            }
+        }
+        return recovered
+    }
+
+    private func consolidatePendingReceipt(
+        receiptURL: URL,
+        spoolURL: URL,
+        header: [String: Any]
+    ) -> Bool {
+        // Read the spool's contents as a UTF-8 substring. The spool is
+        // already JSON-array-element-shaped (each entry is a `{...}`
+        // object indented by four spaces and comma-separated), exactly
+        // matching what `pipeTransferSpool` writes into the receipt's
+        // "transfers" array during normal `finish()`.
+        let spoolBody: String
+        if FileManager.default.fileExists(atPath: spoolURL.path),
+           let data = try? Data(contentsOf: spoolURL),
+           let body = String(data: data, encoding: .utf8) {
+            spoolBody = body
+        } else {
+            spoolBody = ""
+        }
+
+        // Compose a final receipt that reflects "this run was
+        // interrupted; here is what completed before". Status is
+        // ABORTED rather than COMPLETED so callers can distinguish.
+        var out = "{\n"
+        out += "  \"schemaVersion\" : 2,\n"
+        if let runID = header["runID"] as? String {
+            out += "  \"runID\" : \(jsonStringEscape(runID)),\n"
+        }
+        out += "  \"operation\" : \"organize\",\n"
+        out += "  \"status\" : \"ABORTED\",\n"
+        if let timestamp = header["timestamp"] as? String {
+            out += "  \"timestamp\" : \(jsonStringEscape(timestamp)),\n"
+        }
+        if let startedAt = header["startedAt"] as? String {
+            out += "  \"startedAt\" : \(jsonStringEscape(startedAt)),\n"
+        }
+        out += "  \"recoveredAt\" : \(jsonStringEscape(ISO8601DateFormatter().string(from: Date()))),\n"
+        out += "  \"abortReason\" : \"Chronoframe was interrupted before this run finished. The transfers below completed and are revertable.\",\n"
+        out += "  \"transfers\" : [\n"
+        out += spoolBody
+        out += "\n  ]\n}\n"
+
+        let tempURL = receiptURL.appendingPathExtension("recovery.tmp")
+        do {
+            try out.data(using: .utf8)?.write(to: tempURL, options: [.atomic])
+            try FileManager.default.removeItem(at: receiptURL)
+            try FileManager.default.moveItem(at: tempURL, to: receiptURL)
+            try? FileManager.default.removeItem(at: spoolURL)
+            return true
+        } catch {
+            try? FileManager.default.removeItem(at: tempURL)
+            return false
+        }
+    }
+
+    private func jsonStringEscape(_ value: String) -> String {
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: value,
+            options: [.fragmentsAllowed]
+        ) else {
+            return "\"\""
+        }
+        return String(data: data, encoding: .utf8) ?? "\"\""
+    }
+
     public func execute(
         queuedJobs: [QueuedCopyJob],
         database: OrganizerDatabase,
@@ -948,6 +1061,33 @@ private final class StreamingAuditReceiptWriter {
 
         fileManager.createFile(atPath: transferSpoolURL.path, contents: Data())
         self.spoolHandle = try FileHandle(forWritingTo: transferSpoolURL)
+
+        // Phase 1 finding #3: write a PENDING receipt header BEFORE
+        // any transfer happens. If the run dies (SIGKILL, power loss,
+        // app crash) before `finish()` runs, the next engine startup
+        // sees this PENDING receipt + its spool and consolidates them
+        // into a recoverable ABORTED receipt — so files left in the
+        // destination after a crashed run are revertable from Run
+        // History instead of becoming orphaned forever.
+        try writePendingHeader(in: logsDirectoryURL)
+    }
+
+    private func writePendingHeader(in logsDirectoryURL: URL) throws {
+        let pendingJSON: [String: Any] = [
+            "schemaVersion": 2,
+            "runID": runID.uuidString,
+            "operation": "organize",
+            "status": "PENDING",
+            "timestamp": timestampString,
+            "startedAt": timestampString,
+            "transferSpool": transferSpoolURL.lastPathComponent,
+            "transfers": [],
+        ]
+        let data = try JSONSerialization.data(
+            withJSONObject: pendingJSON,
+            options: [.prettyPrinted, .sortedKeys]
+        )
+        try data.write(to: finalReceiptURL, options: [.atomic])
     }
 
     deinit {
@@ -1009,6 +1149,15 @@ private final class StreamingAuditReceiptWriter {
             try receiptHandle.write(contentsOf: Data("\n  ]\n}\n".utf8))
             try receiptHandle.close()
 
+            // Phase 1 finding #3: a PENDING receipt header was written
+            // at init() so a crashed run is recoverable. At finalize
+            // time, replace that PENDING receipt with the final one
+            // atomically. `moveItem` refuses to overwrite, so remove
+            // the existing receipt first; the temp+rename below makes
+            // the swap appear atomic to readers.
+            if fileManager.fileExists(atPath: finalReceiptURL.path) {
+                try fileManager.removeItem(at: finalReceiptURL)
+            }
             try fileManager.moveItem(at: temporaryReceiptURL, to: finalReceiptURL)
             // Phase 1 finding: fsync the receipt's parent directory so
             // the new entry survives power loss. F_FULLFSYNC on the
@@ -1038,7 +1187,15 @@ private final class StreamingAuditReceiptWriter {
 
         try? spoolHandle?.close()
         spoolHandle = nil
-        try? fileManager.removeItem(at: transferSpoolURL)
+        // Phase 1 finding #3: do NOT delete the PENDING receipt or its
+        // spool here. `deinit` runs at the end of a normal Swift
+        // scope as well as on engine crash; in the crash case the
+        // PENDING receipt + spool are exactly what the next startup
+        // needs to recover the run. The only thing that should be
+        // cleaned up here is the per-finalize temp receipt
+        // (`.json.tmp`) that the `finish()` path may have left mid-
+        // write — that's an internal artifact of finalization and
+        // not the durable record of the run.
         try? fileManager.removeItem(at: finalReceiptURL.appendingPathExtension("tmp"))
     }
 

@@ -49,7 +49,7 @@ Recent in-flight commit `4ee99dd` ("Avoid quarantining unreadable revert receipt
 
 ---
 
-### 3. Crashed organize run produces no audit receipt → copied files become unrevertable via the app
+### 3. Crashed organize run produces no audit receipt → copied files become unrevertable via the app ✅ FIXED
 
 - **Category:** reliability / data integrity
 - **Priority:** **P0**

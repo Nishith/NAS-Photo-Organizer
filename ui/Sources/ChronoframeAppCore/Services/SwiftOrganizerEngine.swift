@@ -499,6 +499,24 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                         )
                     }
 
+                    // Phase 1 finding #3: consolidate any PENDING
+                    // receipts left by a crashed previous run, so the
+                    // files it copied before the crash become
+                    // revertable from Run History instead of being
+                    // orphaned in the destination.
+                    let recovered = transferExecutor.recoverInterruptedRuns(at: destinationURL)
+                    if recovered > 0 {
+                        runLogger.warn("Recovered \(recovered) interrupted run receipt(s) from prior session(s)")
+                        continuation.yield(
+                            .issue(
+                                RunIssue(
+                                    severity: .info,
+                                    message: "Recovered \(recovered) interrupted run\(recovered == 1 ? "" : "s") from a previous session. They appear in Run History as ABORTED and can be reverted."
+                                )
+                            )
+                        )
+                    }
+
                     continuation.yield(.startup)
 
                     if resumePendingJobs {
