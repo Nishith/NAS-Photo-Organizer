@@ -4,6 +4,7 @@ import ChronoframeCore
 import Foundation
 import Combine
 
+@MainActor
 public final class PreferencesStore: ObservableObject {
     public static let minimumLogCapacity = 250
     public static let maximumLogCapacity = 10_000

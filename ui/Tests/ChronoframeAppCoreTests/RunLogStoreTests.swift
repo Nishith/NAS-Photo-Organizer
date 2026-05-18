@@ -1,6 +1,7 @@
 import XCTest
 @testable import ChronoframeAppCore
 
+@MainActor
 final class RunLogStoreTests: XCTestCase {
     func testRingBufferDropsOldestLines() {
         let store = RunLogStore(capacity: PreferencesStore.minimumLogCapacity)

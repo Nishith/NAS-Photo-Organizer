@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @testable import ChronoframeAppCore
 
+@MainActor
 final class SetupStoreTests: XCTestCase {
     func testUpdateProfilesSortsAndClearsMissingSelection() {
         let store = SetupStore(

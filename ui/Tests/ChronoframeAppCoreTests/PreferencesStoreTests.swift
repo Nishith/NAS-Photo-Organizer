@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @testable import ChronoframeAppCore
 
+@MainActor
 final class PreferencesStoreTests: XCTestCase {
     private var suiteName: String!
     private var defaults: UserDefaults!

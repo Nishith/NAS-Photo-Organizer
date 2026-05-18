@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @testable import ChronoframeAppCore
 
+@MainActor
 final class HistoryStoreTests: XCTestCase {
     func testRefreshUsesIndexerResults() {
         let entries = [

@@ -160,6 +160,7 @@ private enum SafetyPerformancePreset: String, CaseIterable, Identifiable {
         }
     }
 
+    @MainActor
     func apply(to preferencesStore: PreferencesStore) {
         switch self {
         case .safest:

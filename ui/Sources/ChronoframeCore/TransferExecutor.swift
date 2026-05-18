@@ -602,11 +602,16 @@ public struct TransferExecutor: Sendable {
         try checkDiskSpace(sourcePath: sourcePath, destinationDirectoryPath: destinationDirectoryURL.path)
 
         let finalDestinationPath = try collisionResolvedPath(for: requestedDestinationPath)
-        let temporaryDestinationPath = finalDestinationPath + Self.orphanedTemporarySuffix
-
-        if FileManager.default.fileExists(atPath: temporaryDestinationPath) {
-            try? FileManager.default.removeItem(atPath: temporaryDestinationPath)
-        }
+        // Phase 1 finding (P1, ranked-out from Top 10): use the same
+        // UUID-suffixed temp path the parallel `prepareAtomicCopy` path
+        // already uses, instead of the deterministic
+        // `finalDestinationPath + ".cf-tmp"`. With the old shape, two
+        // Chronoframe processes targeting the same destination could
+        // resolve the same `finalDestinationPath` and then race on the
+        // shared `<dest>.cf-tmp` filename — process B would
+        // unconditionally `removeItem` process A's in-progress write
+        // mid-stream.
+        let temporaryDestinationPath = try uniqueTemporaryCopyPath(for: finalDestinationPath)
 
         do {
             try copyFileContents(from: sourcePath, to: temporaryDestinationPath)
@@ -775,6 +780,29 @@ public struct TransferExecutor: Sendable {
         guard result == 0 else {
             throw currentPOSIXError()
         }
+        // Phase 1 finding (P1, ranked-out from Top 10): fsync the parent
+        // directory after the rename so the directory entry survives
+        // power loss between rename and inode-cache flush. Without this,
+        // a clean COMPLETED run could lose its destination file on
+        // sudden reboot even though the file's own contents were
+        // F_FULLFSYNC'd before rename. APFS is durable-enough in
+        // practice that this rarely bites, but the safety contract
+        // requires the parent-dir fsync to actually make a completed
+        // run crash-recoverable.
+        fsyncParentDirectory(of: destinationPath)
+    }
+
+    /// Best-effort fsync of the directory containing `childPath`. Logs
+    /// nothing on failure: if the directory itself disappeared or was
+    /// unmounted between the rename and this fsync, the rename has
+    /// already returned success and the caller's contract is unaffected.
+    private func fsyncParentDirectory(of childPath: String) {
+        let parentPath = (childPath as NSString).deletingLastPathComponent
+        guard !parentPath.isEmpty else { return }
+        let descriptor = open(parentPath, O_RDONLY | O_CLOEXEC)
+        guard descriptor >= 0 else { return }
+        defer { close(descriptor) }
+        _ = fcntl(descriptor, F_FULLFSYNC)
     }
 
     private func shouldRetry(after error: Error) -> Bool {
@@ -982,6 +1010,18 @@ private final class StreamingAuditReceiptWriter {
             try receiptHandle.close()
 
             try fileManager.moveItem(at: temporaryReceiptURL, to: finalReceiptURL)
+            // Phase 1 finding: fsync the receipt's parent directory so
+            // the new entry survives power loss. F_FULLFSYNC on the
+            // file alone doesn't durably persist the directory's inode
+            // pointing at it.
+            let parentPath = (finalReceiptURL.path as NSString).deletingLastPathComponent
+            if !parentPath.isEmpty {
+                let descriptor = open(parentPath, O_RDONLY | O_CLOEXEC)
+                if descriptor >= 0 {
+                    _ = fcntl(descriptor, F_FULLFSYNC)
+                    close(descriptor)
+                }
+            }
             try? fileManager.removeItem(at: transferSpoolURL)
             finished = true
         } catch {

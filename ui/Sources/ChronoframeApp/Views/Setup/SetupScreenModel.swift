@@ -96,6 +96,7 @@ struct SetupScreenContext {
 struct SetupScreenModel {
     let context: SetupScreenContext
 
+    @MainActor
     init(
         setupStore: SetupStore,
         preferencesStore: PreferencesStore,

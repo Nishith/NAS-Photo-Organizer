@@ -4,6 +4,7 @@ import ChronoframeCore
 import Foundation
 import Combine
 
+@MainActor
 public final class SetupStore: ObservableObject {
     @Published public var sourcePath: String
     @Published public var destinationPath: String

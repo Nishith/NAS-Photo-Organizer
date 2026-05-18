@@ -18,6 +18,7 @@ public struct RunLogEntry: Identifiable, Equatable {
     }
 }
 
+@MainActor
 public final class RunLogStore: ObservableObject {
     public static let minimumBufferedBytes = 256 * 1024
     public static let estimatedBytesPerConfiguredLine = 512

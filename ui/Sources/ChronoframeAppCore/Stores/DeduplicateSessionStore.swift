@@ -149,17 +149,31 @@ public final class DeduplicateSessionStore: ObservableObject {
                 } catch {
                     await MainActor.run { [weak self] in
                         guard let self, self.currentRunEpoch == epoch else { return }
-                        self.status = .failed(error.localizedDescription)
-                        self.lastErrorMessage = error.localizedDescription
-                        self.closeSecurityScope()
+                        self.applyStreamError(error)
                     }
                 }
             }
         } catch {
-            status = .failed(error.localizedDescription)
-            lastErrorMessage = error.localizedDescription
-            closeSecurityScope()
+            applyStreamError(error)
         }
+    }
+
+    /// Phase 1 finding: `.failed` was assigned for ANY thrown error,
+    /// including `CancellationError`. The latter has a useless
+    /// `localizedDescription` ("The operation couldn't be completed.
+    /// (Swift.CancellationError error 1.)") that consumers were
+    /// rendering as a user-visible failure. Treat cancellation as a
+    /// clean state transition instead.
+    private func applyStreamError(_ error: Error) {
+        if error is CancellationError || Task.isCancelled {
+            status = .idle
+            lastErrorMessage = nil
+            closeSecurityScope()
+            return
+        }
+        status = .failed(error.localizedDescription)
+        lastErrorMessage = error.localizedDescription
+        closeSecurityScope()
     }
 
     public var hasPausedReview: Bool {
@@ -259,16 +273,12 @@ public final class DeduplicateSessionStore: ObservableObject {
                 } catch {
                     await MainActor.run { [weak self] in
                         guard let self, self.currentRunEpoch == epoch else { return }
-                        self.status = .failed(error.localizedDescription)
-                        self.lastErrorMessage = error.localizedDescription
-                        self.closeSecurityScope()
+                        self.applyStreamError(error)
                     }
                 }
             }
         } catch {
-            status = .failed(error.localizedDescription)
-            lastErrorMessage = error.localizedDescription
-            closeSecurityScope()
+            applyStreamError(error)
         }
     }
 
@@ -301,16 +311,12 @@ public final class DeduplicateSessionStore: ObservableObject {
                 } catch {
                     await MainActor.run { [weak self] in
                         guard let self, self.currentRunEpoch == epoch else { return }
-                        self.status = .failed(error.localizedDescription)
-                        self.lastErrorMessage = error.localizedDescription
-                        self.closeSecurityScope()
+                        self.applyStreamError(error)
                     }
                 }
             }
         } catch {
-            status = .failed(error.localizedDescription)
-            lastErrorMessage = error.localizedDescription
-            closeSecurityScope()
+            applyStreamError(error)
         }
     }
 

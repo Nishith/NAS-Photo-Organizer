@@ -12,6 +12,10 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
     private let reorganizeExecutor: ReorganizeExecutor
     private var activeTask: Task<Void, Never>?
     private var activeRunID: UUID?
+    /// Per-run cancellation flag the executors poll inside synchronous
+    /// hot paths. Held here so `cancelCurrentRun()` can flip it
+    /// alongside `activeTask.cancel()`.
+    private var activeCancellationRef: TaskCancellationCheck?
 
     public init(
         profilesRepository: any ProfilesRepositorying = ProfilesRepository(),
@@ -76,19 +80,34 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
 
     public func cancelCurrentRun() {
         activeTask?.cancel()
+        // Phase 1 finding: also flip the per-run cancellation flag the
+        // executors poll. `activeTask.cancel()` only marks the Swift
+        // Task; long-running synchronous bodies inside the executor
+        // poll `isCancelledRef.isCancelled` and would otherwise not
+        // observe the cancel until they reach a Task-cancellation
+        // checkpoint (which doesn't exist on the SQLite / file-walk
+        // paths).
+        activeCancellationRef?.cancel()
+        activeCancellationRef = nil
         activeTask = nil
         activeRunID = nil
     }
 
-    private func setActiveTask(_ task: Task<Void, Never>, id: UUID) {
+    private func setActiveTask(
+        _ task: Task<Void, Never>,
+        id: UUID,
+        cancellationRef: TaskCancellationCheck? = nil
+    ) {
         activeRunID = id
         activeTask = task
+        activeCancellationRef = cancellationRef
     }
 
     private func clearActiveTask(id: UUID) {
         guard activeRunID == id else { return }
         activeTask = nil
         activeRunID = nil
+        activeCancellationRef = nil
     }
 
     // MARK: - Revert
@@ -205,7 +224,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                 continuation.finish()
             }
 
-            self.setActiveTask(task, id: runID)
+            self.setActiveTask(task, id: runID, cancellationRef: isCancelledRef)
             continuation.onTermination = { @Sendable _ in
                 isCancelledRef.cancel()
                 task.cancel()
@@ -331,7 +350,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                 continuation.finish()
             }
 
-            self.setActiveTask(task, id: runID)
+            self.setActiveTask(task, id: runID, cancellationRef: isCancelledRef)
             continuation.onTermination = { @Sendable _ in
                 isCancelledRef.cancel()
                 task.cancel()
@@ -427,7 +446,7 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                 }
             }
 
-            self.setActiveTask(task, id: runID)
+            self.setActiveTask(task, id: runID, cancellationRef: isCancelledRef)
             continuation.onTermination = { @Sendable _ in
                 isCancelledRef.cancel()
                 task.cancel()
@@ -511,7 +530,10 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                 }
             }
 
-            self.setActiveTask(task, id: runID)
+            // This transfer/resume stream relies on `Task.isCancelled`
+            // exclusively (no per-run polling flag plumbed through),
+            // so we don't have an `isCancelledRef` to register here.
+            self.setActiveTask(task, id: runID, cancellationRef: nil)
             continuation.onTermination = { @Sendable _ in
                 task.cancel()
             }

@@ -4,14 +4,23 @@ on:
   push:
     branches: ["main"]
   pull_request:
+    # Phase 1 finding (P1): restore CodeQL analysis on PRs so the gate
+    # catches new sinks before merge instead of post-merge. The path
+    # filter limits cost to PRs that actually touch analyzed code —
+    # docs-only PRs, workflow tweaks, and shell-script changes don't
+    # trigger the (slow) Swift CodeQL build.
     branches: ["main"]
+    paths:
+      - "ui/Sources/**"
+      - "ui/Package.swift"
+      - "ui/Chronoframe.xcodeproj/**"
+      - ".github/workflows/codeql.yml"
   schedule:
     - cron: "0 0 * * 1"
 
 jobs:
   analyze-swift:
     name: Analyze (Swift)
-    if: github.event_name != 'pull_request'
     runs-on: macos-14
     timeout-minutes: 90
     permissions:

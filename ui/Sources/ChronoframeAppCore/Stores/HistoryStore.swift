@@ -4,6 +4,7 @@ import ChronoframeCore
 import Foundation
 import Combine
 
+@MainActor
 public final class HistoryStore: ObservableObject {
     @Published public private(set) var entries: [RunHistoryEntry]
     @Published public private(set) var transferredSources: [TransferredSourceRecord]

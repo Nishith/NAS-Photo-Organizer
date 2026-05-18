@@ -316,6 +316,15 @@ public struct ReorganizeExecutor: Sendable {
 
         var abortReason: String?
 
+        // Phase 1 finding: previously the per-move loop rewrote the
+        // entire receipt JSON after EVERY move (O(N²) bytes written
+        // for N moves). Cap the rewrite cadence at every K moves —
+        // on crash, up to K-1 completed moves may be missing from
+        // the on-disk receipt (the files are at their new locations;
+        // revert simply leaves them alone). Always flush after the
+        // loop and on cancellation so the final state is durable.
+        let receiptCheckpointInterval = 25
+
         for (index, move) in executableMoves.enumerated() {
             if isCancelled() {
                 abortReason = "Reorganize was cancelled before all planned moves completed."
@@ -326,6 +335,16 @@ public struct ReorganizeExecutor: Sendable {
             let destinationURL = URL(fileURLWithPath: move.destinationPath)
 
             do {
+                // Phase 1 finding: re-hash the source immediately
+                // before moving so a swap-out between plan-time
+                // hashing and move-time can't poison the receipt's
+                // recorded `hash` with stale content. The previous
+                // code wrote the plan-time hash into the receipt
+                // unconditionally; revert would then refuse all such
+                // entries as "modified since" with no clear signal.
+                if let liveHash = try? hasher.hashIdentity(at: sourceURL) {
+                    receiptItems[index].hash = liveHash.rawValue
+                }
                 try fileManager.createDirectory(
                     at: destinationURL.deletingLastPathComponent(),
                     withIntermediateDirectories: true
@@ -333,16 +352,19 @@ public struct ReorganizeExecutor: Sendable {
                 try fileManager.moveItem(at: sourceURL, to: destinationURL)
                 movedCount += 1
                 receiptItems[index].completed = true
-                try Self.writeReorganizeReceipt(
-                    to: receiptURL,
-                    runID: runID,
-                    status: "PENDING",
-                    startedAt: startedAt,
-                    finishedAt: nil,
-                    destinationRoot: plan.destinationRoot,
-                    items: receiptItems,
-                    abortReason: nil
-                )
+                let shouldCheckpoint = (movedCount % receiptCheckpointInterval == 0)
+                if shouldCheckpoint {
+                    try Self.writeReorganizeReceipt(
+                        to: receiptURL,
+                        runID: runID,
+                        status: "PENDING",
+                        startedAt: startedAt,
+                        finishedAt: nil,
+                        destinationRoot: plan.destinationRoot,
+                        items: receiptItems,
+                        abortReason: nil
+                    )
+                }
 
                 // Best-effort empty-directory cleanup.
                 let parentURL = sourceURL.deletingLastPathComponent()

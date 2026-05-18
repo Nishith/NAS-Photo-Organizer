@@ -182,20 +182,20 @@ Recent in-flight commit `4ee99dd` ("Avoid quarantining unreadable revert receipt
 
 Below the cut but still worth tracking — full evidence in the agent reports.
 
-- **P1** `TransferExecutor.safeCopyAtomicOnce` uses a non-unique deterministic `.tmp` filename ([TransferExecutor.swift:605-609](ui/Sources/ChronoframeCore/TransferExecutor.swift:605)). Two-process race deletes each other's in-progress writes. Fix: use the same UUID-suffixed scheme as `prepareAtomicCopy`.
-- **P1** No `F_FULLFSYNC` on the parent directory after `renamex_np` or after the final receipt rename. Durability hole on power loss between rename and inode-cache flush.
-- **P1** `ReorganizeExecutor` rewrites the entire receipt JSON after every move (O(N²) bytes for N moves), and doesn't fsync the receipt. Fix: append-only log + single consolidated final write.
-- **P1** `ReorganizeExecutor` doesn't re-hash sources at move time — uses plan-time hashes. TOCTOU window between plan and move.
-- **P1** `CodeQL` workflow skips PRs entirely (`.github/workflows/codeql.yml:14`). The gate runs post-merge only. Either restore PR analysis with a path-filter, or accept the post-merge-only posture explicitly.
-- **P1** `ui/archive.sh` passes notarization password as argv to `xcrun notarytool` (visible via `ps -ef`). Use a keychain profile (`--keychain-profile`) instead.
-- **P1** `${TMPDIR:-/tmp}` in `archive.sh`/`build.sh`/`archive-mas.sh` resolves to empty if `TMPDIR=""` (set but empty), producing paths rooted at `/`. Defensive: `[ -n "${TMPDIR:-}" ] || TMPDIR=/tmp` before use.
-- **P1** `RunSessionStore.cancelCurrentRun` does not clear `prompt`, leaving a stale confirm dialog over a cancelled run.
-- **P1** `RunSessionStore.consume(.complete)` calls `historyStore.refresh` synchronously on MainActor — blocks UI on destinations with many receipts.
-- **P1** `SwiftOrganizerEngine.cancelCurrentRun` cancels the Swift Task but does not flip the in-engine `TaskCancellationCheck` flag — long-running synchronous bodies (revert/reorganize/transfer) don't see the cancel until they reach the next yield point.
-- **P1** `DeduplicateSessionStore` surfaces `CancellationError` as `.failed(error.localizedDescription)` — produces "The operation couldn't be completed. (Swift.CancellationError error 1.)" text in the UI.
-- **P1** `PreviewReviewStore.load` short-circuits on `artifactPath == self.artifactPath`, ignoring `isStale`. Rebuilds after edits silently no-op.
-- **P1** `PreferencesStore`, `SetupStore`, `RunLogStore`, `HistoryStore` are not `@MainActor` while the rest of the stores are. Will become Swift 6 errors; today it's a silent main-thread invariant hazard.
-- **P1** `DroppedItemStager.stage` doc-comment promises "symlink directory" but only writes `.chronoframe_drop_manifest.json`. Either the implementation is incomplete or the doc lies.
+- ✅ **P1 FIXED** `TransferExecutor.safeCopyAtomicOnce` uses a non-unique deterministic `.tmp` filename. Fix: switched to the same `uniqueTemporaryCopyPath` scheme used by the parallel `prepareAtomicCopy` path.
+- ✅ **P1 FIXED** No `F_FULLFSYNC` on the parent directory after `renamex_np` or after the final receipt rename. Fix: `renameFile` now opens the parent directory with `O_RDONLY|O_CLOEXEC` and `F_FULLFSYNC`'s it; the streaming audit-receipt finalize fsyncs the receipt's parent too.
+- ✅ **P1 FIXED** `ReorganizeExecutor` rewrites the entire receipt JSON after every move (O(N²) bytes). Fix: receipt is now checkpointed every 25 successful moves and at the loop end. On crash, up to 24 completed moves may be missing from the on-disk receipt; revert correctly leaves those files at the destination (treats them as not-yet-completed → no-op).
+- ✅ **P1 FIXED** `ReorganizeExecutor` doesn't re-hash sources at move time. Fix: re-hash the source inside the per-move loop before `moveItem` and write the live hash into the receipt.
+- ✅ **P1 FIXED** `CodeQL` workflow skips PRs entirely. Fix: restored PR analysis with a paths filter so docs/CI-only PRs don't trigger the slow Swift CodeQL build, but any change to `ui/Sources/**`, `ui/Package.swift`, `ui/Chronoframe.xcodeproj/**`, or the workflow itself does.
+- ✅ **P1 FIXED** `ui/archive.sh` passes notarization password as argv. Fix: `CHRONOFRAME_NOTARY_PROFILE` keychain profile is now required; the `--apple-id`/`--password`/`--team-id` fallback was removed.
+- ✅ **P1 FIXED** `${TMPDIR:-/tmp}` resolved to empty when `TMPDIR=""`. Fix: explicit `[ -z "${TMPDIR:-}" ] && TMPDIR=/tmp` guard plus trailing-slash normalization in `archive.sh`, `archive-mas.sh`, and `build.sh`.
+- ✅ **P1 FIXED** `RunSessionStore.cancelCurrentRun` did not clear `prompt`. Fix: clears `prompt` and resets `.preflighting` status to `.idle`.
+- **P1** `RunSessionStore.consume(.complete)` calls `historyStore.refresh` synchronously on MainActor — blocks UI on destinations with many receipts. (Not yet addressed in this pass.)
+- ✅ **P1 FIXED** `SwiftOrganizerEngine.cancelCurrentRun` did not flip `TaskCancellationCheck`. Fix: engine now holds the per-run cancellation ref alongside `activeTask` and flips it inside `cancelCurrentRun()`.
+- ✅ **P1 FIXED** `DeduplicateSessionStore` surfaced `CancellationError` as `.failed`. Fix: new `applyStreamError` helper sets `.idle` for `CancellationError` / `Task.isCancelled` and only reports `.failed` for real errors.
+- ✅ **P1 FIXED** `PreviewReviewStore.load` ignored `isStale`. Fix: the artifact-path short-circuit now also requires `!isStale`.
+- ✅ **P1 FIXED** `PreferencesStore`, `SetupStore`, `RunLogStore`, `HistoryStore` are now `@MainActor`. Tests that construct them are tagged accordingly.
+- ✅ **P1 FIXED via NEW20** `DroppedItemStager.stage` doc-comment updated to describe the manifest-based implementation (the doc was the bug, not the code).
 - **P2** `ClusterConfidenceScorer` can flip to `.high` via a single tight Vision edge for a 3-member transitively-clustered group, auto-deleting members whose similarity wasn't measured.
 - **P2** `isAutomaticCommitEligible` ignores `configuration.autoAcceptHighConfidence`. The toggle has no effect.
 - **P2** `DedupeDecisions.init` accepts `hardDelete:` parameter and unconditionally writes `false`. Defense-in-depth, but misleading API.

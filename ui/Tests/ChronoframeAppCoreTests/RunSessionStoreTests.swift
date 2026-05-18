@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @testable import ChronoframeAppCore
 
+@MainActor
 final class RunSessionStoreTests: XCTestCase {
     private var historyStore: HistoryStore!
     private var logStore: RunLogStore!

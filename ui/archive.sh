@@ -14,7 +14,11 @@ SCHEME_NAME="Chronoframe"
 PACKAGING_DIR="${SCRIPT_DIR}/Packaging"
 DERIVED_DATA_DIR="${BUILD_DIR}/ArchiveDerivedData"
 ENTITLEMENTS_PATH="${PACKAGING_DIR}/Chronoframe.entitlements"
-TMP_DIR="${TMPDIR:-/tmp}/chronoframe-ui-archive"
+# Phase 1 finding (P1): `${TMPDIR:-/tmp}` only fills in when TMPDIR
+# is unset; an EMPTY TMPDIR yields `/chronoframe-ui-archive` rooted
+# at /, polluting shared machines. Normalize first.
+if [ -z "${TMPDIR:-}" ]; then TMPDIR=/tmp; fi
+TMP_DIR="${TMPDIR%/}/chronoframe-ui-archive"
 MODULE_CACHE_DIR="${TMP_DIR}/module-cache"
 SWIFT_HOME_DIR="${TMP_DIR}/home"
 SWIFT_CACHE_DIR="${SWIFT_HOME_DIR}/Library/Caches"
@@ -138,16 +142,18 @@ ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$ZIP_PATH"
 
 if [ "$LOCAL_ARCHIVE" -eq 0 ]; then
   echo "📨 Submitting zip for notarization..."
-  NOTARY_ARGS=(xcrun notarytool submit "$ZIP_PATH" --wait)
-  if [ -n "${CHRONOFRAME_NOTARY_PROFILE:-}" ]; then
-    NOTARY_ARGS+=(--keychain-profile "$CHRONOFRAME_NOTARY_PROFILE")
-  else
-    NOTARY_ARGS+=(
-      --apple-id "$CHRONOFRAME_NOTARY_APPLE_ID"
-      --password "$CHRONOFRAME_NOTARY_PASSWORD"
-      --team-id "$CHRONOFRAME_DEVELOPMENT_TEAM"
-    )
+  # Phase 1 finding (P1): require a keychain profile so the
+  # app-specific password is never passed on argv. The previous
+  # fallback exposed `--password "$CHRONOFRAME_NOTARY_PASSWORD"`
+  # to `ps -ef` for the duration of the notarytool submit (and to
+  # `bash -x` traces if any future caller enabled them).
+  if [ -z "${CHRONOFRAME_NOTARY_PROFILE:-}" ]; then
+    echo "❌ CHRONOFRAME_NOTARY_PROFILE is required for release notarization." >&2
+    echo "   Store the credential with: xcrun notarytool store-credentials --apple-id ... --team-id ..." >&2
+    echo "   and set CHRONOFRAME_NOTARY_PROFILE to the profile name." >&2
+    exit 1
   fi
+  NOTARY_ARGS=(xcrun notarytool submit "$ZIP_PATH" --wait --keychain-profile "$CHRONOFRAME_NOTARY_PROFILE")
   "${NOTARY_ARGS[@]}"
 
   echo "📎 Stapling notarization ticket..."
