@@ -2,8 +2,16 @@ import Foundation
 import XCTest
 @testable import ChronoframeAppCore
 
-@MainActor
 final class PreferencesStoreTests: XCTestCase {
+    // Class is intentionally nonisolated so the nonisolated XCTestCase
+    // setUp/tearDown overrides compile under Swift 6 strict concurrency
+    // (calling `super.setUp()` from a @MainActor subclass triggers
+    // "sending main actor-isolated value of type XCTestCase to
+    // nonisolated context"). Test methods that touch the @MainActor
+    // PreferencesStore are individually marked `@MainActor` instead.
+    // `nonisolated(unsafe)` is safe because XCTest invokes setUp,
+    // tearDown, and each test method serially on the main thread, so
+    // there's no concurrent access in practice.
     private nonisolated(unsafe) var suiteName: String!
     private nonisolated(unsafe) var defaults: UserDefaults!
 
@@ -21,6 +29,7 @@ final class PreferencesStoreTests: XCTestCase {
         try await super.tearDown()
     }
 
+    @MainActor
     func testPersistsScalarPreferencesAcrossReinit() {
         let store = PreferencesStore(defaults: defaults)
         store.workerCount = 12
@@ -42,6 +51,7 @@ final class PreferencesStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.lastSelectedProfileName, "travel")
     }
 
+    @MainActor
     func testLogBufferCapacityClampsToConfiguredBounds() {
         let store = PreferencesStore(defaults: defaults)
 
@@ -52,6 +62,7 @@ final class PreferencesStoreTests: XCTestCase {
         XCTAssertEqual(store.logBufferCapacity, PreferencesStore.maximumLogCapacity)
     }
 
+    @MainActor
     func testBookmarkRoundTripAndRemoval() {
         let store = PreferencesStore(defaults: defaults)
         let bookmark = FolderBookmark(
@@ -69,6 +80,7 @@ final class PreferencesStoreTests: XCTestCase {
 
     // MARK: - Schema migration framework
 
+    @MainActor
     func testInitOnFreshDefaultsStampsCurrentSchemaVersion() {
         XCTAssertEqual(PreferencesStore.storedSchemaVersion(in: defaults), 0)
         _ = PreferencesStore(defaults: defaults)
@@ -78,6 +90,7 @@ final class PreferencesStoreTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testRunPendingMigrationsIsIdempotentOnAlreadyCurrentDefaults() {
         // First init writes the version.
         _ = PreferencesStore(defaults: defaults)
@@ -89,6 +102,7 @@ final class PreferencesStoreTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testLegacyDefaultsWithoutVersionAreMigratedWithoutLosingValues() {
         // Simulate a pre-versioning install: stored values exist but the
         // schema-version key is absent. Construction must seed the
