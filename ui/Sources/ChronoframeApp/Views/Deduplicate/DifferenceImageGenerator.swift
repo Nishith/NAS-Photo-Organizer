@@ -6,19 +6,28 @@ enum DifferenceImageGenerator {
     /// Asynchronous entry point. Runs the Core Image pipeline on a
     /// detached background task so multi-megapixel inputs don't block
     /// the main thread while the spinner is supposed to be visible.
+    ///
+    /// Returns the CGImage (which is Sendable, unlike NSImage) so the
+    /// pipeline can cross the actor boundary under Swift 6 strict
+    /// concurrency. Callers wrap it as `NSImage(cgImage:size:)` on
+    /// the main actor.
     static func generate(
         leftURL: URL,
         rightURL: URL,
         boostFactor: Double = 3.0
     ) async -> NSImage? {
-        await Task.detached(priority: .userInitiated) {
+        let cgImage = await Task.detached(priority: .userInitiated) {
             generateBlocking(leftURL: leftURL, rightURL: rightURL, boostFactor: boostFactor)
         }.value
+        guard let cgImage else { return nil }
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
     /// Synchronous body — package-internal for direct testing without a
     /// concurrency layer. Production code should call `generate(...)`.
-    static func generateBlocking(leftURL: URL, rightURL: URL, boostFactor: Double = 3.0) -> NSImage? {
+    /// Returns a `CGImage` rather than `NSImage` so the result type
+    /// remains Sendable across actor hops.
+    static func generateBlocking(leftURL: URL, rightURL: URL, boostFactor: Double = 3.0) -> CGImage? {
         guard let leftCI = CIImage(contentsOf: leftURL),
               let rightCI = CIImage(contentsOf: rightURL) else {
             return nil
@@ -46,8 +55,6 @@ enum DifferenceImageGenerator {
 
         let context = CIContext(options: [.useSoftwareRenderer: false])
         let renderExtent = boosted.extent
-        guard let cgImage = context.createCGImage(boosted, from: renderExtent) else { return nil }
-
-        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        return context.createCGImage(boosted, from: renderExtent)
     }
 }

@@ -2,29 +2,35 @@ import Foundation
 import XCTest
 @testable import ChronoframeAppCore
 
-@MainActor
 final class RunSessionStoreTests: XCTestCase {
-    private var historyStore: HistoryStore!
-    private var logStore: RunLogStore!
-    private var tempDestinationURL: URL!
+    // `nonisolated(unsafe)` lets the test's storage be observed from
+    // both nonisolated setUp/tearDown and the @MainActor test bodies.
+    // XCTest invokes these methods serially on the main thread, so
+    // there's no concurrent access in practice.
+    private nonisolated(unsafe) var historyStore: HistoryStore!
+    private nonisolated(unsafe) var logStore: RunLogStore!
+    private nonisolated(unsafe) var tempDestinationURL: URL!
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
-        historyStore = HistoryStore()
-        logStore = RunLogStore(capacity: 500)
+    // Use the async `setUp()` / `tearDown()` overrides rather than
+    // `setUpWithError() throws` so the body has an async context that
+    // can call the @MainActor-isolated initializers.
+    override func setUp() async throws {
+        try await super.setUp()
+        historyStore = await HistoryStore()
+        logStore = await RunLogStore(capacity: 500)
         tempDestinationURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("RunSessionStoreTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDestinationURL, withIntermediateDirectories: true)
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         if let tempDestinationURL {
             try? FileManager.default.removeItem(at: tempDestinationURL)
         }
         tempDestinationURL = nil
         historyStore = nil
         logStore = nil
-        try super.tearDownWithError()
+        try await super.tearDown()
     }
 
     @MainActor

@@ -341,10 +341,14 @@ private struct ComparisonUnavailableView: View {
 /// Asynchronous image loader for the comparison overlays. `NSImage(contentsOfFile:)`
 /// is blocking and can take hundreds of milliseconds to seconds for
 /// multi-megapixel RAW/HEIC inputs; running it inside a MainActor-isolated
-/// `.task { … }` would freeze the UI. Hop to a detached background task
-/// and return the result back to the main actor.
+/// `.task { … }` would freeze the UI. Read the file bytes off the main
+/// thread (Data is Sendable), then hand them to `NSImage(data:)` back
+/// on the main actor — keeps the heavy I/O off the main thread without
+/// dragging non-Sendable `NSImage` across an actor boundary.
 private func loadImage(at path: String) async -> NSImage? {
-    await Task.detached(priority: .userInitiated) {
-        NSImage(contentsOfFile: path)
+    let data = await Task.detached(priority: .userInitiated) {
+        try? Data(contentsOf: URL(fileURLWithPath: path))
     }.value
+    guard let data else { return nil }
+    return NSImage(data: data)
 }

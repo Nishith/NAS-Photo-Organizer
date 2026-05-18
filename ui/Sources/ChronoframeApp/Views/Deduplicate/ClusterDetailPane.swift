@@ -577,6 +577,7 @@ private struct DeduplicatePhotoKeyNavigationView: NSViewRepresentable {
         coordinator.removeMonitor()
     }
 
+    @MainActor
     final class Coordinator {
         weak var hostView: NSView?
         var moveToPrevious: () -> Void
@@ -588,14 +589,29 @@ private struct DeduplicatePhotoKeyNavigationView: NSViewRepresentable {
             self.moveToNext = moveToNext
         }
 
-        deinit {
-            removeMonitor()
-        }
+        // No deinit cleanup — `dismantleNSView` (which is @MainActor)
+        // calls `removeMonitor()` when SwiftUI tears down the
+        // representable, so by the time the Coordinator deallocates
+        // the monitor handle is already nil. Adding a nonisolated
+        // deinit body would require unsafe access to the
+        // MainActor-isolated `monitor` property.
 
         func installMonitor() {
             guard monitor == nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                self?.handle(event) ?? event
+            // The local-event-monitor handler runs on the main thread
+            // per AppKit's contract, but the SDK doesn't type the
+            // closure as @MainActor. Extract Sendable values
+            // (`keyCode`, `modifierFlags`) from the event in the
+            // nonisolated closure body and hand them to a MainActor
+            // handler — the NSEvent itself isn't Sendable so it
+            // can't cross the assumeIsolated boundary.
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                let keyCode = event.keyCode
+                let modifiers = event.modifierFlags
+                let consume = MainActor.assumeIsolated {
+                    self.handleKey(keyCode: keyCode, modifiers: modifiers)
+                }
+                return consume ? nil : event
             }
         }
 
@@ -606,34 +622,39 @@ private struct DeduplicatePhotoKeyNavigationView: NSViewRepresentable {
             }
         }
 
-        private func handle(_ event: NSEvent) -> NSEvent? {
-            guard hostView != nil else { return event }
-            let modifiers = event.modifierFlags
+        /// Returns `true` if the key event should be consumed by the
+        /// cluster navigation, `false` if the caller should let AppKit
+        /// continue to dispatch the event.
+        private func handleKey(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
+            guard hostView != nil else { return false }
+            let mods = modifiers
                 .intersection(.deviceIndependentFlagsMask)
                 .subtracting(.numericPad)
-            guard modifiers.isEmpty else { return event }
+            guard mods.isEmpty else { return false }
 
             // Skip when a text-input responder owns focus. The monitor
             // is process-local, so without this check the cluster
             // arrow-navigation shortcut would eat arrow keys app-wide,
             // including inside any text field on screen (the field
             // editor for an NSTextField is an `NSText`, and an
-            // SwiftUI TextField wraps that).
-            if let firstResponder = event.window?.firstResponder,
+            // SwiftUI TextField wraps that). NSApp.keyWindow's
+            // firstResponder is what the system actually consults for
+            // event dispatch.
+            if let firstResponder = NSApp.keyWindow?.firstResponder,
                firstResponder is NSText
             {
-                return event
+                return false
             }
 
-            switch event.keyCode {
+            switch keyCode {
             case 123:
                 moveToPrevious()
-                return nil
+                return true
             case 124:
                 moveToNext()
-                return nil
+                return true
             default:
-                return event
+                return false
             }
         }
     }
