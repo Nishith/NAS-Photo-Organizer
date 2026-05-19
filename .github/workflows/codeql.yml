@@ -24,6 +24,7 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 90
     permissions:
+      actions: read
       contents: read
       security-events: write
     steps:
