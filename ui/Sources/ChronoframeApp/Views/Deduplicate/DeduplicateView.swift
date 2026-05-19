@@ -976,9 +976,8 @@ private struct DeduplicateRunHistoryRow: View {
 
     private var folderLabel: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "folder")
-                .foregroundStyle(DesignTokens.ColorSystem.accentAction)
-                .frame(width: 18)
+            RecentFolderMosaic(folderPath: record.folderPath)
+                .frame(width: 64, height: 44)
             VStack(alignment: .leading, spacing: 3) {
                 Text(URL(fileURLWithPath: record.folderPath).lastPathComponent)
                     .font(.subheadline.weight(.semibold))
@@ -1028,5 +1027,107 @@ private struct DeduplicateRunHistoryRow: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+/// A tiny 2x2 mosaic of the first four media files (alphabetically) in a
+/// folder, rendered via QuickLook. Falls back to a folder glyph if the
+/// directory is unreadable or contains no media. Each row owns its own
+/// thumbnail load — these are short-lived, lightweight calls and there
+/// are at most 5 history rows on screen.
+private struct RecentFolderMosaic: View {
+    let folderPath: String
+
+    @State private var thumbnails: [NSImage] = []
+    @State private var didAttemptLoad = false
+
+    nonisolated private static let mediaExtensions: Set<String> = [
+        "jpg", "jpeg", "heic", "heif", "png", "tif", "tiff", "gif",
+        "raw", "cr2", "cr3", "nef", "arw", "dng", "orf", "rw2", "raf",
+        "mov", "mp4", "m4v", "avi", "mts", "mkv"
+    ]
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(DesignTokens.ColorSystem.imageStage)
+
+            if thumbnails.isEmpty {
+                Image(systemName: "folder")
+                    .foregroundStyle(DesignTokens.ColorSystem.accentAction)
+                    .font(.system(size: 18, weight: .regular))
+            } else {
+                mosaic
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .strokeBorder(DesignTokens.ColorSystem.photoEdgeHighlight, lineWidth: 0.5)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .task(id: folderPath) {
+            guard !didAttemptLoad else { return }
+            didAttemptLoad = true
+            await loadThumbnails()
+        }
+    }
+
+    private var mosaic: some View {
+        GeometryReader { geo in
+            let count = thumbnails.count
+            let columns = count >= 2 ? 2 : 1
+            let rows = count >= 3 ? 2 : 1
+            let cellW = geo.size.width / CGFloat(columns)
+            let cellH = geo.size.height / CGFloat(rows)
+            VStack(spacing: 0) {
+                ForEach(0..<rows, id: \.self) { r in
+                    HStack(spacing: 0) {
+                        ForEach(0..<columns, id: \.self) { c in
+                            let index = r * columns + c
+                            if index < thumbnails.count {
+                                Image(nsImage: thumbnails[index])
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: cellW, height: cellH)
+                                    .clipped()
+                            } else {
+                                Rectangle()
+                                    .fill(DesignTokens.ColorSystem.imageStage)
+                                    .frame(width: cellW, height: cellH)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func loadThumbnails() async {
+        let urls = await Self.firstMediaURLs(in: folderPath, limit: 4)
+        guard !urls.isEmpty else { return }
+        let target = CGSize(width: 64, height: 64)
+        var loaded: [NSImage] = []
+        for url in urls {
+            if let cg = await ThumbnailRenderer.cgImage(for: url, size: target, scale: 2) {
+                loaded.append(NSImage(cgImage: cg, size: NSSize(width: 32, height: 32)))
+            }
+        }
+        await MainActor.run { self.thumbnails = loaded }
+    }
+
+    private static func firstMediaURLs(in folderPath: String, limit: Int) async -> [URL] {
+        await Task.detached(priority: .utility) { () -> [URL] in
+            let dir = URL(fileURLWithPath: folderPath)
+            let fm = FileManager.default
+            guard let entries = try? fm.contentsOfDirectory(
+                at: dir,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+            ) else { return [] }
+            let sorted = entries
+                .filter { mediaExtensions.contains($0.pathExtension.lowercased()) }
+                .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            return Array(sorted.prefix(limit))
+        }.value
     }
 }
