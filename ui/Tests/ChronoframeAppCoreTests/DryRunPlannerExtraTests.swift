@@ -109,7 +109,7 @@ final class DryRunPlannerExtraTests: XCTestCase {
         XCTAssertEqual(result.counts.newCount, 2)
         XCTAssertEqual(result.transfers.count, 2)
         XCTAssertTrue(events.snapshot.contains { event in
-            if case let .phaseProgress(phase, completed, total, _, _) = event {
+            if case let .phaseProgress(phase, completed, total, _, _, _) = event {
                 return phase == .sourceHashing && completed == 2 && total == 2
             }
             return false

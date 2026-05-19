@@ -357,7 +357,7 @@ final class RunSessionStoreTests: XCTestCase {
 
         // Simulate copy phase in progress before cancellation.
         engine.pendingContinuation?.yield(.phaseStarted(phase: .copy, total: 100))
-        engine.pendingContinuation?.yield(.phaseProgress(phase: .copy, completed: 30, total: 100, bytesCopied: 30_000, bytesTotal: 100_000))
+        engine.pendingContinuation?.yield(.phaseProgress(phase: .copy, completed: 30, total: 100, bytesCopied: 30_000, bytesTotal: 100_000, currentFilePath: "/tmp/source/photo30.jpg"))
         let progressSet = await waitForCondition { store.progress > 0 }
         XCTAssertTrue(progressSet)
         XCTAssertEqual(store.currentTaskTitle, "Copying files... 30 of 100 files…")
@@ -661,7 +661,7 @@ final class RunSessionStoreTests: XCTestCase {
         let continuationReady = await waitForCondition { engine.pendingContinuation != nil }
         XCTAssertTrue(continuationReady)
         engine.pendingContinuation?.yield(.phaseStarted(phase: .sourceHashing, total: 100))
-        engine.pendingContinuation?.yield(.phaseProgress(phase: .sourceHashing, completed: 42, total: 100, bytesCopied: nil, bytesTotal: nil))
+        engine.pendingContinuation?.yield(.phaseProgress(phase: .sourceHashing, completed: 42, total: 100, bytesCopied: nil, bytesTotal: nil, currentFilePath: nil))
         let updated = await waitForCondition { store.currentTaskTitle.contains("42 of 100 files") }
         XCTAssertTrue(updated)
 
@@ -686,7 +686,7 @@ final class RunSessionStoreTests: XCTestCase {
         let continuationReady = await waitForCondition { engine.pendingContinuation != nil }
         XCTAssertTrue(continuationReady)
         engine.pendingContinuation?.yield(.phaseStarted(phase: .sourceHashing, total: nil))
-        engine.pendingContinuation?.yield(.phaseProgress(phase: .sourceHashing, completed: 42, total: 0, bytesCopied: nil, bytesTotal: nil))
+        engine.pendingContinuation?.yield(.phaseProgress(phase: .sourceHashing, completed: 42, total: 0, bytesCopied: nil, bytesTotal: nil, currentFilePath: nil))
         let updated = await waitForCondition { store.currentTaskTitle.contains("42 files") }
         XCTAssertTrue(updated)
 

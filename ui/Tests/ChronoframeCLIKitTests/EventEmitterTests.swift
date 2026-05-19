@@ -10,7 +10,8 @@ final class EventEmitterTests: XCTestCase {
                 completed: 2,
                 total: 5,
                 bytesCopied: 128,
-                bytesTotal: 512
+                bytesTotal: 512,
+                currentFilePath: nil
             )
         )
 
@@ -33,7 +34,7 @@ final class EventEmitterTests: XCTestCase {
         let events: [RunEvent] = [
             .startup,
             .phaseStarted(phase: .discovery, total: 10),
-            .phaseProgress(phase: .copy, completed: 1, total: 1, bytesCopied: 0, bytesTotal: 0),
+            .phaseProgress(phase: .copy, completed: 1, total: 1, bytesCopied: 0, bytesTotal: 0, currentFilePath: nil),
             .copyPlanReady(count: 5),
             .issue(RunIssue(severity: .warning, message: "test")),
         ]

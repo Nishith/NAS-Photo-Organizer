@@ -415,7 +415,7 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
                 return "complete:\(summary.status.rawValue)"
             case let .issue(issue):
                 return "issue:\(issue.message)"
-            case let .phaseProgress(phase, completed, total, _, _):
+            case let .phaseProgress(phase, completed, total, _, _, _):
                 return "phaseProgress:\(phase.rawValue):\(completed)/\(total)"
             case let .prompt(message):
                 return "prompt:\(message)"
@@ -471,7 +471,7 @@ extension SwiftOrganizerEngineIntegrationTests {
             switch event {
             case .startup: sawStartup = true
             case .phaseStarted(let phase, _) where phase == .revert: sawPhaseStarted = true
-            case .phaseProgress(let phase, _, _, _, _) where phase == .revert: sawPhaseProgress = true
+            case .phaseProgress(let phase, _, _, _, _, _) where phase == .revert: sawPhaseProgress = true
             case .phaseCompleted(let phase, _) where phase == .revert: sawPhaseCompleted = true
             case let .complete(s): summary = s
             default: break
@@ -512,7 +512,7 @@ extension SwiftOrganizerEngineIntegrationTests {
         for try await event in stream {
             switch event {
             case let .copyPlanReady(count): planReadyCount = count
-            case .phaseProgress(let phase, _, _, _, _) where phase == .reorganize: phaseProgressCount += 1
+            case .phaseProgress(let phase, _, _, _, _, _) where phase == .reorganize: phaseProgressCount += 1
             case let .complete(s): summary = s
             default: break
             }

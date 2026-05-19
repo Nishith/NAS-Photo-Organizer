@@ -340,7 +340,7 @@ final class ChronoframeCoreDryRunPlannerParityTests: XCTestCase {
                 workerCount: 1,
                 isCancelled: { cancellation.isCancelled },
                 onEvent: { event in
-                    if case let .phaseProgress(phase, completed, _, _, _) = event,
+                    if case let .phaseProgress(phase, completed, _, _, _, _) = event,
                        phase == .sourceHashing,
                        completed >= 100 {
                         cancellation.cancel()
@@ -681,7 +681,7 @@ private final class SourceHashCheckpointProbe: @unchecked Sendable {
     }
 
     func observe(_ event: RunEvent) {
-        guard case let .phaseProgress(phase, completed, _, _, _) = event,
+        guard case let .phaseProgress(phase, completed, _, _, _, _) = event,
               phase == .sourceHashing,
               completed >= triggerCompletedCount else {
             return
@@ -727,7 +727,7 @@ private final class HashProgressTotalsProbe: @unchecked Sendable {
     }
 
     func observe(_ event: RunEvent) {
-        guard case let .phaseProgress(phase, _, total, _, _) = event else {
+        guard case let .phaseProgress(phase, _, total, _, _, _) = event else {
             return
         }
 

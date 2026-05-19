@@ -22,6 +22,11 @@ public final class RunSessionStore: ObservableObject {
     @Published public private(set) var lastPreflight: RunPreflight?
     @Published public private(set) var lastErrorMessage: String?
     @Published public private(set) var latestPreviewReviewPath: String?
+    /// Source URL of the file currently being copied, surfaced by the
+    /// transfer phase. UI uses it to render a live QuickLook thumbnail in
+    /// the Now-Copying card. `nil` outside of the copy phase or when the
+    /// engine has not yet reported a file (e.g. between phases).
+    @Published public private(set) var currentFileURL: URL?
 
     private let engine: any OrganizerEngine
     private let logStore: RunLogStore
@@ -214,7 +219,8 @@ public final class RunSessionStore: ObservableObject {
                                 completed: completed,
                                 total: total,
                                 bytesCopied: nil,
-                                bytesTotal: nil
+                                bytesTotal: nil,
+                                currentFilePath: nil
                             ))
                         }
                     },
@@ -345,6 +351,7 @@ public final class RunSessionStore: ObservableObject {
         lastPreflight = nil
         lastErrorMessage = nil
         latestPreviewReviewPath = nil
+        currentFileURL = nil
         logStore.clear()
         copySpeedLastSampleDate = Date()
         copySpeedLastBytes = 0
@@ -430,7 +437,14 @@ public final class RunSessionStore: ObservableObject {
                 copySpeedLastSampleDate = Date()
             }
 
-        case let .phaseProgress(phase, completed, total, bytesCopied, bytesTotal):
+        case let .phaseProgress(phase, completed, total, bytesCopied, bytesTotal, currentFilePath):
+            if phase == .copy {
+                if let path = currentFilePath, !path.isEmpty {
+                    currentFileURL = URL(fileURLWithPath: path)
+                }
+            } else {
+                currentFileURL = nil
+            }
             if total > 0 {
                 progress = Double(completed) / Double(total)
                 if phase == .copy {
@@ -497,6 +511,7 @@ public final class RunSessionStore: ObservableObject {
             case .copy:
                 metrics.copiedCount = result.copiedCount ?? metrics.copiedCount
                 metrics.failedCount = result.failedCount ?? metrics.failedCount
+                currentFileURL = nil
                 logStore.append("Copy complete: \(result.copiedCount ?? 0) succeeded, \(result.failedCount ?? 0) failed.")
             case .sourceHashing:
                 // The planner carries the final discovered count in the sourceHashing

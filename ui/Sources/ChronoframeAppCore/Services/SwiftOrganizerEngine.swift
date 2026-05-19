@@ -161,7 +161,8 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                                 completed: completed,
                                 total: total,
                                 bytesCopied: nil,
-                                bytesTotal: nil
+                                bytesTotal: nil,
+                                currentFilePath: nil
                             )
                         )
                     },
@@ -289,7 +290,8 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                                 completed: completed,
                                 total: total,
                                 bytesCopied: nil,
-                                bytesTotal: nil
+                                bytesTotal: nil,
+                                currentFilePath: nil
                             )
                         )
                     },
@@ -644,14 +646,15 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                 onPhaseStarted: { total, _ in
                     continuation.yield(.phaseStarted(phase: .copy, total: total))
                 },
-                onPhaseProgress: { completed, total, bytesCopied, bytesTotal in
+                onPhaseProgress: { completed, total, bytesCopied, bytesTotal, currentSourcePath in
                     continuation.yield(
                         .phaseProgress(
                             phase: .copy,
                             completed: completed,
                             total: total,
                             bytesCopied: Int(bytesCopied),
-                            bytesTotal: Int(bytesTotal)
+                            bytesTotal: Int(bytesTotal),
+                            currentFilePath: currentSourcePath
                         )
                     )
                 },
@@ -756,14 +759,15 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                 onPhaseStarted: { total, _ in
                     continuation.yield(.phaseStarted(phase: .copy, total: total))
                 },
-                onPhaseProgress: { completed, total, bytesCopied, bytesTotal in
+                onPhaseProgress: { completed, total, bytesCopied, bytesTotal, currentSourcePath in
                     continuation.yield(
                         .phaseProgress(
                             phase: .copy,
                             completed: completed,
                             total: total,
                             bytesCopied: Int(bytesCopied),
-                            bytesTotal: Int(bytesTotal)
+                            bytesTotal: Int(bytesTotal),
+                            currentFilePath: currentSourcePath
                         )
                     )
                 },

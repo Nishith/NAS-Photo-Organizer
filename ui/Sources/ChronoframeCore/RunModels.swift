@@ -410,7 +410,7 @@ public struct RunSummary: Equatable, Codable, Sendable {
 public enum RunEvent: Sendable {
     case startup
     case phaseStarted(phase: RunPhase, total: Int?)
-    case phaseProgress(phase: RunPhase, completed: Int, total: Int, bytesCopied: Int?, bytesTotal: Int?)
+    case phaseProgress(phase: RunPhase, completed: Int, total: Int, bytesCopied: Int?, bytesTotal: Int?, currentFilePath: String?)
     case phaseCompleted(phase: RunPhase, result: RunPhaseResult)
     case copyPlanReady(count: Int)
     case dateHistogram(buckets: [DateHistogramBucket])

@@ -4,12 +4,12 @@ import os
 
 public struct TransferExecutionObserver: Sendable {
     public var onPhaseStarted: @Sendable (_ total: Int, _ bytesTotal: Int64) -> Void
-    public var onPhaseProgress: @Sendable (_ completed: Int, _ total: Int, _ bytesCopied: Int64, _ bytesTotal: Int64) -> Void
+    public var onPhaseProgress: @Sendable (_ completed: Int, _ total: Int, _ bytesCopied: Int64, _ bytesTotal: Int64, _ currentSourcePath: String?) -> Void
     public var onIssue: @Sendable (_ issue: RunIssue) -> Void
 
     public init(
         onPhaseStarted: @escaping @Sendable (_ total: Int, _ bytesTotal: Int64) -> Void = { _, _ in },
-        onPhaseProgress: @escaping @Sendable (_ completed: Int, _ total: Int, _ bytesCopied: Int64, _ bytesTotal: Int64) -> Void = { _, _, _, _ in },
+        onPhaseProgress: @escaping @Sendable (_ completed: Int, _ total: Int, _ bytesCopied: Int64, _ bytesTotal: Int64, _ currentSourcePath: String?) -> Void = { _, _, _, _, _ in },
         onIssue: @escaping @Sendable (_ issue: RunIssue) -> Void = { _ in }
     ) {
         self.onPhaseStarted = onPhaseStarted
@@ -1316,7 +1316,7 @@ private final class TransferExecutionContext {
 
                 consecutiveFailures += 1
                 failedCount += 1
-                observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal)
+                observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal, job.sourcePath)
                 emittedProgress = true
 
                 if let reason = executor.abortReason(
@@ -1346,7 +1346,7 @@ private final class TransferExecutionContext {
 
             consecutiveFailures += 1
             failedCount += 1
-            observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal)
+            observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal, job.sourcePath)
             emittedProgress = true
 
             if let reason = executor.abortReason(
@@ -1365,7 +1365,7 @@ private final class TransferExecutionContext {
             runLogger.warn(logMessage)
             observer.onIssue(RunIssue(severity: .warning, message: message))
             skippedCount += 1
-            observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal)
+            observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal, job.sourcePath)
             emittedProgress = true
         }
 
@@ -1397,7 +1397,7 @@ private final class TransferExecutionContext {
         copiedCount += 1
 
         if !emittedProgress, totalJobs > 0 {
-            observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal)
+            observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal, job.sourcePath)
         }
 
         return !isCancelled()
@@ -1432,7 +1432,7 @@ private final class TransferExecutionContext {
         )
 
         if totalJobs > 0, attemptedJobs == 0 {
-            observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal)
+            observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal, nil)
         }
 
         finished = true
