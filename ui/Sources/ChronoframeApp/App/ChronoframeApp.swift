@@ -65,6 +65,8 @@ struct ChronoframeApp: App {
 final class ChronoframeAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
+        guard !Self.isRunningUITestScenario else { return }
+
         if let existingApplication = Self.alreadyRunningApplication() {
             existingApplication.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
             NSApp.terminate(nil)
@@ -108,6 +110,10 @@ final class ChronoframeAppDelegate: NSObject, NSApplicationDelegate, UNUserNotif
             .min { lhs, rhs in
                 lhs.processIdentifier < rhs.processIdentifier
             }
+    }
+
+    private static var isRunningUITestScenario: Bool {
+        ProcessInfo.processInfo.environment["CHRONOFRAME_UI_TEST_SCENARIO"] != nil
     }
 
     private nonisolated func activateFromNotification() async {

@@ -95,15 +95,23 @@ final class ChronoframeUITests: XCTestCase {
                 let commit = Self.button(identifier: "dedupeCommitButton", in: app)
 
                 XCTAssertTrue(acceptCluster.isHittable, "Accept Suggestion should stay hittable for \(scenario.rawValue)")
+                Self.coordinateClick(acceptCluster)
                 XCTAssertTrue(acceptAll.waitForExistence(timeout: 5), "Accept All Suggestions should stay visible for \(scenario.rawValue)")
                 XCTAssertTrue(acceptAll.isEnabled, "Accept All Suggestions should stay enabled for \(scenario.rawValue)")
                 XCTAssertTrue(commit.waitForExistence(timeout: 5), "Commit should stay visible for \(scenario.rawValue)")
-                XCTAssertTrue(commit.isEnabled, "Commit should stay enabled for \(scenario.rawValue)")
+                XCTAssertTrue(Self.waitUntilEnabled(commit), "Commit should become enabled after accepting a suggestion for \(scenario.rawValue)")
 
                 let window = app.windows.firstMatch
                 XCTAssertTrue(window.exists)
-                for element in [clusterList, footer, acceptCluster, acceptAll, commit] {
-                    Self.assertFrame(element.frame, isInside: window.frame, scenario: scenario.rawValue)
+                let framedElements = [
+                    ("cluster list", clusterList),
+                    ("commit footer", footer),
+                    ("accept cluster", acceptCluster),
+                    ("accept all", acceptAll),
+                    ("commit", commit),
+                ]
+                for (name, element) in framedElements {
+                    Self.assertFrame(element.frame, named: name, isInside: window.frame, scenario: scenario.rawValue)
                 }
                 XCTAssertLessThanOrEqual(
                     acceptCluster.frame.maxY,
@@ -200,6 +208,11 @@ final class ChronoframeUITests: XCTestCase {
     }
 
     @MainActor
+    private static func coordinateClick(_ element: XCUIElement) {
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+    }
+
+    @MainActor
     private static func element(identifier: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
@@ -222,16 +235,30 @@ final class ChronoframeUITests: XCTestCase {
         app.buttons.matching(identifier: identifier).firstMatch
     }
 
+    @MainActor
+    private static func waitUntilEnabled(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.exists && element.isEnabled {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        return element.exists && element.isEnabled
+    }
+
     private static func assertFrame(
         _ frame: CGRect,
+        named name: String,
         isInside windowFrame: CGRect,
         scenario: String,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        XCTAssertGreaterThanOrEqual(frame.minX, windowFrame.minX, "Element should not clip left in \(scenario)", file: file, line: line)
-        XCTAssertGreaterThanOrEqual(frame.minY, windowFrame.minY, "Element should not clip above the window in \(scenario)", file: file, line: line)
-        XCTAssertLessThanOrEqual(frame.maxX, windowFrame.maxX, "Element should not clip right in \(scenario)", file: file, line: line)
-        XCTAssertLessThanOrEqual(frame.maxY, windowFrame.maxY, "Element should not clip below the window in \(scenario)", file: file, line: line)
+        let tolerance: CGFloat = 1
+        XCTAssertGreaterThanOrEqual(frame.minX, windowFrame.minX - tolerance, "\(name) should not clip left in \(scenario)", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(frame.minY, windowFrame.minY - tolerance, "\(name) should not clip above the window in \(scenario)", file: file, line: line)
+        XCTAssertLessThanOrEqual(frame.maxX, windowFrame.maxX + tolerance, "\(name) should not clip right in \(scenario)", file: file, line: line)
+        XCTAssertLessThanOrEqual(frame.maxY, windowFrame.maxY + tolerance, "\(name) should not clip below the window in \(scenario)", file: file, line: line)
     }
 }

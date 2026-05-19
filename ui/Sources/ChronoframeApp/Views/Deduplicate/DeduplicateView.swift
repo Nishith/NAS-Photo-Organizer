@@ -310,11 +310,11 @@ struct DeduplicateView: View {
             commitFooterMedium(toDelete: toDelete, bytes: bytes, hardDelete: hardDelete)
             commitFooterCompact(toDelete: toDelete, bytes: bytes, hardDelete: hardDelete)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("dedupeCommitFooter")
         .padding(DesignTokens.Spacing.md)
         .frame(maxWidth: .infinity)
         .background(.ultraThinMaterial)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("dedupeCommitFooter")
         .confirmationDialog(
             "Move \(toDelete) file\(toDelete == 1 ? "" : "s") to Trash?",
             isPresented: $showingCommitConfirmation

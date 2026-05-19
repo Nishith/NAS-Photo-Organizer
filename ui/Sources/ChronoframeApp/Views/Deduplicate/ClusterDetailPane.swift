@@ -99,6 +99,7 @@ struct ClusterDetailPane: View {
             memberStripCompact(cluster: cluster, thumbnailSize: thumbnailSize)
         }
         .padding(.vertical, DesignTokens.Spacing.sm)
+        .padding(.trailing, DesignTokens.Spacing.md)
         .frame(height: height)
         .background(.ultraThinMaterial)
         .accessibilityElement(children: .contain)
@@ -108,17 +109,20 @@ struct ClusterDetailPane: View {
     private func memberStripWide(cluster: DuplicateCluster, thumbnailSize: CGFloat) -> some View {
         HStack(spacing: DesignTokens.Spacing.md) {
             memberThumbnailStrip(cluster: cluster, thumbnailSize: thumbnailSize)
+                .frame(minWidth: 0, maxWidth: .infinity)
             acceptSuggestionButton(for: cluster)
-                .padding(.trailing, DesignTokens.Spacing.md)
+                .layoutPriority(1)
         }
+        .frame(maxWidth: .infinity)
     }
 
     private func memberStripCompact(cluster: DuplicateCluster, thumbnailSize: CGFloat) -> some View {
         VStack(alignment: .trailing, spacing: DesignTokens.Spacing.sm) {
             memberThumbnailStrip(cluster: cluster, thumbnailSize: thumbnailSize)
+                .frame(minWidth: 0, maxWidth: .infinity)
             acceptSuggestionButton(for: cluster)
-                .padding(.trailing, DesignTokens.Spacing.md)
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     private func memberThumbnailStrip(cluster: DuplicateCluster, thumbnailSize: CGFloat) -> some View {

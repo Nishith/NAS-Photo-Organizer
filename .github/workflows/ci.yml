@@ -164,7 +164,6 @@ jobs:
             -configuration Debug \
             -derivedDataPath "$RUNNER_TEMP/ChronoframeUITestDerivedData" \
             -destination "platform=macOS" \
-            CODE_SIGNING_ALLOWED=NO \
             test
 
   release-archive-smoke:

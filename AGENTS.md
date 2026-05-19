@@ -128,8 +128,10 @@ xcodebuild -project ui/Chronoframe.xcodeproj -scheme Chronoframe -configuration 
 Xcode UI tests:
 
 ```bash
-xcodebuild -project ui/Chronoframe.xcodeproj -scheme Chronoframe -configuration Debug -derivedDataPath .tmp/ChronoframeXcodeTestDerivedData -destination "platform=macOS" CODE_SIGNING_ALLOWED=NO test
+xcodebuild -project ui/Chronoframe.xcodeproj -scheme Chronoframe -configuration Debug -derivedDataPath .tmp/ChronoframeXcodeTestDerivedData -destination "platform=macOS" test
 ```
+
+Do not force `CODE_SIGNING_ALLOWED=NO` for Xcode UI tests. The macOS XCTest runner needs Xcode's local/ad hoc signing path or Gatekeeper can reject the runner before it connects.
 
 The shared Xcode scheme runs the macOS UI-test target only. SwiftPM remains the authoritative lane for unit tests across `ChronoframeCore`, `ChronoframeAppCore`, and `ChronoframeApp`.
 
