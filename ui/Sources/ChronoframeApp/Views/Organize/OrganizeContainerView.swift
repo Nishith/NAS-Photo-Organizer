@@ -52,13 +52,13 @@ struct OrganizeContainerView: View {
                         .layoutPriority(1)
                 }
 
-                Picker("Section", selection: $appState.organizeSubSelection) {
-                    ForEach(OrganizeSubSection.allCases) { sub in
-                        Text(sub.title).tag(sub)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                WorkspaceTabStrip(
+                    selection: $appState.organizeSubSelection,
+                    tabs: OrganizeSubSection.allCases,
+                    title: { $0.title },
+                    systemImage: { $0.systemImage },
+                    accessibilityIdentifier: { "organizeTab.\($0.rawValue)" }
+                )
                 .frame(width: 360)
             }
             .padding(.horizontal, DesignTokens.Layout.contentPadding)
