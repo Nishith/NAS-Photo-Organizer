@@ -95,6 +95,33 @@ final class RunHistoryViewTests: XCTestCase {
         )
     }
 
+    func testArchiveOverviewUsesOnlyTransferReceipts() {
+        let dedupeEntry = makeEntry(kind: .dedupeAuditReceipt)
+        let reorganizeEntry = makeEntry(kind: .reorganizeAuditReceipt)
+        let transferEntry = makeEntry(kind: .auditReceipt)
+
+        let overviewEntries = RunHistoryView.archiveOverviewReceiptEntries(from: [
+            dedupeEntry,
+            reorganizeEntry,
+            transferEntry,
+        ])
+
+        XCTAssertEqual(overviewEntries.map(\.kind), [.auditReceipt])
+        XCTAssertFalse(
+            RunHistoryView.shouldShowArchiveOverview(
+                receiptEntries: RunHistoryView.archiveOverviewReceiptEntries(from: [dedupeEntry, reorganizeEntry]),
+                totalFramesArchived: 0
+            ),
+            "Cleanup-only receipts must not render a 0 frames archived overview."
+        )
+        XCTAssertTrue(
+            RunHistoryView.shouldShowArchiveOverview(
+                receiptEntries: overviewEntries,
+                totalFramesArchived: 12
+            )
+        )
+    }
+
     private func makeEntry(kind: RunHistoryEntryKind) -> RunHistoryEntry {
         RunHistoryEntry(
             kind: kind,

@@ -221,7 +221,7 @@ struct RunHistoryView: View {
     /// hero strip — e.g. no completed transfers yet. Keeps the empty
     /// destination state quiet rather than showing "0 frames archived".
     private var heroStripIsEmpty: Bool {
-        receiptEntries.isEmpty && totalFramesArchived == 0
+        !Self.shouldShowArchiveOverview(receiptEntries: archiveOverviewReceiptEntries, totalFramesArchived: totalFramesArchived)
     }
 
     private var heroStrip: some View {
@@ -254,7 +254,7 @@ struct RunHistoryView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Archive overview: \(totalFramesArchived) frames archived across \(receiptEntries.count) runs.")
+        .accessibilityLabel("Archive overview: \(totalFramesArchived) frames archived across \(archiveOverviewReceiptEntries.count) runs.")
     }
 
     /// Cumulative count of completed-run receipts over time. Renders an area
@@ -300,27 +300,31 @@ struct RunHistoryView: View {
     }
 
     private var sinceLabel: String {
-        guard let earliest = receiptEntries.last?.createdAt else {
+        guard let earliest = archiveOverviewReceiptEntries.last?.createdAt else {
             return "—"
         }
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
-        return "Since \(formatter.string(from: earliest)) · \(receiptEntries.count) run\(receiptEntries.count == 1 ? "" : "s")"
+        return "Since \(formatter.string(from: earliest)) · \(archiveOverviewReceiptEntries.count) run\(archiveOverviewReceiptEntries.count == 1 ? "" : "s")"
     }
 
-    private var receiptEntries: [RunHistoryEntry] {
-        historyStore.entries
-            .filter {
-                $0.kind == .auditReceipt
-                    || $0.kind == .dedupeAuditReceipt
-                    || $0.kind == .reorganizeAuditReceipt
-            }
+    private var archiveOverviewReceiptEntries: [RunHistoryEntry] {
+        Self.archiveOverviewReceiptEntries(from: historyStore.entries)
+    }
+
+    static func archiveOverviewReceiptEntries(from entries: [RunHistoryEntry]) -> [RunHistoryEntry] {
+        entries
+            .filter { $0.kind == .auditReceipt }
             .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    static func shouldShowArchiveOverview(receiptEntries: [RunHistoryEntry], totalFramesArchived: Int) -> Bool {
+        !receiptEntries.isEmpty && totalFramesArchived > 0
     }
 
     private var sparklinePoints: [SparklinePoint] {
         // Process oldest -> newest so the cumulative line trends up.
-        let chronological = receiptEntries.sorted { $0.createdAt < $1.createdAt }
+        let chronological = archiveOverviewReceiptEntries.sorted { $0.createdAt < $1.createdAt }
         var cumulative = 0
         return chronological.map { entry in
             cumulative += 1
