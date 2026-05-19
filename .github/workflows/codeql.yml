@@ -64,9 +64,8 @@ jobs:
       - uses: github/codeql-action/analyze@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4
         with:
           category: "/language:swift"
-          # On `pull_request`, skip the SARIF upload — code scanning is not
-          # currently enabled on this repository, and the upload step errors
-          # out on PR runs even though `push`/`schedule` runs succeed by
-          # not exercising the same code path. The analysis itself still
-          # runs on PRs, so compiler/extraction errors surface in the logs.
-          upload: ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
+          # Code scanning is not currently enabled for this repository, so
+          # SARIF uploads fail after analysis succeeds. Keep the CodeQL build
+          # and analysis gate active for compiler/extraction failures, and
+          # re-enable uploads after code scanning is turned on in repo settings.
+          upload: never
