@@ -18,11 +18,15 @@ on:
   schedule:
     - cron: "0 0 * * 1"
 
+concurrency:
+  group: codeql-swift-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze-swift:
     name: Analyze (Swift)
     runs-on: macos-14
-    timeout-minutes: 90
+    timeout-minutes: 60
     permissions:
       actions: read
       contents: read
@@ -49,7 +53,17 @@ jobs:
         with:
           languages: swift
           build-mode: manual
-      - name: Build Chronoframe app
+      - name: Build Chronoframe app with SwiftPM
+        if: github.event_name == 'pull_request'
+        run: |
+          mkdir -p "$RUNNER_TEMP/swiftpm-home" "$RUNNER_TEMP/swiftpm-cache" "$RUNNER_TEMP/modulecache"
+          HOME="$RUNNER_TEMP/swiftpm-home" \
+          XDG_CACHE_HOME="$RUNNER_TEMP/swiftpm-cache" \
+          CLANG_MODULE_CACHE_PATH="$RUNNER_TEMP/modulecache" \
+          SWIFTPM_MODULECACHE_OVERRIDE="$RUNNER_TEMP/modulecache" \
+            swift build --package-path ui --product ChronoframeApp
+      - name: Build Chronoframe app with Xcode
+        if: github.event_name != 'pull_request'
         run: |
           xcodebuild \
             -project ui/Chronoframe.xcodeproj \
@@ -60,7 +74,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ARCHS=x86_64 \
             ONLY_ACTIVE_ARCH=YES \
-            build
+            build \
+            -showBuildTimingSummary
       - uses: github/codeql-action/analyze@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4
         with:
           category: "/language:swift"
