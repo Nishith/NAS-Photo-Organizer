@@ -44,6 +44,8 @@ struct HealthDashboardView: View {
                 }
 
                 if let summary = healthStore.summary {
+                    LibraryHealthHero(summary: summary)
+
                     LazyVGrid(
                         columns: [GridItem(.adaptive(minimum: 260, maximum: 360), spacing: 12)],
                         spacing: 12
@@ -222,5 +224,162 @@ private struct HealthCardView: View {
         case .refreshDestinationIndex:
             return "arrow.clockwise"
         }
+    }
+}
+
+/// Hero visualization above the card grid: a readiness dial on the left and
+/// a severity breakdown bar on the right. Both derive from the same
+/// `summary.cards` collection that drives the detail grid — no engine
+/// extension required.
+private struct LibraryHealthHero: View {
+    let summary: LibraryHealthSummary
+
+    private var counts: (good: Int, attention: Int, critical: Int) {
+        var good = 0, attention = 0, critical = 0
+        for card in summary.cards {
+            switch card.severity {
+            case .good: good += 1
+            case .attention: attention += 1
+            case .critical: critical += 1
+            }
+        }
+        return (good, attention, critical)
+    }
+
+    private var total: Int {
+        max(summary.cards.count, 1)
+    }
+
+    private var readyFraction: Double {
+        Double(counts.good) / Double(total)
+    }
+
+    var body: some View {
+        MeridianSurfaceCard(style: .section) {
+            HStack(alignment: .center, spacing: DesignTokens.Spacing.lg) {
+                readinessDial
+                    .frame(width: 120, height: 120)
+
+                VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+                    Text("Library shape")
+                        .font(DesignTokens.Typography.label.weight(.medium))
+                        .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+                        .tracking(0.8)
+                        .textCase(.uppercase)
+
+                    severityBar
+                        .frame(height: 14)
+
+                    HStack(spacing: 14) {
+                        legend("Healthy", count: counts.good, tint: DesignTokens.ColorSystem.statusSuccess)
+                        legend("Review", count: counts.attention, tint: DesignTokens.ColorSystem.statusWarning)
+                        legend("Critical", count: counts.critical, tint: DesignTokens.ColorSystem.statusDanger)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(DesignTokens.Layout.cardPadding)
+            .background(
+                RoundedRectangle(cornerRadius: DesignTokens.Corner.card, style: .continuous)
+                    .fill(DesignTokens.ColorSystem.imageStage.opacity(0.6))
+            )
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Library shape: \(counts.good) healthy, \(counts.attention) needs review, \(counts.critical) critical")
+    }
+
+    private var readinessDial: some View {
+        // Built from Circle.trim primitives rather than `SectorMark` so the
+        // dial works on macOS 13 (SectorMark requires macOS 14).
+        ZStack {
+            // Track
+            Circle()
+                .stroke(DesignTokens.ColorSystem.hairline, lineWidth: 12)
+
+            // Critical segment (starts at top, runs clockwise)
+            dialSegment(start: 0, fraction: criticalFraction, tint: DesignTokens.ColorSystem.statusDanger)
+            // Attention segment
+            dialSegment(start: criticalFraction, fraction: attentionFraction, tint: DesignTokens.ColorSystem.statusWarning)
+            // Healthy segment
+            dialSegment(start: criticalFraction + attentionFraction, fraction: readyFraction, tint: DesignTokens.ColorSystem.statusSuccess)
+
+            VStack(spacing: 2) {
+                Text(percentString)
+                    .font(DesignTokens.Typography.metric)
+                    .monospacedDigit()
+                    .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+                    .contentTransition(.numericText())
+                Text("Healthy")
+                    .font(DesignTokens.Typography.label)
+                    .tracking(0.8)
+                    .textCase(.uppercase)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+            }
+        }
+        .padding(6)
+    }
+
+    private func dialSegment(start: Double, fraction: Double, tint: Color) -> some View {
+        Circle()
+            .trim(from: start, to: start + fraction)
+            .stroke(tint, style: StrokeStyle(lineWidth: 12, lineCap: .butt))
+            .rotationEffect(.degrees(-90)) // start at 12 o'clock
+    }
+
+    private var attentionFraction: Double {
+        Double(counts.attention) / Double(total)
+    }
+
+    private var criticalFraction: Double {
+        Double(counts.critical) / Double(total)
+    }
+
+    private var severityBar: some View {
+        GeometryReader { geo in
+            HStack(spacing: 2) {
+                if counts.good > 0 {
+                    severitySegment(
+                        width: geo.size.width * Double(counts.good) / Double(total),
+                        tint: DesignTokens.ColorSystem.statusSuccess
+                    )
+                }
+                if counts.attention > 0 {
+                    severitySegment(
+                        width: geo.size.width * Double(counts.attention) / Double(total),
+                        tint: DesignTokens.ColorSystem.statusWarning
+                    )
+                }
+                if counts.critical > 0 {
+                    severitySegment(
+                        width: geo.size.width * Double(counts.critical) / Double(total),
+                        tint: DesignTokens.ColorSystem.statusDanger
+                    )
+                }
+            }
+            .clipShape(Capsule())
+        }
+    }
+
+    private func severitySegment(width: CGFloat, tint: Color) -> some View {
+        Capsule()
+            .fill(tint)
+            .frame(width: max(width - 2, 4))
+    }
+
+    private func legend(_ label: String, count: Int, tint: Color) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(tint)
+                .frame(width: 6, height: 6)
+            Text("\(count) \(label.lowercased())")
+                .font(DesignTokens.Typography.body)
+                .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+                .monospacedDigit()
+        }
+    }
+
+    private var percentString: String {
+        let pct = Int((readyFraction * 100).rounded())
+        return "\(pct)%"
     }
 }
