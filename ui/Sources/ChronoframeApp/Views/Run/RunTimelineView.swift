@@ -102,10 +102,11 @@ struct RunTimelineView: View {
         let ratio = Double(bucket.plannedCount) / Double(maxCount)
         let height = max(minBarHeight, CGFloat(ratio) * availableHeight)
         let cornerRadius = min(width, height) / 2
+        let track = seasonalTint(for: bucket.key)
 
         return ZStack(alignment: .bottom) {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(DesignTokens.ColorSystem.inkMuted.opacity(0.18))
+                .fill(track)
 
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(fillColor(for: fill))
@@ -124,6 +125,25 @@ struct RunTimelineView: View {
             return DesignTokens.ColorSystem.accentWaypoint
         }
         return .clear
+    }
+
+    /// Low-saturation seasonal tint for the bar track. Winter months read cool
+    /// blue, summer months warm amber, spring/autumn transition between. Keeps
+    /// the chart legible at a glance as a calendar of the library's shape.
+    private func seasonalTint(for key: String) -> Color {
+        guard key.count >= 7, key != "Unknown" else {
+            return DesignTokens.ColorSystem.inkMuted.opacity(0.18)
+        }
+        let monthPart = key.dropFirst(5).prefix(2)
+        guard let month = Int(monthPart), (1...12).contains(month) else {
+            return DesignTokens.ColorSystem.inkMuted.opacity(0.18)
+        }
+        // Cosine-shaped warmth curve centered on July: coldest at Jan
+        // (~220°, deep blue), warmest at Jul (~35°, warm amber), with smooth
+        // periodicity through Dec ↔ Jan.
+        let warmth = (cos(Double(month - 7) / 6.0 * .pi) + 1) / 2
+        let hue = (220 - warmth * 185) / 360
+        return Color(hue: hue, saturation: 0.32, brightness: 0.66, opacity: 0.32)
     }
 
     private func yearMarkers(width: CGFloat) -> some View {
@@ -169,11 +189,18 @@ struct RunTimelineView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(DesignTokens.ColorSystem.imageStage)
 
+            GhostTimelineBars()
+                .padding(DesignTokens.Spacing.md)
+
             Text(emptyStateMessage)
                 .font(DesignTokens.Typography.label)
-                .foregroundStyle(.white.opacity(0.62))
+                .foregroundStyle(.white.opacity(0.72))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, DesignTokens.Spacing.md)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule().fill(DesignTokens.ColorSystem.imageStage.opacity(0.65))
+                )
         }
         .frame(height: chartHeight)
     }
@@ -273,6 +300,59 @@ struct RunTimelineView: View {
     private func label(for bucket: DateHistogramBucket) -> String {
         let label = bucket.key == "Unknown" ? "Unknown date" : bucket.key
         return "\(label): \(bucket.plannedCount) files"
+    }
+}
+
+/// Placeholder row of low-opacity bars for the timeline empty state. Heights
+/// are seeded once so the silhouette is stable, and the whole layer pulses
+/// gently between two opacities on a slow filmic loop so the surface reads
+/// as "waiting for data" rather than "broken".
+private struct GhostTimelineBars: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let heights: [CGFloat] = {
+        var rng = SeededTimelineRNG(seed: 0x4368726F6E6F31)
+        return (0..<36).map { _ in CGFloat.random(in: 0.18...0.95, using: &rng) }
+    }()
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let pulse = (sin(t * .pi / 2) + 1) / 2 // 4-second cycle, 0..1
+            let opacity = 0.10 + pulse * 0.06
+
+            GeometryReader { geo in
+                let spacing: CGFloat = 3
+                let count = Self.heights.count
+                let barWidth = (geo.size.width - spacing * CGFloat(count - 1)) / CGFloat(count)
+
+                HStack(alignment: .bottom, spacing: spacing) {
+                    ForEach(0..<count, id: \.self) { i in
+                        let h = Self.heights[i]
+                        let height = max(2, h * geo.size.height)
+                        RoundedRectangle(cornerRadius: min(barWidth, height) / 2, style: .continuous)
+                            .fill(Color.white.opacity(opacity))
+                            .frame(width: barWidth, height: height)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Tiny splitmix-style RNG so the ghost-bar silhouette is stable across redraws.
+private struct SeededTimelineRNG: RandomNumberGenerator {
+    private var state: UInt64
+    init(seed: UInt64) { self.state = seed }
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z &>> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z &>> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z &>> 31)
     }
 }
 
