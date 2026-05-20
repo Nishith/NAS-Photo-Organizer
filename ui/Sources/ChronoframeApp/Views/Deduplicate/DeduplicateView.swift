@@ -926,6 +926,124 @@ private struct PausedDeduplicateReviewCard: View {
     }
 }
 
+/// A small 2x2 QuickLook mosaic of the first images in a folder, so each recent
+/// dedupe folder shows what's inside it rather than a generic icon. Falls back
+/// to the folder glyph when the folder is empty or unreadable.
+private struct FolderMosaicThumbnail: View {
+    let folderPath: String
+
+    private let side: CGFloat = 40
+
+    @State private var images: [NSImage] = []
+    @State private var didLoad = false
+
+    var body: some View {
+        Group {
+            if images.isEmpty {
+                fallback
+            } else if images.count == 1 {
+                imageCell(images[0])
+            } else {
+                mosaic
+            }
+        }
+        .frame(width: side, height: side)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(DesignTokens.ColorSystem.photoEdgeHighlight, lineWidth: 0.5)
+        )
+        .task(id: folderPath) { await load() }
+        .accessibilityHidden(true)
+    }
+
+    private var fallback: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(DesignTokens.ColorSystem.accentAction.opacity(0.12))
+            Image(systemName: "folder")
+                .foregroundStyle(DesignTokens.ColorSystem.accentAction)
+        }
+    }
+
+    private var mosaic: some View {
+        let cells = paddedImages
+        return VStack(spacing: 1) {
+            HStack(spacing: 1) {
+                cell(cells[0])
+                cell(cells[1])
+            }
+            HStack(spacing: 1) {
+                cell(cells[2])
+                cell(cells[3])
+            }
+        }
+    }
+
+    /// Pads to exactly four optional cells so the 2x2 grid is always complete.
+    private var paddedImages: [NSImage?] {
+        var result: [NSImage?] = images.map { $0 }
+        while result.count < 4 { result.append(nil) }
+        return Array(result.prefix(4))
+    }
+
+    @ViewBuilder
+    private func cell(_ image: NSImage?) -> some View {
+        if let image {
+            imageCell(image)
+        } else {
+            Rectangle().fill(DesignTokens.ColorSystem.imageStage.opacity(0.6))
+        }
+    }
+
+    private func imageCell(_ image: NSImage) -> some View {
+        Image(nsImage: image)
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+    }
+
+    private func load() async {
+        guard !didLoad else { return }
+        didLoad = true
+
+        let urls = await Task.detached(priority: .utility) {
+            Self.firstImageURLs(in: folderPath, limit: 4)
+        }.value
+
+        var loaded: [NSImage] = []
+        for url in urls {
+            if let cg = await ThumbnailRenderer.cgImage(for: url, size: CGSize(width: 44, height: 44), scale: 2) {
+                loaded.append(NSImage(cgImage: cg, size: NSSize(width: 44, height: 44)))
+            }
+        }
+        images = loaded
+    }
+
+    private static let imageExtensions: Set<String> = [
+        "jpg", "jpeg", "png", "heic", "heif", "tiff", "tif", "gif", "webp", "bmp",
+        "dng", "raw", "cr2", "cr3", "nef", "arw", "raf", "orf", "rw2",
+        "mov", "mp4", "m4v", "avi", "hevc",
+    ]
+
+    nonisolated static func firstImageURLs(in folderPath: String, limit: Int) -> [URL] {
+        let directory = URL(fileURLWithPath: folderPath, isDirectory: true)
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+        ) else {
+            return []
+        }
+        return entries
+            .filter { imageExtensions.contains($0.pathExtension.lowercased()) }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            .prefix(limit)
+            .map { $0 }
+    }
+}
+
 private struct DeduplicateRunHistoryRow: View {
     let record: DeduplicateFolderHistoryRecord
     let useFolder: () -> Void
@@ -976,9 +1094,7 @@ private struct DeduplicateRunHistoryRow: View {
 
     private var folderLabel: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "folder")
-                .foregroundStyle(DesignTokens.ColorSystem.accentAction)
-                .frame(width: 18)
+            FolderMosaicThumbnail(folderPath: record.folderPath)
             VStack(alignment: .leading, spacing: 3) {
                 Text(URL(fileURLWithPath: record.folderPath).lastPathComponent)
                     .font(.subheadline.weight(.semibold))

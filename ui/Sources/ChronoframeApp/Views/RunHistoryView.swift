@@ -1,6 +1,7 @@
 #if canImport(ChronoframeAppCore)
 import ChronoframeAppCore
 #endif
+import Charts
 import SwiftUI
 
 private enum HistoryFilter: String, CaseIterable, Identifiable {
@@ -98,6 +99,13 @@ struct RunHistoryView: View {
 
                 if let error = historyStore.lastRefreshError, !error.isEmpty {
                     refreshErrorStrip(error)
+                }
+
+                if !historyStore.entries.isEmpty {
+                    ArchiveOverview(
+                        entries: historyStore.entries,
+                        sources: historyStore.transferredSources
+                    )
                 }
 
                 reusableSourcesSection
@@ -455,16 +463,20 @@ struct RunHistoryView: View {
                                     .padding(.vertical, DesignTokens.Spacing.sm)
                             }
 
-                            VStack(alignment: .leading, spacing: 0) {
-                                sectionHeader(for: section.date)
+                            HStack(alignment: .top, spacing: DesignTokens.Spacing.md) {
+                                TimelineRail()
 
-                                ForEach(Array(section.entries.enumerated()), id: \.element.id) { entryIndex, entry in
-                                    if entryIndex != 0 {
-                                        Rectangle()
-                                            .fill(DesignTokens.ColorSystem.hairline.opacity(0.5))
-                                            .frame(height: 0.5)
+                                VStack(alignment: .leading, spacing: 0) {
+                                    sectionHeader(for: section.date)
+
+                                    ForEach(Array(section.entries.enumerated()), id: \.element.id) { entryIndex, entry in
+                                        if entryIndex != 0 {
+                                            Rectangle()
+                                                .fill(DesignTokens.ColorSystem.hairline.opacity(0.5))
+                                                .frame(height: 0.5)
+                                        }
+                                        artifactRow(for: entry)
                                     }
-                                    artifactRow(for: entry)
                                 }
                             }
                         }
@@ -603,5 +615,164 @@ struct RunHistoryView: View {
         case .queueDatabase:
             return DesignTokens.ColorSystem.statusActive
         }
+    }
+}
+
+// MARK: - Archive overview (pride metric + activity sparkline)
+
+/// The top-of-archive "pride wall": a large frames-archived metric and a
+/// sparkline of archive activity over time. Reads from the existing history
+/// records — no engine change.
+private struct ArchiveOverview: View {
+    let entries: [RunHistoryEntry]
+    let sources: [TransferredSourceRecord]
+
+    private struct DayPoint: Identifiable {
+        let date: Date
+        let count: Int
+        var id: Date { date }
+    }
+
+    private var framesArchived: Int {
+        sources.reduce(0) { $0 + $1.totalCopiedCount }
+    }
+
+    private var runCount: Int {
+        sources.reduce(0) { $0 + $1.runCount }
+    }
+
+    private var sinceDate: Date? {
+        sources.map(\.firstTransferredAt).min()
+            ?? entries.map(\.createdAt).min()
+    }
+
+    /// Headline reads as frames archived once anything has transferred; before
+    /// that it celebrates the artifacts a preview produced, so the band never
+    /// leads with a deflating "0 frames archived."
+    private var headlineValue: Int {
+        framesArchived > 0 ? framesArchived : entries.count
+    }
+
+    private var headlineLabel: String {
+        framesArchived > 0 ? "FRAMES ARCHIVED" : "ARTIFACTS RECORDED"
+    }
+
+    private var subtitle: String {
+        var parts: [String] = []
+        if framesArchived > 0 {
+            parts.append("\(runCount) run\(runCount == 1 ? "" : "s")")
+            parts.append("\(sources.count) source\(sources.count == 1 ? "" : "s")")
+        }
+        if let since = sinceDate {
+            parts.append("since \(since.formatted(date: .abbreviated, time: .omitted))")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var activity: [DayPoint] {
+        let grouped = Dictionary(grouping: entries) { Calendar.current.startOfDay(for: $0.createdAt) }
+        return grouped
+            .map { DayPoint(date: $0.key, count: $0.value.count) }
+            .sorted { $0.date < $1.date }
+    }
+
+    var body: some View {
+        MeridianSurfaceCard(style: .section) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: DesignTokens.Spacing.xl) {
+                    metric
+                    sparkline
+                }
+
+                VStack(alignment: .leading, spacing: DesignTokens.Spacing.lg) {
+                    metric
+                    sparkline
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(headlineValue) \(headlineLabel.lowercased()). \(subtitle)")
+    }
+
+    private var metric: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(headlineValue.formatted())
+                .font(DesignTokens.Typography.display)
+                .monospacedDigit()
+                .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+            Text(headlineLabel)
+                .font(DesignTokens.Typography.label)
+                .tracking(0.8)
+                .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+            if !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(DesignTokens.Typography.subtitle)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+                    .padding(.top, 2)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var sparkline: some View {
+        if activity.count >= 2 {
+            Chart(activity) { point in
+                AreaMark(
+                    x: .value("Day", point.date),
+                    y: .value("Artifacts", point.count)
+                )
+                .interpolationMethod(.monotone)
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [
+                            DesignTokens.ColorSystem.accentWaypoint.opacity(0.30),
+                            DesignTokens.ColorSystem.accentWaypoint.opacity(0.02),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+
+                LineMark(
+                    x: .value("Day", point.date),
+                    y: .value("Artifacts", point.count)
+                )
+                .interpolationMethod(.monotone)
+                .foregroundStyle(DesignTokens.ColorSystem.accentWaypoint)
+                .lineStyle(StrokeStyle(lineWidth: 1.5))
+            }
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .accessibilityLabel("Archive activity over time")
+        }
+    }
+}
+
+// MARK: - Timeline rail
+
+/// A vertical timeline rail with a node dot at the top, rendered to the left of
+/// each date section so the artifact list reads as an archival ribbon. The line
+/// stretches to the section height; the node marks the day.
+private struct TimelineRail: View {
+    var nodeColor: Color = DesignTokens.ColorSystem.accentWaypoint
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Rectangle()
+                .fill(DesignTokens.ColorSystem.hairline)
+                .frame(width: 1.5)
+                .frame(maxHeight: .infinity)
+
+            Circle()
+                .fill(nodeColor)
+                .frame(width: 9, height: 9)
+                .overlay(Circle().stroke(DesignTokens.ColorSystem.canvas, lineWidth: 2))
+                .padding(.top, 3)
+        }
+        .frame(width: 12)
+        .accessibilityHidden(true)
     }
 }

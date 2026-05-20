@@ -1,6 +1,7 @@
 #if canImport(ChronoframeAppCore)
 import ChronoframeAppCore
 #endif
+import Charts
 import SwiftUI
 
 struct HealthDashboardView: View {
@@ -44,6 +45,8 @@ struct HealthDashboardView: View {
                 }
 
                 if let summary = healthStore.summary {
+                    LibraryHealthOverview(summary: summary)
+
                     LazyVGrid(
                         columns: [GridItem(.adaptive(minimum: 260, maximum: 360), spacing: 12)],
                         spacing: 12
@@ -147,6 +150,128 @@ struct HealthDashboardView: View {
             return "Not checked yet"
         }
         return generatedAt.formatted(date: .abbreviated, time: .shortened)
+    }
+}
+
+/// At-a-glance "library shape": a spectrum bar where each health area is one
+/// segment colored by its severity, anchored by a big "N of M areas healthy"
+/// metric. Reads directly from the existing summary — no engine change — and
+/// uses only macOS 13-safe Chart marks (BarMark).
+private struct LibraryHealthOverview: View {
+    let summary: LibraryHealthSummary
+
+    private var healthyCount: Int {
+        summary.cards.filter { $0.severity == .good }.count
+    }
+
+    private var totalCount: Int { summary.cards.count }
+
+    var body: some View {
+        MeridianSurfaceCard(style: .section) {
+            VStack(alignment: .leading, spacing: DesignTokens.Layout.cardSpacing) {
+                SectionHeading(
+                    eyebrow: "Overview",
+                    title: "Library Shape",
+                    message: "How each area of your destination is holding up right now."
+                )
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: DesignTokens.Spacing.xl) {
+                        metric
+                        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+                            spectrumBar
+                            legend
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.lg) {
+                        metric
+                        spectrumBar
+                        legend
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Library shape: \(healthyCount) of \(totalCount) areas healthy")
+    }
+
+    private var metric: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(healthyCount)")
+                    .font(DesignTokens.Typography.display)
+                    .monospacedDigit()
+                    .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+                Text("/ \(totalCount)")
+                    .font(DesignTokens.Typography.title)
+                    .monospacedDigit()
+                    .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+            }
+            Text("AREAS HEALTHY")
+                .font(DesignTokens.Typography.label)
+                .tracking(0.8)
+                .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+        }
+        .fixedSize()
+    }
+
+    private var spectrumBar: some View {
+        Chart(summary.cards) { card in
+            BarMark(
+                x: .value("Weight", 1),
+                y: .value("Health", "library"),
+                height: .fixed(16)
+            )
+            .foregroundStyle(color(for: card.severity))
+            .cornerRadius(2)
+        }
+        .chartXAxis(.hidden)
+        .chartYAxis(.hidden)
+        .chartLegend(.hidden)
+        .frame(height: 16)
+        .frame(maxWidth: .infinity)
+        .accessibilityHidden(true)
+    }
+
+    private var legend: some View {
+        FlowLegend(cards: summary.cards, color: color(for:))
+    }
+
+    private func color(for severity: LibraryHealthSeverity) -> Color {
+        switch severity {
+        case .good:
+            return DesignTokens.ColorSystem.statusSuccess
+        case .attention:
+            return DesignTokens.ColorSystem.statusWarning
+        case .critical:
+            return DesignTokens.ColorSystem.statusDanger
+        }
+    }
+}
+
+/// Wrapping legend of health areas with a severity dot per area.
+private struct FlowLegend: View {
+    let cards: [LibraryHealthCard]
+    let color: (LibraryHealthSeverity) -> Color
+
+    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 8)]
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+            ForEach(cards) { card in
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(color(card.severity))
+                        .frame(width: 7, height: 7)
+                    Text(card.title)
+                        .font(DesignTokens.Typography.body)
+                        .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                }
+            }
+        }
     }
 }
 

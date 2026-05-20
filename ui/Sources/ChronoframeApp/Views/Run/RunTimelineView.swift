@@ -104,9 +104,13 @@ struct RunTimelineView: View {
         let cornerRadius = min(width, height) / 2
 
         return ZStack(alignment: .bottom) {
+            // Resting bar carries a quiet seasonal tint, so the shape of the
+            // library reads like a year of light — warm summers, cool winters.
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(DesignTokens.ColorSystem.inkMuted.opacity(0.18))
+                .fill(seasonalColor(for: bucket.key).opacity(0.32))
 
+            // The copy-progress overlay (amber filling → green complete) sits on
+            // top, unchanged, so progress semantics stay legible.
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(fillColor(for: fill))
                 .frame(height: max(0, height * CGFloat(fill)))
@@ -114,6 +118,20 @@ struct RunTimelineView: View {
         }
         .frame(width: width, height: height)
         .accessibilityLabel(label(for: bucket))
+    }
+
+    /// Maps a "YYYY-MM" bucket key to a low-saturation seasonal hue. "Unknown"
+    /// (and unparseable keys) resolve to a neutral gray so undated frames read
+    /// as outside the seasonal cycle.
+    private func seasonalColor(for key: String) -> Color {
+        guard key != "Unknown", key.count >= 7,
+              let month = Int(key.dropFirst(5).prefix(2)), (1...12).contains(month) else {
+            return DesignTokens.ColorSystem.inkMuted
+        }
+        // Northern-hemisphere seasonal sweep: cool blues in winter, greens in
+        // spring, warm golds in summer, ambers/violets in autumn.
+        let hues: [Double] = [0.58, 0.55, 0.45, 0.35, 0.28, 0.18, 0.12, 0.08, 0.05, 0.02, 0.92, 0.62]
+        return Color(hue: hues[month - 1], saturation: 0.42, brightness: 0.80)
     }
 
     private func fillColor(for fill: Double) -> Color {
@@ -169,13 +187,19 @@ struct RunTimelineView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(DesignTokens.ColorSystem.imageStage)
 
+            GhostTimeline()
+                .padding(DesignTokens.Spacing.md)
+
             Text(emptyStateMessage)
                 .font(DesignTokens.Typography.label)
-                .foregroundStyle(.white.opacity(0.62))
+                .foregroundStyle(.white.opacity(0.78))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, DesignTokens.Spacing.md)
+                .padding(.vertical, 6)
+                .background(.black.opacity(0.32), in: Capsule())
         }
         .frame(height: chartHeight)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var emptyStateMessage: String {
@@ -273,6 +297,38 @@ struct RunTimelineView: View {
     private func label(for bucket: DateHistogramBucket) -> String {
         let label = bucket.key == "Unknown" ? "Unknown date" : bucket.key
         return "\(label): \(bucket.plannedCount) files"
+    }
+}
+
+/// A quiet placeholder histogram for the empty timeline — a row of dim bars at
+/// staggered heights that breathe gently, so the empty state reads as "waiting
+/// for frames" rather than an error. Honors Reduce Motion.
+private struct GhostTimeline: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulse = false
+
+    private let heights: [CGFloat] = [0.30, 0.55, 0.40, 0.70, 0.50, 0.85, 0.60, 0.45, 0.78, 0.35, 0.66, 0.50]
+
+    var body: some View {
+        GeometryReader { geo in
+            HStack(alignment: .bottom, spacing: 3) {
+                ForEach(heights.indices, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(Color.white.opacity(0.10))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: max(2, geo.size.height * heights[index]))
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .opacity(pulse ? 0.9 : 0.5)
+        }
+        .allowsHitTesting(false)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
+        }
     }
 }
 
