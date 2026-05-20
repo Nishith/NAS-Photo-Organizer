@@ -176,6 +176,11 @@ final class DeduplicateStatusViewTests: XCTestCase {
         XCTAssertEqual(CommitFooterButtonDensity.compact.commitTitle(fileCount: 99), "Move to Trash")
     }
 
+    func testBulkAcceptLabelMatchesHighConfidenceOnlyBehavior() {
+        XCTAssertEqual(CommitFooterButtonDensity.full.acceptAllTitle, "Auto-Accept Safe")
+        XCTAssertEqual(CommitFooterButtonDensity.compact.acceptAllTitle, "Accept Safe")
+    }
+
     // MARK: - Quality / sharpness labels (design-critique fix #2)
 
     func testClusterDetailQualityLabelCoversAllFiveTiersWithCorrectDotCount() {

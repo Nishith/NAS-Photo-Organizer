@@ -113,7 +113,6 @@ final class ChronoframeCoreMediaDiscoveryTests: XCTestCase {
         let data = try JSONSerialization.data(withJSONObject: manifest)
         try data.write(to: stagingDir.appendingPathComponent(".chronoframe_drop_manifest.json"))
 
-        var issues: [MediaDiscovery.DirectoryIssue] = []
         let discovered = try MediaDiscovery.discoverMediaFiles(
             at: stagingDir,
             onDirectoryIssue: { issue in
@@ -139,7 +138,6 @@ final class ChronoframeCoreMediaDiscoveryTests: XCTestCase {
             collected.values.allSatisfy { $0.message.contains("package") || $0.message.contains("symlink") || $0.message.contains("photo libraries") },
             "Issue message should explain why the entry was skipped"
         )
-        _ = issues // silence unused warning
     }
 
     private func normalize(_ path: String) -> String {

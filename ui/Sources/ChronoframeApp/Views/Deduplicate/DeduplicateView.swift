@@ -503,9 +503,9 @@ struct DeduplicateView: View {
         .keyboardShortcut(.return, modifiers: [.command, .shift])
         .buttonStyle(.bordered)
         .fixedSize()
-        .accessibilityLabel("Accept All Suggestions")
+        .accessibilityLabel("Accept High-Confidence Suggestions")
         .accessibilityIdentifier("dedupeAcceptAllSuggestionsButton")
-        .accessibilityHint("Marks every cluster's suggested keeper as keep and the rest as delete")
+        .accessibilityHint("Marks high-confidence clusters' suggested keepers as keep and the rest as delete")
 
         Spacer().frame(width: DesignTokens.Spacing.lg)
 
@@ -739,8 +739,8 @@ enum CommitFooterButtonDensity {
 
     var acceptAllTitle: String {
         switch self {
-        case .full: return "Accept All"
-        case .compact: return "Accept All"
+        case .full: return "Auto-Accept Safe"
+        case .compact: return "Accept Safe"
         }
     }
 

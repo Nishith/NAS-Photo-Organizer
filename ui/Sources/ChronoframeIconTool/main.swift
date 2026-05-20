@@ -7,9 +7,11 @@
 //     swift run --package-path ui ChronoframeIconTool \
 //         ui/Resources/Assets.xcassets/AppIcon.appiconset
 //
-// The tool emits 30 PNGs — Any/Dark/Tinted × 10 (size × scale) pairs —
-// plus the catalog's `Contents.json` declaring the appearance variants
-// the macOS 14+ icon-tinting system requires.
+// The tool emits the 10 standard macOS AppIcon PNGs into the app-icon
+// catalog, plus optional Dark/Tinted reference renders in
+// `ui/Resources/IconSources/`. The reference renders intentionally live
+// outside `.appiconset` because `actool` treats appearance variants there
+// as unassigned app-icon children.
 
 import AppKit
 import CoreGraphics
@@ -31,14 +33,6 @@ enum IconVariant: String, CaseIterable {
         }
     }
 
-    /// Asset-catalog `appearances` array. `nil` for the default ("Any") slot.
-    var appearancesJSON: String? {
-        switch self {
-        case .any: return nil
-        case .dark: return "[{\"appearance\":\"luminosity\",\"value\":\"dark\"}]"
-        case .tinted: return "[{\"appearance\":\"luminosity\",\"value\":\"tinted\"}]"
-        }
-    }
 }
 
 // MARK: - Sizes
@@ -469,21 +463,41 @@ struct IconRenderer {
 
 struct AssetCatalogWriter {
     let outputDirectory: URL
+    let iconSourcesDirectory: URL?
+
+    init(outputDirectory: URL, iconSourcesDirectory: URL? = nil) {
+        self.outputDirectory = outputDirectory
+        self.iconSourcesDirectory = iconSourcesDirectory
+    }
 
     func write() throws {
         try FileManager.default.createDirectory(
             at: outputDirectory,
             withIntermediateDirectories: true
         )
+        try removeStaleReferenceRendersFromAppIconSet()
+        if let iconSourcesDirectory {
+            try FileManager.default.createDirectory(
+                at: iconSourcesDirectory,
+                withIntermediateDirectories: true
+            )
+        }
 
         for slot in IconSlot.all {
-            for variant in IconVariant.allCases {
-                let renderer = IconRenderer(variant: variant, pixelSize: slot.pixelSize)
-                let data = renderer.render()
-                let filename = "\(slot.baseFilename)\(variant.filenameSuffix).png"
-                let url = outputDirectory.appendingPathComponent(filename)
-                try data.write(to: url)
-                FileHandle.standardError.write(Data("Rendered \(filename) (\(slot.pixelSize)px)\n".utf8))
+            let appIconRenderer = IconRenderer(variant: .any, pixelSize: slot.pixelSize)
+            let appIconFilename = "\(slot.baseFilename).png"
+            let appIconURL = outputDirectory.appendingPathComponent(appIconFilename)
+            try appIconRenderer.render().write(to: appIconURL)
+            FileHandle.standardError.write(Data("Rendered \(appIconFilename) (\(slot.pixelSize)px)\n".utf8))
+
+            if let iconSourcesDirectory {
+                for variant in [IconVariant.dark, .tinted] {
+                    let renderer = IconRenderer(variant: variant, pixelSize: slot.pixelSize)
+                    let filename = "\(slot.baseFilename)\(variant.filenameSuffix).png"
+                    let url = iconSourcesDirectory.appendingPathComponent(filename)
+                    try renderer.render().write(to: url)
+                    FileHandle.standardError.write(Data("Rendered reference \(filename) (\(slot.pixelSize)px)\n".utf8))
+                }
             }
         }
 
@@ -492,23 +506,32 @@ struct AssetCatalogWriter {
         FileHandle.standardError.write(Data("Wrote Contents.json\n".utf8))
     }
 
+    private func removeStaleReferenceRendersFromAppIconSet() throws {
+        let staleFiles = try FileManager.default.contentsOfDirectory(
+            at: outputDirectory,
+            includingPropertiesForKeys: nil
+        )
+        for url in staleFiles where url.pathExtension == "png" {
+            let stem = url.deletingPathExtension().lastPathComponent
+            if stem.hasSuffix("_dark") || stem.hasSuffix("_tinted") {
+                try FileManager.default.removeItem(at: url)
+                FileHandle.standardError.write(Data("Removed stale app-icon reference \(url.lastPathComponent)\n".utf8))
+            }
+        }
+    }
+
     private func contentsJSON() -> String {
         var imageEntries: [String] = []
         for slot in IconSlot.all {
-            for variant in IconVariant.allCases {
-                let filename = "\(slot.baseFilename)\(variant.filenameSuffix).png"
-                var fields: [String] = [
-                    "\"filename\" : \"\(filename)\"",
-                    "\"idiom\" : \"mac\"",
-                    "\"scale\" : \"\(slot.scaleJSON)\"",
-                    "\"size\" : \"\(slot.sizeJSON)\"",
-                ]
-                if let appearances = variant.appearancesJSON {
-                    fields.insert("\"appearances\" : \(appearances)", at: 0)
-                }
-                let entry = "    {\n      " + fields.joined(separator: ",\n      ") + "\n    }"
-                imageEntries.append(entry)
-            }
+            let filename = "\(slot.baseFilename).png"
+            let fields: [String] = [
+                "\"filename\" : \"\(filename)\"",
+                "\"idiom\" : \"mac\"",
+                "\"scale\" : \"\(slot.scaleJSON)\"",
+                "\"size\" : \"\(slot.sizeJSON)\"",
+            ]
+            let entry = "    {\n      " + fields.joined(separator: ",\n      ") + "\n    }"
+            imageEntries.append(entry)
         }
         let images = imageEntries.joined(separator: ",\n")
         return """
@@ -537,7 +560,14 @@ guard arguments.count >= 2 else {
 
 let outputDirectory = URL(fileURLWithPath: arguments[1])
 do {
-    let writer = AssetCatalogWriter(outputDirectory: outputDirectory)
+    let defaultIconSourcesDirectory = outputDirectory
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("IconSources", isDirectory: true)
+    let writer = AssetCatalogWriter(
+        outputDirectory: outputDirectory,
+        iconSourcesDirectory: defaultIconSourcesDirectory
+    )
     try writer.write()
 } catch {
     FileHandle.standardError.write(Data("Failed: \(error)\n".utf8))
