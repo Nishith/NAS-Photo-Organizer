@@ -161,7 +161,7 @@ struct ClusterDetailPane: View {
 
     private func detailContentWide(focused: PhotoCandidate?, cluster: DuplicateCluster) -> some View {
         HStack(alignment: .top, spacing: DesignTokens.Spacing.lg) {
-            preview(for: focused)
+            previewArea(for: focused, cluster: cluster)
                 .frame(minWidth: 160, maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(1)
             if let focused {
@@ -170,6 +170,120 @@ struct ClusterDetailPane: View {
             }
         }
         .padding(DesignTokens.Spacing.lg)
+    }
+
+    /// Default-mode preview area. When the cluster has 2+ members and the
+    /// available width can comfortably host two panes, render the suggested
+    /// keeper on the left and the currently-focused other member on the
+    /// right — the "Compare" sheet remains available for slider/difference/
+    /// flicker modes. Falls back to a single large preview otherwise.
+    @ViewBuilder
+    private func previewArea(for focused: PhotoCandidate?, cluster: DuplicateCluster) -> some View {
+        let pair = sideBySidePair(for: focused, in: cluster)
+        if let pair {
+            GeometryReader { geometry in
+                if geometry.size.width >= 480 {
+                    HStack(spacing: DesignTokens.Spacing.md) {
+                        comparisonPane(member: pair.left, role: .keeper, cluster: cluster)
+                        comparisonPane(member: pair.right, role: .other, cluster: cluster)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    preview(for: focused)
+                }
+            }
+        } else {
+            preview(for: focused)
+        }
+    }
+
+    private enum ComparisonRole {
+        case keeper
+        case other
+
+        var label: String {
+            switch self {
+            case .keeper: return "Keeper"
+            case .other: return "Compare"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .keeper: return "star.fill"
+            case .other: return "rectangle.on.rectangle"
+            }
+        }
+
+        var tint: Color {
+            switch self {
+            case .keeper: return DesignTokens.ColorSystem.accentWaypoint
+            case .other: return DesignTokens.ColorSystem.inkSecondary
+            }
+        }
+    }
+
+    private struct ComparisonPair {
+        let left: PhotoCandidate
+        let right: PhotoCandidate
+    }
+
+    private func sideBySidePair(for focused: PhotoCandidate?, in cluster: DuplicateCluster) -> ComparisonPair? {
+        guard cluster.members.count >= 2 else { return nil }
+        let keeper = cluster.members.first(where: { isSuggestedKeeper($0, in: cluster) }) ?? cluster.members[0]
+        let other: PhotoCandidate
+        if let focused, focused.id != keeper.id {
+            other = focused
+        } else if let firstOther = cluster.members.first(where: { $0.id != keeper.id }) {
+            other = firstOther
+        } else {
+            return nil
+        }
+        return ComparisonPair(left: keeper, right: other)
+    }
+
+    private func comparisonPane(member: PhotoCandidate, role: ComparisonRole, cluster: DuplicateCluster) -> some View {
+        let isFocused = member.path == focusedMemberPath
+        let decision = sessionStore.decisions.byPath[member.path] ?? (isSuggestedKeeper(member, in: cluster) ? .keep : .delete)
+        return ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.black.opacity(0.34))
+            LargePreviewImage(path: member.path)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            comparisonPaneBadge(role: role, decision: decision)
+                .padding(10)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(
+                    isFocused ? DesignTokens.ColorSystem.accentWaypoint : Color.white.opacity(0.08),
+                    lineWidth: isFocused ? 2 : 0.5
+                )
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            focusedMemberPath = member.path
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(role.label): \(URL(fileURLWithPath: member.path).lastPathComponent)")
+    }
+
+    private func comparisonPaneBadge(role: ComparisonRole, decision: DedupeDecision) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: role.systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(role.tint)
+            Text(role.label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+            Circle()
+                .fill(decision == .keep ? DesignTokens.ColorSystem.statusSuccess : DesignTokens.ColorSystem.statusDanger)
+                .frame(width: 6, height: 6)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(.black.opacity(0.46), in: Capsule())
     }
 
     private func preview(for member: PhotoCandidate?) -> some View {
