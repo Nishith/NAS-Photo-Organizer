@@ -164,6 +164,7 @@ jobs:
             -configuration Debug \
             -derivedDataPath "$RUNNER_TEMP/ChronoframeUITestDerivedData" \
             -destination "platform=macOS" \
+            DEVELOPMENT_TEAM= \
             test
 
   release-archive-smoke:
