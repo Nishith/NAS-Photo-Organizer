@@ -152,6 +152,37 @@ public enum SidebarDestination: String, CaseIterable, Identifiable, Hashable, Se
             return "person.crop.rectangle.stack"
         }
     }
+
+    /// Sidebar section a destination belongs to. The sidebar groups
+    /// destinations under named headers so it has room to grow without
+    /// becoming a flat list.
+    public var section: SidebarSection {
+        switch self {
+        case .organize, .deduplicate:
+            return .library
+        case .profiles:
+            return .preferences
+        }
+    }
+}
+
+/// Named groupings that the sidebar uses to lay out destinations. Currently
+/// only two sections exist, but the enum is the seam new workspaces hook
+/// into — adding "Tools" or "Insights" later is a one-line change here.
+public enum SidebarSection: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case library
+    case preferences
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .library:
+            return "Library"
+        case .preferences:
+            return "Preferences"
+        }
+    }
 }
 
 /// Sub-sections nested inside the Organize sidebar destination. The original

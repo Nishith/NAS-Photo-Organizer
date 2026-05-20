@@ -21,69 +21,36 @@ struct SidebarView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(SidebarDestination.primaryNavigationCases) { destination in
-                let isSelected = appState.selection == destination
-                Button {
-                    appState.selection = destination
-                } label: {
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: destination.systemImage)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(isSelected ? DesignTokens.ColorSystem.accentAction : iconTint(for: destination))
-                            .frame(width: 20, height: 22)
-                            .overlay(alignment: .bottomTrailing) {
-                                if isSelected {
-                                    Circle()
-                                        .fill(DesignTokens.ColorSystem.accentWaypoint)
-                                        .frame(width: 5, height: 5)
-                                        .offset(x: 3, y: 1)
-                                }
-                            }
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(visibleSections) { section in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(section.title)
+                        .font(.caption.weight(.semibold))
+                        .tracking(0.8)
+                        .textCase(.uppercase)
+                        .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 2)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(destination.title)
-                                .font(.system(size: 14, weight: .semibold, design: .default))
-                                .foregroundStyle(isSelected ? DesignTokens.ColorSystem.accentAction : DesignTokens.ColorSystem.inkPrimary)
-                                .lineLimit(1)
-
-                            Text(destination.subtitle)
-                                .font(.caption)
-                                .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
-                                .lineLimit(1)
-                        }
-
-                        Spacer()
-
-                        if showsProgress(for: destination) {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else if showsStatusDot(for: destination) {
-                            Circle()
-                                .fill(statusDotTint(for: destination))
-                                .frame(width: 6, height: 6)
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(destinations(in: section)) { destination in
+                            destinationButton(destination)
                         }
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(isSelected ? DesignTokens.ColorSystem.accentAction.opacity(0.10) : Color.clear)
-                    )
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .strokeBorder(isSelected ? DesignTokens.ColorSystem.accentAction.opacity(0.18) : Color.clear, lineWidth: 0.5)
-                    )
-                    .contentShape(Capsule(style: .continuous))
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-                .tag(destination)
             }
+
             Spacer()
+
+            LibraryAtAGlanceFooter(
+                destinationRoot: historyStore.destinationRoot,
+                runCount: historyStore.entries.count,
+                totalArchived: historyStore.transferredSources.reduce(0) { $0 + $1.totalCopiedCount }
+            )
         }
         .padding(.horizontal, 8)
         .padding(.top, 8)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationTitle("Chronoframe")
         .onChange(of: appState.organizeSubSelection) { sub in
@@ -105,6 +72,75 @@ struct SidebarView: View {
         .onAppear {
             refreshDeduplicateAttentionMarker()
         }
+    }
+
+    private var visibleSections: [SidebarSection] {
+        let active = Set(SidebarDestination.primaryNavigationCases.map { $0.section })
+        return SidebarSection.allCases.filter { active.contains($0) }
+    }
+
+    private func destinations(in section: SidebarSection) -> [SidebarDestination] {
+        SidebarDestination.primaryNavigationCases.filter { $0.section == section }
+    }
+
+    @ViewBuilder
+    private func destinationButton(_ destination: SidebarDestination) -> some View {
+        let isSelected = appState.selection == destination
+        Button {
+            appState.selection = destination
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: destination.systemImage)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(isSelected ? DesignTokens.ColorSystem.accentAction : iconTint(for: destination))
+                    .frame(width: 20, height: 22)
+                    .overlay(alignment: .bottomTrailing) {
+                        if isSelected {
+                            Circle()
+                                .fill(DesignTokens.ColorSystem.accentWaypoint)
+                                .frame(width: 5, height: 5)
+                                .offset(x: 3, y: 1)
+                        }
+                    }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(destination.title)
+                        .font(.system(size: 14, weight: .semibold, design: .default))
+                        .foregroundStyle(isSelected ? DesignTokens.ColorSystem.accentAction : DesignTokens.ColorSystem.inkPrimary)
+                        .lineLimit(1)
+
+                    Text(destination.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                if showsProgress(for: destination) {
+                    ProgressView()
+                        .controlSize(.small)
+                } else if showsStatusDot(for: destination) {
+                    Circle()
+                        .fill(statusDotTint(for: destination))
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isSelected ? DesignTokens.ColorSystem.accentAction.opacity(0.10) : Color.clear)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(isSelected ? DesignTokens.ColorSystem.accentAction.opacity(0.18) : Color.clear, lineWidth: 0.5)
+            )
+            .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .tag(destination)
     }
 
     private func iconTint(for destination: SidebarDestination) -> SwiftUI.Color {
@@ -196,6 +232,71 @@ struct SidebarView: View {
             isSelected: appState.selection == .deduplicate,
             currentToken: lastSeenDeduplicateAttentionToken
         )
+    }
+}
+
+/// Pinned footer below the destination list. Shows the active destination
+/// root and at-a-glance counters so the sidebar carries identity even when
+/// the workspace is empty. Hidden when there is no destination configured
+/// yet — the rest of the UI guides setup in that case.
+private struct LibraryAtAGlanceFooter: View {
+    let destinationRoot: String
+    let runCount: Int
+    let totalArchived: Int
+
+    var body: some View {
+        if destinationRoot.isEmpty {
+            EmptyView()
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Library at a glance")
+                    .font(.caption.weight(.semibold))
+                    .tracking(0.8)
+                    .textCase(.uppercase)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+
+                HStack(spacing: 8) {
+                    Image(systemName: "externaldrive")
+                        .font(.caption)
+                        .foregroundStyle(DesignTokens.ColorSystem.accentWaypoint)
+                    Text(URL(fileURLWithPath: destinationRoot).lastPathComponent)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                HStack(spacing: 12) {
+                    metric(value: "\(totalArchived.formatted(.number))", label: "archived")
+                    metric(value: "\(runCount.formatted(.number))", label: "runs")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(DesignTokens.ColorSystem.utilityBand)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(DesignTokens.ColorSystem.hairline, lineWidth: 0.5)
+            )
+            .padding(.horizontal, 6)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Library at a glance: \(totalArchived) photos archived across \(runCount) runs to \(URL(fileURLWithPath: destinationRoot).lastPathComponent)")
+        }
+    }
+
+    private func metric(value: String, label: String) -> some View {
+        HStack(spacing: 4) {
+            Text(value)
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+        }
     }
 }
 
