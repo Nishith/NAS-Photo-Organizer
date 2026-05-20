@@ -19,13 +19,11 @@ Subtitle alternative (28 char): `Safe photo & video organizer`
 
 ## URLs
 
-Fill these in once `site/` is hosted (see hosting note at the bottom).
-
 | Field | Value |
 | :--- | :--- |
-| Marketing URL | `https://<your-domain>/` |
-| Support URL | `https://<your-domain>/support.html` |
-| Privacy Policy URL | `https://<your-domain>/privacy.html` |
+| Marketing URL | `https://chronoframe.app/` |
+| Support URL | `https://chronoframe.app/support.html` |
+| Privacy Policy URL | `https://chronoframe.app/privacy.html` |
 
 ## Promotional Text (170 char max)
 
@@ -91,9 +89,13 @@ If App Store Connect still asks per-category questions, answer "Not Collected" f
 
 ## Hosting the URLs
 
-The three URLs above come from the static site in `site/` (`index.html`, `support.html`, `privacy.html`). It has no build step and no external dependencies, so any static host works:
+The three URLs above come from the static site in `site/` (`index.html`, `support.html`, `privacy.html`). It is published to GitHub Pages by `.github/workflows/pages.yml` on every push to `main`, served at the custom domain **chronoframe.app** (`site/CNAME`).
 
-- **GitHub Pages:** Pages "deploy from a branch" only serves the repo root or `/docs`. Either add a small Pages GitHub Action that publishes `site/`, or copy the `site/` files into `/docs`.
-- **Netlify / Cloudflare Pages / Vercel:** point the project at the `site/` directory as the publish root.
+To make the custom domain resolve, add these records at the registrar for `chronoframe.app`:
 
-After hosting, replace the Mac App Store button `href` in `site/index.html` with the live App Store product URL.
+- **A** (apex `@`) → `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`
+- **AAAA** (apex `@`) → `2606:50c0:8000::153`, `2606:50c0:8001::153`, `2606:50c0:8002::153`, `2606:50c0:8003::153`
+
+Then set the Pages custom domain (`gh api -X PUT repos/Nishith/Chronoframe/pages -f cname=chronoframe.app`) and enable "Enforce HTTPS" once DNS resolves.
+
+After the App Store listing is live, replace the Mac App Store button `href` in `site/index.html` with the live App Store product URL.
