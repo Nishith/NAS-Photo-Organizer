@@ -59,7 +59,7 @@ final class BundleValidatorTests: XCTestCase {
 
     func testValidationReportsMissingPackagedResources() throws {
         let appURL = try makeMinimalAppBundle()
-        try FileManager.default.removeItem(at: appURL.appendingPathComponent("Contents/Resources/AppIcon.icns"))
+        try FileManager.default.removeItem(at: appURL.appendingPathComponent("Contents/Resources/Assets.car"))
 
         let result = BundleValidator.validateAppBundle(
             appURL: appURL,
@@ -67,7 +67,7 @@ final class BundleValidatorTests: XCTestCase {
             gatekeeperInspector: { _ in .accepted }
         )
 
-        XCTAssertTrue(result.errors.contains { $0.contains("AppIcon.icns") })
+        XCTAssertTrue(result.errors.contains { $0.contains("Assets.car") })
     }
 
     func testInspectCodesignParsesDeveloperIDOutput() {
@@ -163,7 +163,7 @@ final class BundleValidatorTests: XCTestCase {
         try writeInfoPlist(
             [
                 "CFBundleIdentifier": "com.nishith.chronoframe",
-                "CFBundleIconFile": "WrongIcon",
+                "CFBundleIconName": "WrongIcon",
                 "CFBundlePackageType": "BNDL",
             ],
             to: appURL
@@ -176,7 +176,7 @@ final class BundleValidatorTests: XCTestCase {
         )
 
         XCTAssertTrue(result.errors.contains { $0.contains("missing CFBundleExecutable") })
-        XCTAssertTrue(result.errors.contains { $0.contains("CFBundleIconFile=AppIcon") })
+        XCTAssertTrue(result.errors.contains { $0.contains("CFBundleIconName=AppIcon") })
         XCTAssertTrue(result.errors.contains { $0.contains("CFBundlePackageType=APPL") })
         XCTAssertTrue(result.errors.contains { $0.contains("codesign inspection failed") })
         XCTAssertTrue(result.warnings.contains { $0.contains("Gatekeeper assessment was unavailable") })
@@ -262,7 +262,7 @@ final class BundleValidatorTests: XCTestCase {
             executablePath: "/tmp/Chronoframe.app/Contents/MacOS/Chronoframe",
             infoPlistPath: "/tmp/Chronoframe.app/Contents/Info.plist",
             distributionReady: false,
-            errors: ["Missing packaged resource: AppIcon.icns"],
+            errors: ["Missing packaged resource: Assets.car"],
             warnings: ["Gatekeeper assessment was unavailable"],
             signature: .adhoc,
             gatekeeper: .unavailable
@@ -421,13 +421,15 @@ final class BundleValidatorTests: XCTestCase {
             [
                 "CFBundleExecutable": "Chronoframe",
                 "CFBundleIdentifier": "com.nishith.chronoframe",
-                "CFBundleIconFile": "AppIcon",
+                "CFBundleIconName": "AppIcon",
                 "CFBundlePackageType": "APPL",
             ],
             to: appURL
         )
         try "binary".write(to: executableURL, atomically: true, encoding: .utf8)
-        try "icon".write(to: resourcesURL.appendingPathComponent("AppIcon.icns"), atomically: true, encoding: .utf8)
+        // Asset catalog stand-in — the real bundle ships a compiled
+        // `Assets.car` produced by `actool` from the .xcassets source.
+        try "catalog".write(to: resourcesURL.appendingPathComponent("Assets.car"), atomically: true, encoding: .utf8)
         return appURL
     }
 

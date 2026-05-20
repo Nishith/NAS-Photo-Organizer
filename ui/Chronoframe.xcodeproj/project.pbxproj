@@ -32,7 +32,7 @@
 		AA0000000000000000000218 /* RuntimePaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000118 /* RuntimePaths.swift */; };
 		AA0000000000000000000219 /* ProfileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000119 /* ProfileModels.swift */; };
 		AA000000000000000000021A /* RunModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000011A /* RunModels.swift */; };
-		AA000000000000000000021B /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000124 /* AppIcon.icns */; };
+		AA000000000000000000021B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000124 /* Assets.xcassets */; };
 		AA000000000000000000021C /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000121 /* AppStateTests.swift */; };
 		AA000000000000000000021D /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000122 /* TestSupport.swift */; };
 		AA000000000000000000021E /* ChronoframeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000123 /* ChronoframeUITests.swift */; };
@@ -164,7 +164,7 @@
 		AA0000000000000000000121 /* AppStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000122 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		AA0000000000000000000123 /* ChronoframeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronoframeUITests.swift; sourceTree = "<group>"; };
-		AA0000000000000000000124 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		AA0000000000000000000124 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA0000000000000000000125 /* Chronoframe.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Chronoframe.entitlements; sourceTree = "<group>"; };
 		AA0000000000000000000126 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
 		AA0000000000000000000127 /* SwiftOrganizerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftOrganizerEngine.swift; sourceTree = "<group>"; };
@@ -551,7 +551,7 @@
 		AA000000000000000000001D /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				AA0000000000000000000124 /* AppIcon.icns */,
+				AA0000000000000000000124 /* Assets.xcassets */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -692,7 +692,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA000000000000000000021B /* AppIcon.icns in Resources */,
+				AA000000000000000000021B /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -885,6 +885,7 @@
 		AA0000000000000000000611 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Packaging/Chronoframe.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;
@@ -914,6 +915,7 @@
 		AA0000000000000000000612 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Packaging/Chronoframe.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;

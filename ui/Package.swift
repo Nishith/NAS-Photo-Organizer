@@ -15,6 +15,7 @@ let package = Package(
         .executable(name: "ChronoframeApp", targets: ["ChronoframeApp"]),
         .executable(name: "ChronoframeCLI", targets: ["ChronoframeCLI"]),
         .executable(name: "ChronoframePackagingTool", targets: ["ChronoframePackagingTool"]),
+        .executable(name: "ChronoframeIconTool", targets: ["ChronoframeIconTool"]),
     ],
     targets: [
         .target(
@@ -45,6 +46,15 @@ let package = Package(
         .executableTarget(
             name: "ChronoframePackagingTool",
             dependencies: ["ChronoframePackaging"]
+        ),
+        // Procedural renderer for the macOS app icon. Run via
+        // `swift run ChronoframeIconTool <output-dir>` to regenerate every
+        // PNG variant (Any / Dark / Tinted × all sizes) for the
+        // `Assets.xcassets/AppIcon.appiconset`. The tool is the single
+        // source of truth for the icon design — colors and geometry live
+        // in code, not in a Sketch/Figma file.
+        .executableTarget(
+            name: "ChronoframeIconTool"
         ),
         .testTarget(
             name: "ChronoframeAppCoreTests",

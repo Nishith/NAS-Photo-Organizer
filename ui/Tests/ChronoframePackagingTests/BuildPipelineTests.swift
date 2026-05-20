@@ -19,7 +19,7 @@ final class BuildPipelineTests: XCTestCase {
             guard url.pathExtension == "swift" else { continue }
             let relative = url.path.replacingOccurrences(of: sourcesRoot.path + "/", with: "")
             let topLevelTarget = relative.split(separator: "/").first.map(String.init)
-            if ["ChronoframeCLI", "ChronoframeCLIKit", "ChronoframePackaging", "ChronoframePackagingTool"].contains(topLevelTarget) {
+            if ["ChronoframeCLI", "ChronoframeCLIKit", "ChronoframePackaging", "ChronoframePackagingTool", "ChronoframeIconTool"].contains(topLevelTarget) {
                 continue
             }
             if !project.contains(url.lastPathComponent) {

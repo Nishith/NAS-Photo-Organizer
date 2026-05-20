@@ -234,16 +234,21 @@ public enum BundleValidator {
             result.errors.append("Info.plist is missing CFBundleExecutable.")
         }
 
-        if info["CFBundleIconFile"] as? String != "AppIcon" {
-            result.errors.append("Info.plist must declare CFBundleIconFile=AppIcon.")
+        // Modern AppIcon wiring (macOS 14+): the icon lives inside the
+        // compiled asset catalog `Assets.car` and the bundle references
+        // it by name via `CFBundleIconName`. The legacy `CFBundleIconFile`
+        // → `AppIcon.icns` path doesn't carry the Dark/Tinted appearance
+        // variants the system needs for tinting modes.
+        if info["CFBundleIconName"] as? String != "AppIcon" {
+            result.errors.append("Info.plist must declare CFBundleIconName=AppIcon.")
         }
         if info["CFBundlePackageType"] as? String != "APPL" {
             result.errors.append("Info.plist must declare CFBundlePackageType=APPL.")
         }
 
-        let appIconURL = appURL.appendingPathComponent("Contents/Resources/AppIcon.icns")
-        if !fileManager.fileExists(atPath: appIconURL.path) {
-            result.errors.append("Missing packaged resource: \(appIconURL.path)")
+        let assetsURL = appURL.appendingPathComponent("Contents/Resources/Assets.car")
+        if !fileManager.fileExists(atPath: assetsURL.path) {
+            result.errors.append("Missing packaged resource: \(assetsURL.path)")
         }
 
         let retiredBackendURL = appURL.appendingPathComponent("Contents/Resources/Backend")
