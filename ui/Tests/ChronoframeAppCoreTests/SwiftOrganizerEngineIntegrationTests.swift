@@ -112,7 +112,8 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
 
         XCTAssertEqual(summary.metrics.discoveredCount, 1)
         XCTAssertEqual(summary.metrics.plannedCount, 1)
-        XCTAssertEqual(summary.metrics.dateHistogram, [DateHistogramBucket(key: "2024-01", plannedCount: 1)])
+        XCTAssertEqual(summary.metrics.dateHistogram.map(\.key), ["2024-01"])
+        XCTAssertEqual(summary.metrics.dateHistogram.map(\.plannedCount), [1])
         XCTAssertEqual(summary.status, .dryRunFinished)
         XCTAssertEqual(summary.title, "Preview complete")
         XCTAssertEqual(summary.artifacts.destinationRoot, destinationURL.path)
@@ -183,7 +184,8 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
         })
         XCTAssertTrue(events.contains {
             if case let .dateHistogram(buckets) = $0 {
-                return buckets == [DateHistogramBucket(key: "2026-04", plannedCount: 1_001)]
+                return buckets.map(\.key) == ["2026-04"]
+                    && buckets.map(\.plannedCount) == [1_001]
             }
             return false
         })
@@ -191,7 +193,8 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
         guard case let .complete(summary)? = events.last else {
             return XCTFail("Expected complete event")
         }
-        XCTAssertEqual(summary.metrics.dateHistogram, [DateHistogramBucket(key: "2026-04", plannedCount: 1_001)])
+        XCTAssertEqual(summary.metrics.dateHistogram.map(\.key), ["2026-04"])
+        XCTAssertEqual(summary.metrics.dateHistogram.map(\.plannedCount), [1_001])
     }
 
     @MainActor
@@ -250,7 +253,8 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
         XCTAssertEqual(summary.metrics.plannedCount, 1)
         XCTAssertEqual(summary.metrics.copiedCount, 1)
         XCTAssertEqual(summary.metrics.failedCount, 0)
-        XCTAssertEqual(summary.metrics.dateHistogram, [DateHistogramBucket(key: "2024-01", plannedCount: 1)])
+        XCTAssertEqual(summary.metrics.dateHistogram.map(\.key), ["2024-01"])
+        XCTAssertEqual(summary.metrics.dateHistogram.map(\.plannedCount), [1])
 
         let copiedFileURL = destinationURL.appendingPathComponent("2024/01/02/2024-01-02_001.jpg")
         XCTAssertTrue(FileManager.default.fileExists(atPath: copiedFileURL.path))

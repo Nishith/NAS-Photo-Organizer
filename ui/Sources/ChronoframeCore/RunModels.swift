@@ -157,12 +157,32 @@ public struct RunIssue: Identifiable, Sendable {
 public struct DateHistogramBucket: Equatable, Codable, Sendable, Identifiable {
     public var key: String
     public var plannedCount: Int
+    /// Up to a few source paths from this bucket, used by the UI to render a
+    /// hover thumbnail peek. Empty on paths where source paths aren't
+    /// available (resume runs reconstructed from destination filenames).
+    public var samplePaths: [String]
 
     public var id: String { key }
 
-    public init(key: String, plannedCount: Int) {
+    public init(key: String, plannedCount: Int, samplePaths: [String] = []) {
         self.key = key
         self.plannedCount = plannedCount
+        self.samplePaths = samplePaths
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case key
+        case plannedCount
+        case samplePaths
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.key = try container.decode(String.self, forKey: .key)
+        self.plannedCount = try container.decode(Int.self, forKey: .plannedCount)
+        // samplePaths is new in this build; older receipts/snapshots may not
+        // carry it. Decode defensively so older artifacts still parse.
+        self.samplePaths = try container.decodeIfPresent([String].self, forKey: .samplePaths) ?? []
     }
 }
 

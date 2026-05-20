@@ -257,13 +257,27 @@ public enum CopyPlanBuilder {
         from transfers: [PlannedTransfer],
         namingRules: PlannerNamingRules
     ) -> [DateHistogramBucket] {
+        // Cap on how many source paths each bucket carries forward. Four
+        // is enough for the UI's hover peek (a small grid) without bloating
+        // the receipt/snapshot — even a 50K-file run with 200 buckets only
+        // adds ~800 path strings to the histogram.
+        let samplePathLimit = 4
         var countsByBucket: [String: Int] = [:]
+        var samplesByBucket: [String: [String]] = [:]
         for transfer in transfers {
-            countsByBucket[histogramKey(for: transfer.dateBucket, namingRules: namingRules), default: 0] += 1
+            let key = histogramKey(for: transfer.dateBucket, namingRules: namingRules)
+            countsByBucket[key, default: 0] += 1
+            if (samplesByBucket[key]?.count ?? 0) < samplePathLimit {
+                samplesByBucket[key, default: []].append(transfer.sourcePath)
+            }
         }
 
         return countsByBucket.keys.sorted(by: histogramSort).map { key in
-            DateHistogramBucket(key: key, plannedCount: countsByBucket[key] ?? 0)
+            DateHistogramBucket(
+                key: key,
+                plannedCount: countsByBucket[key] ?? 0,
+                samplePaths: samplesByBucket[key] ?? []
+            )
         }
     }
 

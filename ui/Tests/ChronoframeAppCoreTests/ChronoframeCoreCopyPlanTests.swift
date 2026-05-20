@@ -113,7 +113,8 @@ final class ChronoframeCoreCopyPlanTests: XCTestCase {
             result.infoMessages,
             ["Day 2026-04-19: 1,001 files — using 4-digit sequence numbers."]
         )
-        XCTAssertEqual(result.dateHistogram, [DateHistogramBucket(key: "2026-04", plannedCount: 1_001)])
+        XCTAssertEqual(result.dateHistogram.map(\.key), ["2026-04"])
+        XCTAssertEqual(result.dateHistogram.map(\.plannedCount), [1_001])
     }
 
     func testBuildDoesNotWarnWhenExistingDateAlreadyUsesWideSequence() {
@@ -157,7 +158,8 @@ final class ChronoframeCoreCopyPlanTests: XCTestCase {
         XCTAssertEqual(duplicateDestinations[998], "/dest/Duplicate/2026/04/19/2026-04-19_0999.jpg")
         XCTAssertEqual(duplicateDestinations[999], "/dest/Duplicate/2026/04/19/2026-04-19_1000.jpg")
         XCTAssertEqual(result.warningMessages, [])
-        XCTAssertEqual(result.dateHistogram, [DateHistogramBucket(key: "2026-04", plannedCount: 1_001)])
+        XCTAssertEqual(result.dateHistogram.map(\.key), ["2026-04"])
+        XCTAssertEqual(result.dateHistogram.map(\.plannedCount), [1_001])
     }
 
     func testBuildDateHistogramIncludesTransfersAndSortsUnknownLast() {
@@ -171,12 +173,14 @@ final class ChronoframeCoreCopyPlanTests: XCTestCase {
             destinationRoot: "/dest"
         )
 
+        XCTAssertEqual(result.dateHistogram.map(\.key), ["2026-01", "2026-02", "Unknown"])
+        XCTAssertEqual(result.dateHistogram.map(\.plannedCount), [1, 1, 1])
         XCTAssertEqual(
-            result.dateHistogram,
+            result.dateHistogram.map(\.samplePaths),
             [
-                DateHistogramBucket(key: "2026-01", plannedCount: 1),
-                DateHistogramBucket(key: "2026-02", plannedCount: 1),
-                DateHistogramBucket(key: "Unknown", plannedCount: 1),
+                ["/source/jan/IMG_20260131_010101.jpg"],
+                ["/source/feb/IMG_20260201_010101.jpg"],
+                ["/source/unknown/orphan.jpg"],
             ]
         )
     }

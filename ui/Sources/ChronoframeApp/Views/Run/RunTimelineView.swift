@@ -1,6 +1,7 @@
 #if canImport(ChronoframeAppCore)
 import ChronoframeAppCore
 #endif
+import AppKit
 import SwiftUI
 
 /// The emotional centerpiece of the Run view: a chronological histogram of
@@ -16,6 +17,7 @@ import SwiftUI
 struct RunTimelineView: View {
     let model: RunWorkspaceModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hoveredBucketKey: String?
 
     private let chartHeight: CGFloat = 136
     private let minBarHeight: CGFloat = 3
@@ -114,6 +116,19 @@ struct RunTimelineView: View {
                 .motion(reduceMotion ? Motion.mechanical : Motion.filmic, value: fill)
         }
         .frame(width: width, height: height)
+        .contentShape(Rectangle())
+        .onHover { isHovering in
+            hoveredBucketKey = isHovering ? bucket.key : (hoveredBucketKey == bucket.key ? nil : hoveredBucketKey)
+        }
+        .popover(
+            isPresented: Binding(
+                get: { hoveredBucketKey == bucket.key && !bucket.samplePaths.isEmpty },
+                set: { newValue in if !newValue { hoveredBucketKey = nil } }
+            ),
+            arrowEdge: .top
+        ) {
+            TimelineBucketPeek(bucket: bucket)
+        }
         .accessibilityLabel(label(for: bucket))
     }
 
@@ -418,5 +433,85 @@ struct RunPhaseStrip: View {
 
     private var currentIndex: Int? {
         model.phaseEntries.firstIndex { $0.state == .current }
+    }
+}
+
+/// Popover content for a hovered timeline bucket. Shows the bucket label
+/// (month/year or "Unknown"), the planned count for that bucket, and a
+/// small grid of QuickLook thumbnails sampled from the bucket's planned
+/// sources. Each thumbnail loads asynchronously on a detached task.
+private struct TimelineBucketPeek: View {
+    let bucket: DateHistogramBucket
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(headerTitle)
+                    .font(DesignTokens.Typography.cardTitle)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+                Text("\(bucket.plannedCount.formatted(.number)) planned")
+                    .font(DesignTokens.Typography.label)
+                    .tracking(0.6)
+                    .textCase(.uppercase)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+            }
+
+            HStack(spacing: 6) {
+                ForEach(bucket.samplePaths.prefix(4), id: \.self) { path in
+                    TimelinePeekThumbnail(path: path)
+                }
+            }
+        }
+        .padding(DesignTokens.Spacing.md)
+        .frame(minWidth: 220)
+    }
+
+    private var headerTitle: String {
+        guard bucket.key != "Unknown", bucket.key.count >= 7 else {
+            return bucket.key
+        }
+        let yearPart = bucket.key.prefix(4)
+        let monthPart = bucket.key.dropFirst(5).prefix(2)
+        guard let month = Int(monthPart), (1...12).contains(month) else {
+            return bucket.key
+        }
+        let monthName = DateFormatter().monthSymbols[month - 1]
+        return "\(monthName) \(yearPart)"
+    }
+}
+
+private struct TimelinePeekThumbnail: View {
+    let path: String
+    @State private var image: NSImage?
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(DesignTokens.ColorSystem.imageStage)
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+        .frame(width: 56, height: 56)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(DesignTokens.ColorSystem.photoEdgeHighlight, lineWidth: 0.5)
+        }
+        .task(id: path) {
+            let url = URL(fileURLWithPath: path)
+            let cg = await ThumbnailRenderer.cgImage(
+                for: url,
+                size: CGSize(width: 112, height: 112),
+                scale: 2.0
+            )
+            guard !Task.isCancelled, let cg else { return }
+            image = NSImage(cgImage: cg, size: NSSize(width: 56, height: 56))
+        }
     }
 }
