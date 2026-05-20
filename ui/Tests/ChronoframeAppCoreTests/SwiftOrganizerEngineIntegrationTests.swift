@@ -401,8 +401,11 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
     }
 
     private static func render(_ events: [RunEvent]) -> [String] {
-        events.map {
-            switch $0 {
+        // `.copyingFile` is an auxiliary per-file channel for the UI's live
+        // thumbnail; it isn't part of the phase/progress sequence these tests
+        // assert, so it's filtered out here.
+        events.compactMap { event -> String? in
+            switch event {
             case .startup:
                 return "startup"
             case let .phaseStarted(phase, _):
@@ -421,6 +424,8 @@ final class SwiftOrganizerEngineIntegrationTests: XCTestCase {
                 return "prompt:\(message)"
             case let .dateHistogram(buckets):
                 return "dateHistogram:\(buckets.count)"
+            case .copyingFile:
+                return nil
             }
         }
     }

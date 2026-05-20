@@ -22,6 +22,8 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            sectionHeader("Workspace")
+
             ForEach(SidebarDestination.primaryNavigationCases) { destination in
                 let isSelected = appState.selection == destination
                 Button {
@@ -80,10 +82,16 @@ struct SidebarView: View {
                 .accessibilityAddTraits(isSelected ? [.isSelected] : [])
                 .tag(destination)
             }
+
             Spacer()
+
+            if hasLibraryStats {
+                libraryGlanceFooter
+            }
         }
         .padding(.horizontal, 8)
         .padding(.top, 8)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationTitle("Chronoframe")
         .onChange(of: appState.organizeSubSelection) { sub in
@@ -105,6 +113,69 @@ struct SidebarView: View {
         .onAppear {
             refreshDeduplicateAttentionMarker()
         }
+    }
+
+    // MARK: - Section header (grouping primitive)
+
+    /// A small uppercase group label. Introduces sidebar sectioning so future
+    /// destinations can be grouped (e.g. "Workspace" vs "Library") without a
+    /// structural rewrite.
+    private func sectionHeader(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(DesignTokens.Typography.label)
+            .tracking(0.8)
+            .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 2)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    // MARK: - Library at a glance
+
+    private var framesArchived: Int {
+        historyStore.transferredSources.reduce(0) { $0 + $1.totalCopiedCount }
+    }
+
+    private var archivedSourceCount: Int {
+        historyStore.transferredSources.count
+    }
+
+    private var hasLibraryStats: Bool {
+        framesArchived > 0
+    }
+
+    /// A quiet footer that fills the empty lower sidebar with a sense of what
+    /// the user has built so far. Reads from history records — no health scan.
+    private var libraryGlanceFooter: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("LIBRARY")
+                .font(DesignTokens.Typography.label)
+                .tracking(0.8)
+                .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text(framesArchived.formatted())
+                    .font(DesignTokens.Typography.cardTitle)
+                    .monospacedDigit()
+                    .foregroundStyle(DesignTokens.ColorSystem.inkPrimary)
+                Text("frames archived")
+                    .font(.caption)
+                    .foregroundStyle(DesignTokens.ColorSystem.inkSecondary)
+            }
+
+            Text("\(archivedSourceCount) source\(archivedSourceCount == 1 ? "" : "s")")
+                .font(.caption)
+                .foregroundStyle(DesignTokens.ColorSystem.inkMuted)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(DesignTokens.ColorSystem.hairline.opacity(0.35))
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(framesArchived) frames archived across \(archivedSourceCount) sources")
     }
 
     private func iconTint(for destination: SidebarDestination) -> SwiftUI.Color {

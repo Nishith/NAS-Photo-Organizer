@@ -67,6 +67,8 @@ public enum JSONLineEmitter {
                 "missing": result.missingCount,
                 "moved": result.movedCount,
             ])
+        case let .copyingFile(path):
+            return ["type": "copying_file", "path": path]
         case let .copyPlanReady(count):
             return ["type": "copy_plan_ready", "count": count]
         case let .dateHistogram(buckets):
@@ -172,6 +174,10 @@ public enum HumanLineEmitter {
         case let .complete(summary):
             return completeLine(summary)
         case .dateHistogram:
+            return nil
+        case .copyingFile:
+            // Per-file detail is covered by the copy phase progress line; no
+            // separate human-readable output to avoid noise.
             return nil
         }
     }

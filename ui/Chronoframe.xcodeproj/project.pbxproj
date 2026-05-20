@@ -68,6 +68,7 @@
 		AA000000000000000000023C /* PathControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000142 /* PathControl.swift */; };
 		AA000000000000000000023D /* ContactSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000143 /* ContactSheetView.swift */; };
 		AA000000000000000000023E /* TickerRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000144 /* TickerRow.swift */; };
+		AA0000000000000000000F02 /* WorkspaceTabStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000F01 /* WorkspaceTabStrip.swift */; };
 		AA000000000000000000023F /* RunTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000145 /* RunTimelineView.swift */; };
 		AA0000000000000000000240 /* NowCopyingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000146 /* NowCopyingCard.swift */; };
 			AA0000000000000000000247 /* OnboardingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000147 /* OnboardingCard.swift */; };
@@ -196,6 +197,7 @@
 		AA0000000000000000000142 /* PathControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathControl.swift; sourceTree = "<group>"; };
 		AA0000000000000000000143 /* ContactSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactSheetView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000144 /* TickerRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TickerRow.swift; sourceTree = "<group>"; };
+		AA0000000000000000000F01 /* WorkspaceTabStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceTabStrip.swift; sourceTree = "<group>"; };
 		AA0000000000000000000145 /* RunTimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunTimelineView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000146 /* NowCopyingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowCopyingCard.swift; sourceTree = "<group>"; };
 			AA0000000000000000000147 /* OnboardingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingCard.swift; sourceTree = "<group>"; };
@@ -364,6 +366,7 @@
 				AA0000000000000000000142 /* PathControl.swift */,
 				AA0000000000000000000143 /* ContactSheetView.swift */,
 				AA0000000000000000000144 /* TickerRow.swift */,
+				AA0000000000000000000F01 /* WorkspaceTabStrip.swift */,
 				AA0000000000000000000147 /* OnboardingCard.swift */,
 				AA0000000000000000000195 /* ThumbnailRenderer.swift */,
 			);
@@ -759,6 +762,7 @@
 				AA000000000000000000023C /* PathControl.swift in Sources */,
 				AA000000000000000000023D /* ContactSheetView.swift in Sources */,
 				AA000000000000000000023E /* TickerRow.swift in Sources */,
+				AA0000000000000000000F02 /* WorkspaceTabStrip.swift in Sources */,
 				AA000000000000000000023F /* RunTimelineView.swift in Sources */,
 				AA0000000000000000000240 /* NowCopyingCard.swift in Sources */,
 				AA0000000000000000000247 /* OnboardingCard.swift in Sources */,

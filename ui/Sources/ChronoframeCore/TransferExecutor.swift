@@ -6,15 +6,21 @@ public struct TransferExecutionObserver: Sendable {
     public var onPhaseStarted: @Sendable (_ total: Int, _ bytesTotal: Int64) -> Void
     public var onPhaseProgress: @Sendable (_ completed: Int, _ total: Int, _ bytesCopied: Int64, _ bytesTotal: Int64) -> Void
     public var onIssue: @Sendable (_ issue: RunIssue) -> Void
+    /// Called with the destination path of each file as it is placed, so the UI
+    /// can show a live preview. Optional (defaults to a no-op) so existing
+    /// callers are unaffected.
+    public var onCurrentFile: @Sendable (_ destinationPath: String) -> Void
 
     public init(
         onPhaseStarted: @escaping @Sendable (_ total: Int, _ bytesTotal: Int64) -> Void = { _, _ in },
         onPhaseProgress: @escaping @Sendable (_ completed: Int, _ total: Int, _ bytesCopied: Int64, _ bytesTotal: Int64) -> Void = { _, _, _, _ in },
-        onIssue: @escaping @Sendable (_ issue: RunIssue) -> Void = { _ in }
+        onIssue: @escaping @Sendable (_ issue: RunIssue) -> Void = { _ in },
+        onCurrentFile: @escaping @Sendable (_ destinationPath: String) -> Void = { _ in }
     ) {
         self.onPhaseStarted = onPhaseStarted
         self.onPhaseProgress = onPhaseProgress
         self.onIssue = onIssue
+        self.onCurrentFile = onCurrentFile
     }
 }
 
@@ -1395,6 +1401,9 @@ private final class TransferExecutionContext {
         bytesCopied += executor.safeFileSize(atPath: job.sourcePath) ?? completedCopy.actualSize
         consecutiveFailures = 0
         copiedCount += 1
+
+        // The file now exists at its destination — surface it for a live preview.
+        observer.onCurrentFile(completedCopy.destinationPath)
 
         if !emittedProgress, totalJobs > 0 {
             observer.onPhaseProgress(attemptedJobs, totalJobs, bytesCopied, bytesTotal)

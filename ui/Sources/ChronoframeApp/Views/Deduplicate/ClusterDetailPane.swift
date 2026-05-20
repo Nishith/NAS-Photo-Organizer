@@ -157,15 +157,91 @@ struct ClusterDetailPane: View {
 
     private func detailContentWide(focused: PhotoCandidate?, cluster: DuplicateCluster) -> some View {
         HStack(alignment: .top, spacing: DesignTokens.Spacing.lg) {
-            preview(for: focused)
+            // For a tool whose job is comparison, the default state should
+            // already be comparing: show the suggested keeper next to the
+            // focused candidate at full bleed. The slider/difference/flicker
+            // overlay remains available via the "Compare" button as a deep tool.
+            if let pair = comparisonPair(focused: focused, cluster: cluster) {
+                HStack(spacing: DesignTokens.Spacing.sm) {
+                    rolePreview(for: pair.keeper, role: .keeper, cluster: cluster)
+                    rolePreview(for: pair.candidate, role: .candidate, cluster: cluster)
+                }
                 .frame(minWidth: 160, maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(1)
+            } else {
+                preview(for: focused)
+                    .frame(minWidth: 160, maxWidth: .infinity, maxHeight: .infinity)
+                    .layoutPriority(1)
+            }
+
             if let focused {
                 metadataPanel(for: focused, cluster: cluster)
                     .frame(width: 200)
             }
         }
         .padding(DesignTokens.Spacing.lg)
+    }
+
+    private enum ComparisonRole {
+        case keeper
+        case candidate
+    }
+
+    /// The keeper/candidate pair to compare side-by-side. The left slot is the
+    /// suggested keeper; the right slot is whatever the user is focused on
+    /// (so scrubbing the strip swaps the right image). When focus lands on the
+    /// keeper itself, the right slot falls back to the next member.
+    private func comparisonPair(
+        focused: PhotoCandidate?,
+        cluster: DuplicateCluster
+    ) -> (keeper: PhotoCandidate, candidate: PhotoCandidate)? {
+        guard cluster.members.count >= 2 else { return nil }
+        let keeper = cluster.members.first { isSuggestedKeeper($0, in: cluster) } ?? cluster.members[0]
+        let candidate: PhotoCandidate
+        if let focused, focused.id != keeper.id {
+            candidate = focused
+        } else {
+            candidate = cluster.members.first { $0.id != keeper.id } ?? keeper
+        }
+        guard candidate.id != keeper.id else { return nil }
+        return (keeper, candidate)
+    }
+
+    private func rolePreview(
+        for member: PhotoCandidate,
+        role: ComparisonRole,
+        cluster: DuplicateCluster
+    ) -> some View {
+        preview(for: member)
+            .overlay(alignment: .topLeading) {
+                roleChip(for: member, role: role, cluster: cluster)
+                    .padding(10)
+            }
+    }
+
+    private func roleChip(
+        for member: PhotoCandidate,
+        role: ComparisonRole,
+        cluster: DuplicateCluster
+    ) -> some View {
+        let decision = sessionStore.decisions.byPath[member.path]
+            ?? (isSuggestedKeeper(member, in: cluster) ? .keep : .delete)
+        let tone = decision == .keep
+            ? DesignTokens.ColorSystem.statusSuccess
+            : DesignTokens.ColorSystem.statusDanger
+        let text: String
+        switch role {
+        case .keeper:
+            text = "Suggested Keeper"
+        case .candidate:
+            text = decision == .keep ? "Keep" : "Delete"
+        }
+        return Label(text, systemImage: decision == .keep ? "checkmark.circle.fill" : "trash.fill")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tone.opacity(0.92), in: Capsule())
     }
 
     private func preview(for member: PhotoCandidate?) -> some View {

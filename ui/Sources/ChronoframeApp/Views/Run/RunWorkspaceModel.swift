@@ -100,6 +100,7 @@ struct RunWorkspaceContext {
     var status: RunStatus
     var currentMode: RunMode?
     var currentTaskTitle: String
+    var currentFileURL: URL?
     var currentPhase: RunPhase?
     var progress: Double
     var metrics: RunMetrics
@@ -120,6 +121,7 @@ struct RunWorkspaceContext {
         status: RunStatus,
         currentMode: RunMode?,
         currentTaskTitle: String,
+        currentFileURL: URL? = nil,
         currentPhase: RunPhase?,
         progress: Double,
         metrics: RunMetrics,
@@ -139,6 +141,7 @@ struct RunWorkspaceContext {
         self.status = status
         self.currentMode = currentMode
         self.currentTaskTitle = currentTaskTitle
+        self.currentFileURL = currentFileURL
         self.currentPhase = currentPhase
         self.progress = progress
         self.metrics = metrics
@@ -173,6 +176,7 @@ struct RunWorkspaceModel {
                 status: runSessionStore.status,
                 currentMode: runSessionStore.currentMode,
                 currentTaskTitle: runSessionStore.currentTaskTitle,
+                currentFileURL: runSessionStore.currentFileURL,
                 currentPhase: runSessionStore.currentPhase,
                 progress: runSessionStore.progress,
                 metrics: runSessionStore.metrics,

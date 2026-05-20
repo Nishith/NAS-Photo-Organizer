@@ -411,6 +411,11 @@ public enum RunEvent: Sendable {
     case startup
     case phaseStarted(phase: RunPhase, total: Int?)
     case phaseProgress(phase: RunPhase, completed: Int, total: Int, bytesCopied: Int?, bytesTotal: Int?)
+    /// The destination path of a file that was just placed during the copy
+    /// phase. Carried on a dedicated case (rather than folded into
+    /// `phaseProgress`) so existing progress consumers stay untouched; the UI
+    /// uses it to show a live thumbnail of the frame finding its place.
+    case copyingFile(path: String)
     case phaseCompleted(phase: RunPhase, result: RunPhaseResult)
     case copyPlanReady(count: Int)
     case dateHistogram(buckets: [DateHistogramBucket])

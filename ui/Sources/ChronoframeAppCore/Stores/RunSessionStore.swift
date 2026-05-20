@@ -22,6 +22,10 @@ public final class RunSessionStore: ObservableObject {
     @Published public private(set) var lastPreflight: RunPreflight?
     @Published public private(set) var lastErrorMessage: String?
     @Published public private(set) var latestPreviewReviewPath: String?
+    /// Destination path of the file most recently placed during a copy, for the
+    /// "Now" live thumbnail. Holds its last value after a run ends so the card
+    /// doesn't flash empty; reset when a new run begins.
+    @Published public private(set) var currentFileURL: URL?
 
     private let engine: any OrganizerEngine
     private let logStore: RunLogStore
@@ -370,6 +374,7 @@ public final class RunSessionStore: ObservableObject {
         prompt = nil
         status = .running
         currentMode = preflight.configuration.mode
+        currentFileURL = nil
         currentTaskTitle = resumePendingJobs ? "Resuming transfer..." : "Starting \(preflight.configuration.mode.title.lowercased())..."
         artifacts = RunArtifactPaths(
             destinationRoot: preflight.resolvedDestinationPath,
@@ -526,6 +531,9 @@ public final class RunSessionStore: ObservableObject {
                     + "\(result.failedCount ?? 0) failed."
                 )
             }
+
+        case let .copyingFile(path):
+            currentFileURL = URL(fileURLWithPath: path)
 
         case let .copyPlanReady(count):
             metrics.plannedCount = count

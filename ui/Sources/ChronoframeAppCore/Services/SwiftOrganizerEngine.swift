@@ -660,6 +660,9 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                         errorCounter.increment()
                     }
                     continuation.yield(.issue(issue))
+                },
+                onCurrentFile: { destinationPath in
+                    continuation.yield(.copyingFile(path: destinationPath))
                 }
             ),
             isCancelled: { Task.isCancelled }
@@ -772,6 +775,9 @@ public final class SwiftOrganizerEngine: OrganizerEngine {
                         errorCounter.increment()
                     }
                     continuation.yield(.issue(issue))
+                },
+                onCurrentFile: { destinationPath in
+                    continuation.yield(.copyingFile(path: destinationPath))
                 }
             ),
             isCancelled: { Task.isCancelled }

@@ -39,14 +39,12 @@ struct OrganizeContainerView: View {
                     Spacer(minLength: 0)
                 }
 
-                Picker("Section", selection: $appState.organizeSubSelection) {
-                    ForEach(OrganizeSubSection.allCases) { sub in
-                        Text(sub.title).tag(sub)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 360)
+                WorkspaceTabStrip(
+                    tabs: OrganizeSubSection.allCases,
+                    selection: $appState.organizeSubSelection,
+                    title: { $0.title }
+                )
+                .fixedSize()
             }
             .padding(.horizontal, DesignTokens.Layout.contentPadding)
             .padding(.vertical, DesignTokens.Spacing.sm)
